@@ -1,4 +1,5 @@
 # Byte-compiled / optimized / DLL files
+wildwood/fromscikit/*
 __pycache__/
 *.py[cod]
 *$py.class
