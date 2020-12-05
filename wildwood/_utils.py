@@ -1,7 +1,17 @@
 
 import numpy as np
-from numba import float64, intp, int32, uint32
+from numba import float32, float64, intp, int32, uint32
+from numba import njit as njit_
+from numba.experimental import jitclass as jitclass_
 
+# Lazy to change everywhere when numba people decide that jitclass is not
+# experimental anymore
+jitclass = jitclass_
+njit = njit_
+
+
+DTYPE_t = float32
+NP_DTYPE_t = np.float32
 DOUBLE_t = float64
 NP_DOUBLE_t = np.float64
 SIZE_t = intp
@@ -12,6 +22,7 @@ UINT32_t = uint32
 NP_UINT32_t = np.uint32
 
 INFINITY = np.inf
+EPSILON = np.finfo('double').eps
 
 
 def get_numba_type(class_):
