@@ -4,12 +4,13 @@ from heapq import heappush
 from collections import namedtuple
 from numpy.random import randint
 from numba.experimental import jitclass
+from numba import from_dtype
 from time import time
 from numba import uint32
 
 import numpy as np
 
-Node = namedtuple("Node", ["left", "right", "parent"])
+# Node = namedtuple("Node", ["left", "right", "parent"])
 
 
 spec = [(
@@ -68,6 +69,16 @@ spec_node = [
     ("weighted_n_node_samples", DOUBLE_t)
 ]
 
+node_dtype = [
+    ("left_child", NP_SIZE_t),
+    ("right_child", NP_SIZE_t),
+    ("feature", NP_SIZE_t),
+    ("threshold", NP_DOUBLE_t),
+    ("impurity", NP_DOUBLE_t),
+    ("n_node_samples", NP_SIZE_t),
+    ("weighted_n_node_samples", NP_DOUBLE_t)
+]
+
 @jitclass(spec_node)
 class Node(object):
     # cdef struct Node:
@@ -92,34 +103,104 @@ class Node(object):
         self.weighted_n_node_samples = weighted_n_node_samples
 
 
+
+
 @njit
-def main2():
+def set_node(nodes, idx, node):
+    # It's a dtype
+    node_dtype = nodes[idx]
+    node_dtype["left_child"] = node.left_child
+    node_dtype["right_child"] = node.right_child
+    node_dtype["feature"] = node.feature
+    node_dtype["threshold"] = node.threshold
+    node_dtype["impurity"] = node.impurity
+    node_dtype["n_node_samples"] = node.n_node_samples
+    node_dtype["weighted_n_node_samples"] = node.weighted_n_node_samples
 
 
-    node = Node(0, 0, 0.0, 0.0, 0.0, 0.0, 0.0)
+@njit
+def get_node(nodes, idx):
+    # It's a jitclass object
+    node = nodes[idx]
+    return Node(
+        node["left_child"],
+        node["right_child"],
+        node["feature"],
+        node["threshold"],
+        node["impurity"],
+        node["n_node_samples"],
+        node["weighted_n_node_samples"]
+    )
+
+
+n_nodes = 10_000_000
+nodes = np.empty(n_nodes, dtype=node_dtype)
+numba_nodes_dtype = from_dtype(np.dtype(node_dtype))
+
+
+
+# >>> struct_dtype = np.dtype([('row', np.float64), ('col', np.float64)])
+# >>> ty = numba.from_dtype(struct_dtype)
+# >>> ty
+# Record([('row', '<f8'), ('col', '<f8')])
+# >>> ty[:, :]
+# unaligned array(Record([('row', '<f8'), ('col', '<f8')]), 2d, A)
+spec_A = [
+    ("nodes", numba_nodes_dtype[::1])
+]
+
+@jitclass(spec_A)
+class A(object):
+
+    def __init__(self, nodes):
+        self.nodes = nodes
+
+
+# node_dtype = [spec_node_dtype]
+
+
+@njit
+def main2(nodes):
+
+    for i in range(n_nodes):
+        node = Node(1, 2, 3.0, 4.0, 5.0, 6.0, 7.0)
+        set_node(nodes, i, node)
+
+    for i in range(n_nodes):
+        node = get_node(nodes, i)
+
+    a = A(nodes)
+
+    # nodes[0]["feature"] = 123
+
+    # node = get_node(nodes, 2)
+    # node = Node(0, 0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
     # cdef Node dummy;
     # NODE_DTYPE = np.asarray(<Node[:1]>(&dummy)).dtype
 
-    nodes = np.array(10, dtype=get_numba_type(Node))
-    print(nodes)
-    pass
+    # nodes = np.empty(10, dtype=node_dtype)
+    # print(node.left_child, node.right_child)
 
+tic = time()
+main2(nodes)
+toc = time()
 
-import numpy as np
-from numba import njit
-
-arr = np.array([(1, 2)], dtype=[('a1', 'f8'), ('a2', 'f8')])
-fields_gl = ('a1', 'a2')
-
-@njit
-def get_field_sum(rec):
-    fields_lc = ('a1', 'a2')
-    field_name1 = fields_lc[0]
-    field_name2 = fields_gl[1]
-    return rec[field_name1] + rec[field_name2]
-
-print(get_field_sum(arr[0]))
+print(toc-tic)
+# import numpy as np
+# from numba import njit
+#
+# arr = np.array([(1, 2)], dtype=[('a1', 'f8'), ('a2', 'f8')])
+# fields_gl = ('a1', 'a2')
+#
+# @njit
+# def get_field_sum(rec):
+#     fields_lc = ('a1', 'a2')
+#     field_name1 = fields_lc[0]
+#     field_name2 = fields_gl[1]
+#     return rec[field_name1] + rec[field_name2]
+#
+# print(get_field_sum(arr[0]))
 # returns 3
 
 

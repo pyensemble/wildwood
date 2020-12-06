@@ -17,6 +17,8 @@ Et puis faut verifier qu'on peut mettre n'importe quel dtype dans un numpy array
 - Comment ils allouent / decalouent ?
 - Faut bien comprendre la gestion de noeuds
 
+-> C'est ok il suffit d'utiliser numba.from_dtype
+
 - Reprendre le code de scikit-learn en pure Python / Numba
 - Traduire la foret en numba
 - J'ai commence le _splitter mais faut finir avant le _criterion
