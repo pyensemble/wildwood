@@ -30,26 +30,12 @@ from scipy.sparse import csr_matrix
 
 import numpy as np
 from ._utils import DTYPE_t, NP_DTYPE_t, DOUBLE_t, NP_DOUBLE_t, SIZE_t, NP_SIZE_t, \
-    INT32_t, NP_UINT32_t, jitclass, njit, get_numba_type
-# cimport numpy as np
+    INT32_t, NP_UINT32_t, SIZE_MAX, jitclass, njit, get_numba_type, resize, INFINITY,\
+    Stack, stack_push, stack_pop, stack_is_empty
 
 
-# ctypedef np.npy_float32 DTYPE_t          # Type of X
-# ctypedef np.npy_float64 DOUBLE_t         # Type of y, sample_weight
-# ctypedef np.npy_intp SIZE_t              # Type for indices and counters
-# ctypedef np.npy_int32 INT32_t            # Signed 32 bit integer
-# ctypedef np.npy_uint32 UINT32_t          # Unsigned 32 bit integer
-
-# DTYPE_t = float32
-# NP_DTYPE_t = np.float32
-# NP_DOUBLE_t = np.float32
-# ctypedef np.npy_float64 DOUBLE_t         # Type of y, sample_weight
-# ctypedef np.npy_intp SIZE_t              # Type for indices and counters
-# ctypedef np.npy_int32 INT32_t            # Signed 32 bit integer
-# ctypedef np.npy_uint32 UINT32_t          # Unsigned 32 bit integer
-
-from ._splitter import Splitter
-from ._splitter import SplitRecord
+from ._splitter import Splitter, SplitRecord, splitter_init, splitter_node_reset, \
+    splitter_node_split, spec_split_record, splitter_node_value
 
 import numba
 
@@ -75,7 +61,8 @@ node_dtype = [
     ("weighted_n_node_samples", NP_DOUBLE_t)
 ]
 
-numba_node_dtype = numba.from_dtype(np.dtype(node_dtype))
+NP_NODE_t = np.dtype(node_dtype)
+NODE_t = numba.from_dtype(NP_NODE_t)
 
 
 @njit
@@ -150,21 +137,6 @@ class Node(object):
 #     cdef double* value                   # (capacity, n_outputs, max_n_classes) array of values
 #     cdef SIZE_t value_stride             # = n_outputs * max_n_classes
 
-spec_tree = [
-    ("n_features", SIZE_t),
-    ("n_classes", SIZE_t[::1]),
-    ("n_outputs", SIZE_t),
-    ("max_n_classes", SIZE_t),
-    ("max_depth", SIZE_t),
-    ("node_count", SIZE_t),
-    ("capacity", SIZE_t),
-    ("nodes", numba_node_dtype[::1]),
-    ("value", DOUBLE_t[::1]),
-    ("value_stride", SIZE_t)
-]
-
-
-
 # =============================================================================
 # Tree builder
 # =============================================================================
@@ -202,43 +174,73 @@ class TreeBuilder(object):
         pass
 
 
-@njit
-def tree_builder_build(tree_builder, tree, X, y, sample_weight):
-    #cpdef build(self, Tree tree, object X, np.ndarray y, np.ndarray sample_weight=*)
-    pass
+# @njit
+# def tree_builder_build(tree_builder, tree, X, y, sample_weight):
+#     #cpdef build(self, Tree tree, object X, np.ndarray y, np.ndarray sample_weight=*)
+#     pass
 
 
-@njit
-def tree_check_input(tree, X, y, sample_weight):
-    #     cdef inline _check_input(self, object X, np.ndarray y,
-    #                              np.ndarray sample_weight):
-    #         """Check input dtype, layout and format"""
-    #         if issparse(X):
-    #             X = X.tocsc()
-    #             X.sort_indices()
-    #
-    #             if X.data.dtype != DTYPE:
-    #                 X.data = np.ascontiguousarray(X.data, dtype=DTYPE)
-    #
-    #             if X.indices.dtype != np.int32 or X.indptr.dtype != np.int32:
-    #                 raise ValueError("No support for np.int64 index based "
-    #                                  "sparse matrices")
-    #
-    #         elif X.dtype != DTYPE:
-    #             # since we have to copy we will make it fortran for efficiency
-    #             X = np.asfortranarray(X, dtype=DTYPE)
-    #
-    #         if y.dtype != DOUBLE or not y.flags.contiguous:
-    #             y = np.ascontiguousarray(y, dtype=DOUBLE)
-    #
-    #         if (sample_weight is not None and
-    #             (sample_weight.dtype != DOUBLE or
-    #             not sample_weight.flags.contiguous)):
-    #                 sample_weight = np.asarray(sample_weight, dtype=DOUBLE,
-    #                                            order="C")
-    #
-    #         return X, y, sample_weight
-    pass
+# TODO: faudra remettre le check_input, mais pas ici car pas possible dans @njit
+
+#
+# @njit
+# def tree_builder_check_input(tree, X, y, sample_weight):
+#     #     cdef inline _check_input(self, object X, np.ndarray y,
+#     #                              np.ndarray sample_weight):
+#     #         """Check input dtype, layout and format"""
+#     #         if issparse(X):
+#     #             X = X.tocsc()
+#     #             X.sort_indices()
+#     #
+#     #             if X.data.dtype != DTYPE:
+#     #                 X.data = np.ascontiguousarray(X.data, dtype=DTYPE)
+#     #
+#     #             if X.indices.dtype != np.int32 or X.indptr.dtype != np.int32:
+#     #                 raise ValueError("No support for np.int64 index based "
+#     #                                  "sparse matrices")
+#     #
+#     #         elif X.dtype != DTYPE:
+#     #             # since we have to copy we will make it fortran for efficiency
+#     #             X = np.asfortranarray(X, dtype=DTYPE)
+#     #
+#     #         if y.dtype != DOUBLE or not y.flags.contiguous:
+#     #             y = np.ascontiguousarray(y, dtype=DOUBLE)
+#     #
+#     #         if (sample_weight is not None and
+#     #             (sample_weight.dtype != DOUBLE or
+#     #             not sample_weight.flags.contiguous)):
+#     #                 sample_weight = np.asarray(sample_weight, dtype=DOUBLE,
+#     #                                            order="C")
+#     #
+#     #         return X, y, sample_weight
+#
+#         """Check input dtype, layout and format"""
+#         if issparse(X):
+#             X = X.tocsc()
+#             X.sort_indices()
+#
+#             if X.data.dtype != DTYPE:
+#                 X.data = np.ascontiguousarray(X.data, dtype=DTYPE)
+#
+#             if X.indices.dtype != np.int32 or X.indptr.dtype != np.int32:
+#                 raise ValueError("No support for np.int64 index based "
+#                                  "sparse matrices")
+#
+#         elif X.dtype != DTYPE:
+#             # since we have to copy we will make it fortran for efficiency
+#             X = np.asfortranarray(X, dtype=DTYPE)
+#
+#         if y.dtype != DOUBLE or not y.flags.contiguous:
+#             y = np.ascontiguousarray(y, dtype=DOUBLE)
+#
+#         if (sample_weight is not None and
+#             (sample_weight.dtype != DOUBLE or
+#             not sample_weight.flags.contiguous)):
+#                 sample_weight = np.asarray(sample_weight, dtype=DOUBLE,
+#                                            order="C")
+#
+#         return X, y, sample_weight
+
 
 
 #
@@ -262,6 +264,8 @@ def tree_check_input(tree, X, y, sample_weight):
 # from ._utils cimport safe_realloc
 # from ._utils cimport sizet_ptr_to_ndarray
 #
+
+
 
 
 # cdef extern from "numpy/arrayobject.h":
@@ -288,10 +292,11 @@ IS_NOT_FIRST = 0
 IS_LEFT = 1
 IS_NOT_LEFT = 0
 
-TREE_LEAF = -1
-TREE_UNDEFINED = -2
-_TREE_LEAF = SIZE_t(TREE_LEAF)
-_TREE_UNDEFINED = SIZE_t(TREE_UNDEFINED)
+# TREE_LEAF = -1
+TREE_LEAF = SIZE_t(-1)
+TREE_UNDEFINED = SIZE_t(-2)
+
+# _TREE_UNDEFINED = SIZE_t(TREE_UNDEFINED)
 INITIAL_STACK_SIZE = SIZE_t(10)
 
 
@@ -317,7 +322,8 @@ class DepthFirstTreeBuilder(object):
     # cdef class DepthFirstTreeBuilder(TreeBuilder):
     #     """Build a decision tree in depth-first fashion."""
 
-    def __init__(self):
+    def __init__(self, splitter, min_samples_split, min_samples_leaf,
+                 min_weight_leaf, max_depth, min_impurity_decrease, min_impurity_split):
         #     def __cinit__(self, Splitter splitter, SIZE_t min_samples_split,
         #                   SIZE_t min_samples_leaf, double min_weight_leaf,
         #                   SIZE_t max_depth, double min_impurity_decrease,
@@ -329,10 +335,19 @@ class DepthFirstTreeBuilder(object):
         #         self.max_depth = max_depth
         #         self.min_impurity_decrease = min_impurity_decrease
         #         self.min_impurity_split = min_impurity_split
-        pass
+
+        self.splitter = splitter
+        self.min_samples_split = min_samples_split
+        self.min_samples_leaf = min_samples_leaf
+        self.min_weight_leaf = min_weight_leaf
+        self.max_depth = max_depth
+        self.min_impurity_decrease = min_impurity_decrease
+        self.min_impurity_split = min_impurity_split
+
+
 
 @njit
-def depth_first_tree_builder_build(depth_first_tree_builder, tree, X, y, sample_weight):
+def depth_first_tree_builder_build(builder, tree, X, y, sample_weight):
 #     cpdef build(self, Tree tree, object X, np.ndarray y,
 #                 np.ndarray sample_weight=None):
 #         """Build a decision tree from the training set (X, y)."""
@@ -467,7 +482,160 @@ def depth_first_tree_builder_build(depth_first_tree_builder, tree, X, y, sample_
 #                 tree.max_depth = max_depth_seen
 #         if rc == -1:
 #             raise MemoryError()
-    pass
+
+    """Build a decision tree from the training set (X, y)."""
+
+    # check input
+    # TODO: faudra remettre ca
+    # X, y, sample_weight = builder._check_input(X, y, sample_weight)
+
+    # cdef DOUBLE_t* sample_weight_ptr = NULL
+    # if sample_weight is not None:
+    #     sample_weight_ptr = <DOUBLE_t*> sample_weight.data
+
+    # Initial capacity
+    # cdef int init_capacity
+
+    if tree.max_depth <= 10:
+        init_capacity = (2 ** (tree.max_depth + 1)) - 1
+    else:
+        init_capacity = 2047
+
+    # tree._resize(init_capacity)
+    tree_resize(tree, init_capacity)
+
+    # Parameters
+    splitter = builder.splitter
+    max_depth = builder.max_depth
+    min_samples_leaf = builder.min_samples_leaf
+    min_weight_leaf = builder.min_weight_leaf
+    min_samples_split = builder.min_samples_split
+    min_impurity_decrease = builder.min_impurity_decrease
+    min_impurity_split = builder.min_impurity_split
+
+    # Recursive partition (without actual recursion)
+    # splitter.init(X, y, sample_weight_ptr)
+    splitter_init(splitter, X, y, sample_weight)
+
+    # cdef SIZE_t start
+    # cdef SIZE_t end
+    # cdef SIZE_t depth
+    # cdef SIZE_t parent
+    # cdef bint is_left
+    # cdef SIZE_t n_node_samples = splitter.n_samples
+    n_node_samples = splitter.n_samples
+    # cdef double weighted_n_samples = splitter.weighted_n_samples
+    weighted_n_samples = splitter.weighted_n_samples
+    # cdef double weighted_n_node_samples
+    # cdef SplitRecord split
+    # cdef SIZE_t node_id
+
+    # cdef double impurity = INFINITY
+    impurity = INFINITY
+
+    # cdef SIZE_t n_constant_features
+    # cdef bint is_leaf
+    # cdef bint first = 1
+    first = 1
+    # cdef SIZE_t max_depth_seen = -1
+    max_depth_seen = -1
+    # cdef int rc = 0
+    rc = 0
+
+    stack = Stack(INITIAL_STACK_SIZE)
+    # cdef StackRecord stack_record
+
+    # with nogil:
+        # push root node onto stack
+    # rc = stack.push(0, n_node_samples, 0, _TREE_UNDEFINED, 0, INFINITY, 0)
+    rc = stack.push(0, n_node_samples, 0, TREE_UNDEFINED, 0, INFINITY, 0)
+
+    # if rc == -1:
+    #     # got return code -1 - out-of-memory
+    #     with gil:
+    #         raise MemoryError()
+
+    while not stack_is_empty(stack):
+        stack_record = stack_pop(stack)
+        # start = stack_record.start
+        # end = stack_record.end
+        # depth = stack_record.depth
+        # parent = stack_record.parent
+        # is_left = stack_record.is_left
+        # impurity = stack_record.impurity
+        # n_constant_features = stack_record.n_constant_features
+        start = stack_record["start"]
+        end = stack_record["end"]
+        depth = stack_record["depth"]
+        parent = stack_record["parent"]
+        is_left = stack_record["is_left"]
+        impurity = stack_record["impurity"]
+        n_constant_features = stack_record["n_constant_features"]
+
+        n_node_samples = end - start
+        # splitter.node_reset(start, end, &weighted_n_node_samples)
+        weighted_n_node_samples = splitter_node_reset(splitter, start, end)
+
+        is_leaf = (depth >= max_depth or
+                   n_node_samples < min_samples_split or
+                   n_node_samples < 2 * min_samples_leaf or
+                   weighted_n_node_samples < 2 * min_weight_leaf)
+
+        if first:
+            impurity = splitter.node_impurity()
+            first = 0
+
+        is_leaf = (is_leaf or
+                   (impurity <= min_impurity_split))
+
+        if not is_leaf:
+            # splitter.node_split(impurity, &split, &n_constant_features)
+            splitter_node_split(splitter, impurity, split, n_constant_features)
+            # If EPSILON=0 in the below comparison, float precision
+            # issues stop splitting, producing trees that are
+            # dissimilar to v0.18
+            is_leaf = (is_leaf or split.pos >= end or
+                       (split.improvement + EPSILON <
+                        min_impurity_decrease))
+
+        node_id = tree._add_node(parent, is_left, is_leaf, split.feature,
+                                 split.threshold, impurity, n_node_samples,
+                                 weighted_n_node_samples)
+
+        if node_id == SIZE_MAX:
+            rc = -1
+            break
+
+        # Store value for all nodes, to facilitate tree/model
+        # inspection and interpretation
+        splitter.node_value(tree.value + node_id * tree.value_stride)
+
+        if not is_leaf:
+            # Push right child on stack
+            rc = stack.push(split.pos, end, depth + 1, node_id, 0,
+                            split.impurity_right, n_constant_features)
+            if rc == -1:
+                break
+
+            # Push left child on stack
+            rc = stack.push(start, split.pos, depth + 1, node_id, 1,
+                            split.impurity_left, n_constant_features)
+            if rc == -1:
+                break
+
+        if depth > max_depth_seen:
+            max_depth_seen = depth
+
+    if rc >= 0:
+        rc = tree._resize_c(tree.node_count)
+
+    if rc >= 0:
+        tree.max_depth = max_depth_seen
+if rc == -1:
+    raise MemoryError()
+
+
+
 
 
 # # Best first builder ----------------------------------------------------------
@@ -505,7 +673,8 @@ def depth_first_tree_builder_build(depth_first_tree_builder, tree, X, y, sample_
 #         self.max_leaf_nodes = max_leaf_nodes
 #         self.min_impurity_decrease = min_impurity_decrease
 #         self.min_impurity_split = min_impurity_split
-#
+
+
 #     cpdef build(self, Tree tree, object X, np.ndarray y,
 #                 np.ndarray sample_weight=None):
 #         """Build a decision tree from the training set (X, y)."""
@@ -617,7 +786,8 @@ def depth_first_tree_builder_build(depth_first_tree_builder, tree, X, y, sample_
 #
 #         if rc == -1:
 #             raise MemoryError()
-#
+
+
 #     cdef inline int _add_split_node(self, Splitter splitter, Tree tree,
 #                                     SIZE_t start, SIZE_t end, double impurity,
 #                                     bint is_first, bint is_left, Node* parent,
@@ -692,6 +862,20 @@ def depth_first_tree_builder_build(depth_first_tree_builder, tree, X, y, sample_
 #         return 0
 
 
+spec_tree = [
+    ("n_features", SIZE_t),
+    ("n_classes", SIZE_t[::1]),
+    ("n_outputs", SIZE_t),
+    ("max_n_classes", SIZE_t),
+    ("max_depth", SIZE_t),
+    ("node_count", SIZE_t),
+    ("capacity", SIZE_t),
+    ("nodes", NODE_t[::1]),
+    ("value", DOUBLE_t[::1]),
+    ("value_stride", SIZE_t)
+]
+
+
 @jitclass(spec_tree)
 class Tree(object):
     # # =============================================================================
@@ -756,7 +940,8 @@ class Tree(object):
     #     # WARNING: these reference the current `nodes` and `value` buffers, which
     #     # must not be freed by a subsequent memory allocation.
     #     # (i.e. through `_resize` or `__setstate__`)
-    def __init__(self):
+
+    def __init__(self, n_features, n_classes, n_outputs):
         #     def __cinit__(self, int n_features, np.ndarray[SIZE_t, ndim=1] n_classes,
         #                   int n_outputs):
         #         """Constructor."""
@@ -779,12 +964,55 @@ class Tree(object):
         #         self.capacity = 0
         #         self.value = NULL
         #         self.nodes = NULL
-        pass
+        """Constructor."""
+        # Input/Output layout
+        self.n_features = n_features
+        self.n_outputs = n_outputs
+        # self.n_classes = NULL
+        # safe_realloc(&self.n_classes, n_outputs)
+        self.n_classes = np.empty(n_outputs, dtype=NP_SIZE_t)
+        self.max_n_classes = np.max(n_classes)
+        self.value_stride = n_outputs * self.max_n_classes
+
+        for k in range(n_outputs):
+            self.n_classes[k] = n_classes[k]
+
+        # Inner structures
+        self.max_depth = 0
+        self.node_count = 0
+        self.capacity = 0
+
+        # self.value = NULL
+        self.nodes = np.empty(0, dtype=NP_NODE_t)
+
+
+def print_tree(tree):
+    s = "Tree("
+    s += "n_features={n_features}".format(n_features=tree.n_features)
+    s += ", n_outputs={n_outputs}".format(n_outputs=tree.n_outputs)
+    s += ", n_classes={n_classes}".format(n_classes=tree.n_classes)
+    s += ", capacity={capacity}".format(capacity=tree.capacity)
+    s += ", node_count={node_count}".format(node_count=tree.node_count)
+    s += ")"
+    print(s)
+
+
+def get_nodes(tree):
+    import pandas as pd
+    nodes = tree.nodes
+    columns = [col_name for col_name, _ in node_dtype]
+    # columns = ["left_child"]
+
+    return pd.DataFrame.from_records(
+        (tuple(node[col] for col in columns) for i, node in enumerate(nodes) if i <
+         tree.node_count),
+        columns=columns
+    )
 
 
 @njit
 def tree_add_node(tree, parent, is_left, is_leaf, feature, threshold, impurity,
-                  n_node_samples, weighted_n_samples):
+                  n_node_samples, weighted_n_node_samples):
     #     cdef SIZE_t _add_node(self, SIZE_t parent, bint is_left, bint is_leaf,
     #                           SIZE_t feature, double threshold, double impurity,
     #                           SIZE_t n_node_samples,
@@ -826,10 +1054,45 @@ def tree_add_node(tree, parent, is_left, is_leaf, feature, threshold, impurity,
     #         self.node_count += 1
     #
     #         return node_id
-    pass
+
+    node_id = tree.node_count
+
+    if node_id >= tree.capacity:
+        tree_resize(tree)
+        # TODO: qu'est ce qui se passe ici ?
+        # if tree._resize_c() != 0:
+        #     return SIZE_MAX
+
+    nodes = tree.nodes
+    node = nodes[node_id]
+    # cdef Node* node = &tree.nodes[node_id]
+    node["impurity"] = impurity
+    node["n_node_samples"] = n_node_samples
+    node["weighted_n_node_samples"] = weighted_n_node_samples
+
+    if parent != TREE_UNDEFINED:
+        if is_left:
+            nodes[parent].left_child = node_id
+        else:
+            nodes[parent].right_child = node_id
+
+    if is_leaf:
+        node["left_child"] = TREE_LEAF
+        node["right_child"] = TREE_LEAF
+        node["feature"] = TREE_UNDEFINED
+        node["threshold"] = TREE_UNDEFINED
+    else:
+        # left_child and right_child will be set later
+        node["feature"] = feature
+        node["threshold"] = threshold
+
+    tree.node_count += 1
+
+    return node_id
+
 
 @njit
-def tree_resize(tree, capacity):
+def tree_resize(tree, capacity=SIZE_MAX):
     #     cdef int _resize(self, SIZE_t capacity) nogil except -1:
     #         """Resize all inner arrays to `capacity`, if `capacity` == -1, then
     #            double the size of the inner arrays.
@@ -841,11 +1104,7 @@ def tree_resize(tree, capacity):
     #             # Acquire gil only if we need to raise
     #             with gil:
     #                 raise MemoryError()
-    pass
-
-
-@njit
-def tree_resize_c(tree, capacity):
+    #
     #     cdef int _resize_c(self, SIZE_t capacity=SIZE_MAX) nogil except -1:
     #         """Guts of _resize
     #
@@ -876,7 +1135,38 @@ def tree_resize_c(tree, capacity):
     #
     #         self.capacity = capacity
     #         return 0
-    pass
+
+    # TODO: When does this happen ?
+    # if capacity == tree.capacity and tree.nodes != NULL:
+    if capacity == tree.capacity and tree.nodes.size > 0:
+        return 0
+
+    if capacity == SIZE_MAX:
+        if tree.capacity == 0:
+            capacity = 3  # default initial value
+        else:
+            capacity = 2 * tree.capacity
+
+    # safe_realloc( & tree.nodes, capacity)
+    tree.nodes = resize(tree.nodes, capacity)
+    # safe_realloc( & tree.value, capacity * tree.value_stride)
+
+    # TODO: je ne comprends toujours pas tres bien a quoi sert ce value mais bon
+    tree.value = resize(tree.value, capacity * tree.value_stride, zeros=True)
+
+    # value memory is initialised to 0 to enable classifier argmax
+    # if capacity > tree.capacity:
+    #     memset( < void * > (tree.value + tree.capacity * tree.value_stride), 0,
+    #     (capacity - tree.capacity) * tree.value_stride *
+    #     sizeof(double))
+
+    # if capacity smaller than node_count, adjust the counter
+    if capacity < tree.node_count:
+        tree.node_count = capacity
+
+    tree.capacity = capacity
+    return 0
+
 
 @njit
 def tree_get_value_ndarray(tree):
@@ -984,7 +1274,53 @@ def tree_apply_dense(tree, X):
     #                 out_ptr[i] = <SIZE_t>(node - self.nodes)  # node offset
     #
     #         return out
-    pass
+
+    # Check input
+    if not isinstance(X, np.ndarray):
+        raise ValueError("X should be in np.ndarray format, got %s"
+                         % type(X))
+
+    if X.dtype != DTYPE_t:
+        raise ValueError("X.dtype should be np.float32, got %s" % X.dtype)
+
+    # Extract input
+    # cdef const DTYPE_t[:, :] X_ndarray = X
+    X_ndarray = X
+
+    # cdef SIZE_t n_samples = X.shape[0]
+    n_samples = X.shape[0]
+
+    # Initialize output
+    # cdef np.ndarray[SIZE_t] out = np.zeros((n_samples,), dtype=np.intp)
+    out = np.zeros((n_samples,), dtype=NP_SIZE_t)
+    # cdef SIZE_t* out_ptr = <SIZE_t*> out.data
+
+    # Initialize auxiliary data-structure
+    # cdef Node* node = NULL
+    # cdef SIZE_t i = 0
+
+    # with nogil:
+
+    nodes = tree.nodes
+
+    for i in range(n_samples):
+        # Index of the leaf containing the sample
+        idx_leaf = 0
+        node = nodes[idx_leaf]
+        # While node not a leaf
+        while node["left_child"] != TREE_LEAF:
+            # ... and node.right_child != TREE_LEAF:
+            if X_ndarray[i, node["feature"]] <= node["threshold"]:
+                idx_leaf = node["left_child"]
+            else:
+                idx_leaf = node["right_child"]
+            node = nodes[idx_leaf]
+
+        # out_ptr[i] = <SIZE_t>(node - tree.nodes)  # node offset
+        out[i] = SIZE_t(idx_leaf)
+
+    return out
+
 
 @njit
 def tree_apply_sparse_csr(tree, X):

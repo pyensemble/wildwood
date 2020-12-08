@@ -5,188 +5,328 @@ from collections import namedtuple
 from numpy.random import randint
 from numba.experimental import jitclass
 from numba import from_dtype
+from numba.typed import List
 from time import time
 from numba import uint32
 
+from wildwood._splitter import sort
+
+from wildwood._utils import SIZE_t, DOUBLE_t, NP_SIZE_t, NP_DOUBLE_t
+
 import numpy as np
 
-# Node = namedtuple("Node", ["left", "right", "parent"])
+# # Node = namedtuple("Node", ["left", "right", "parent"])
+#
+
+# cdef struct StackRecord:
+#     SIZE_t start
+#     SIZE_t end
+#     SIZE_t depth
+#     SIZE_t parent
+#     bint is_left
+#     double impurity
+#     SIZE_t n_constant_features
 
 
-spec = [(
-    ("a", uint32)
-)]
-@jitclass(spec)
-class A(object):
-
-    def __init__(self, a):
-        self.a = a
-
-
-
-@jitclass(spec)
-class B(object):
-
-    def __init__(self, a):
-        self.a = a
-
-
-@njit
-def update(obj, a):
-    obj.a = a
-
-
-@njit
-def truc():
-    return 1.2, 3.2
-
-
-@njit
-def main():
-    # a = A(2)
-    # b = B(1)
-    # update(a, 123)
-    # update(b, 42)
-    # print(a.a, b.a)
-    a, b = truc()
-    print(a, b)
-
-main()
-
-
-from wildwood._utils import DTYPE_t, NP_DTYPE_t, DOUBLE_t, NP_DOUBLE_t, SIZE_t, \
-    NP_SIZE_t, \
-    INT32_t, NP_UINT32_t, jitclass, njit, get_numba_type
-
-
-spec_node = [
-    ("left_child", SIZE_t),
-    ("right_child", SIZE_t),
-    ("feature", SIZE_t),
-    ("threshold", DOUBLE_t),
-    ("impurity", DOUBLE_t),
-    ("n_node_samples", SIZE_t),
-    ("weighted_n_node_samples", DOUBLE_t)
-]
-
-node_dtype = [
-    ("left_child", NP_SIZE_t),
-    ("right_child", NP_SIZE_t),
-    ("feature", NP_SIZE_t),
-    ("threshold", NP_DOUBLE_t),
-    ("impurity", NP_DOUBLE_t),
-    ("n_node_samples", NP_SIZE_t),
-    ("weighted_n_node_samples", NP_DOUBLE_t)
-]
-
-@jitclass(spec_node)
-class Node(object):
-    # cdef struct Node:
-    #     # Base storage structure for the nodes in a Tree object
-    #
-    #     SIZE_t left_child                    # id of the left child of the node
-    #     SIZE_t right_child                   # id of the right child of the node
-    #     SIZE_t feature                       # Feature used for splitting the node
-    #     DOUBLE_t threshold                   # Threshold value at the node
-    #     DOUBLE_t impurity                    # Impurity of the node (i.e., the value of the criterion)
-    #     SIZE_t n_node_samples                # Number of samples at the node
-    #     DOUBLE_t weighted_n_node_samples     # Weighted number of samples at the node
-
-    def __init__(self, left_child, right_child, feature, threshold, impurity,
-                 n_node_samples, weighted_n_node_samples):
-        self.left_child = left_child
-        self.right_child = right_child
-        self.feature = feature
-        self.threshold = threshold
-        self.impurity = impurity
-        self.n_node_samples = n_node_samples
-        self.weighted_n_node_samples = weighted_n_node_samples
 
 
 
 
 @njit
-def set_node(nodes, idx, node):
-    # It's a dtype
-    node_dtype = nodes[idx]
-    node_dtype["left_child"] = node.left_child
-    node_dtype["right_child"] = node.right_child
-    node_dtype["feature"] = node.feature
-    node_dtype["threshold"] = node.threshold
-    node_dtype["impurity"] = node.impurity
-    node_dtype["n_node_samples"] = node.n_node_samples
-    node_dtype["weighted_n_node_samples"] = node.weighted_n_node_samples
+def numpy_sort(Xf, samples, n):
+    idx = np.argsort(Xf)
+    Xf = Xf[idx]
+    samples = samples[idx]
+
 
 
 @njit
-def get_node(nodes, idx):
-    # It's a jitclass object
-    node = nodes[idx]
-    return Node(
-        node["left_child"],
-        node["right_child"],
-        node["feature"],
-        node["threshold"],
-        node["impurity"],
-        node["n_node_samples"],
-        node["weighted_n_node_samples"]
-    )
-
-
-n_nodes = 10_000_000
-nodes = np.empty(n_nodes, dtype=node_dtype)
-numba_nodes_dtype = from_dtype(np.dtype(node_dtype))
-
-
-
-# >>> struct_dtype = np.dtype([('row', np.float64), ('col', np.float64)])
-# >>> ty = numba.from_dtype(struct_dtype)
-# >>> ty
-# Record([('row', '<f8'), ('col', '<f8')])
-# >>> ty[:, :]
-# unaligned array(Record([('row', '<f8'), ('col', '<f8')]), 2d, A)
-spec_A = [
-    ("nodes", numba_nodes_dtype[::1])
-]
-
-@jitclass(spec_A)
-class A(object):
-
-    def __init__(self, nodes):
-        self.nodes = nodes
-
-
-# node_dtype = [spec_node_dtype]
+def numba_sort(Xf, samples, n):
+    sort(Xf, samples, n)
 
 
 @njit
-def main2(nodes):
+def compile():
+    print('JIT Compile')
+    n = 10
+    Xf = np.random.randn(n)
+    samples = np.arange(0, n)
+    numpy_sort(Xf, samples, n)
+    numba_sort(Xf, samples, n)
 
-    for i in range(n_nodes):
-        node = Node(1, 2, 3.0, 4.0, 5.0, 6.0, 7.0)
-        set_node(nodes, i, node)
 
-    for i in range(n_nodes):
-        node = get_node(nodes, i)
+compile()
 
-    a = A(nodes)
 
-    # nodes[0]["feature"] = 123
+print("One big")
+n_repeat = 5
+n = 10_000_000
 
-    # node = get_node(nodes, 2)
-    # node = Node(0, 0, 0.0, 0.0, 0.0, 0.0, 0.0)
+total_time_numba = 0
+total_time_numpy = 0
 
-    # cdef Node dummy;
-    # NODE_DTYPE = np.asarray(<Node[:1]>(&dummy)).dtype
+for i in range(n_repeat):
+    # Generate data
+    Xf = np.random.randn(n)
+    samples = np.arange(0, n)
 
-    # nodes = np.empty(10, dtype=node_dtype)
-    # print(node.left_child, node.right_child)
+    # Time numpy
+    tic = time()
+    numpy_sort(Xf, samples, n)
+    toc = time()
+    total_time_numpy += toc - tic
 
-tic = time()
-main2(nodes)
-toc = time()
+    # Time numba
+    tic = time()
+    numba_sort(Xf, samples, n)
+    toc = time()
+    total_time_numba += toc - tic
 
-print(toc-tic)
+
+print("numpy: ", total_time_numpy)
+print("numba: ", total_time_numba)
+
+
+print("Many small")
+n_repeat = 5_000
+n = 10_000
+
+total_time_numba = 0
+total_time_numpy = 0
+
+for i in range(n_repeat):
+    # Generate data
+    Xf = np.random.randn(n)
+    samples = np.arange(0, n)
+
+    # Time numpy
+    tic = time()
+    numpy_sort(Xf, samples, n)
+    toc = time()
+    total_time_numpy += toc - tic
+
+    # Time numba
+    tic = time()
+    numba_sort(Xf, samples, n)
+    toc = time()
+    total_time_numba += toc - tic
+
+
+print("numpy: ", total_time_numpy)
+print("numba: ", total_time_numba)
+
+
+    # print("Xf: ", Xf)
+
+    # print("samples: ", samples)
+    # sort(Xf, samples, n)
+
+    # print("Xf: ", Xf)
+    # print("samples: ", samples)
+
+
+
+
+#
+# @njit
+# def main():
+#
+#
+#
+#     l = List()
+#     l.append(42)
+#     l.append(3.14)
+#     return l
+#
+# l = main()
+# print(l)
+
+
+#
+# spec = [(
+#     ("a", uint32)
+# )]
+# @jitclass(spec)
+# class A(object):
+#
+#     def __init__(self, a):
+#         self.a = a
+#
+#
+#
+# @jitclass(spec)
+# class B(object):
+#
+#     def __init__(self, a):
+#         self.a = a
+#
+#
+# @njit
+# def update(obj, a):
+#     obj.a = a
+#
+#
+# @njit
+# def truc():
+#     return 1.2, 3.2
+#
+#
+# @njit
+# def main():
+#     # a = A(2)
+#     # b = B(1)
+#     # update(a, 123)
+#     # update(b, 42)
+#     # print(a.a, b.a)
+#     a, b = truc()
+#     print(a, b)
+#
+# main()
+#
+#
+#
+# from wildwood._utils import DTYPE_t, NP_DTYPE_t, DOUBLE_t, NP_DOUBLE_t, SIZE_t, \
+#     NP_SIZE_t, \
+#     INT32_t, NP_UINT32_t, jitclass, njit, get_numba_type
+#
+#
+# spec_node = [
+#     ("left_child", SIZE_t),
+#     ("right_child", SIZE_t),
+#     ("feature", SIZE_t),
+#     ("threshold", DOUBLE_t),
+#     ("impurity", DOUBLE_t),
+#     ("n_node_samples", SIZE_t),
+#     ("weighted_n_node_samples", DOUBLE_t)
+# ]
+#
+# node_dtype = [
+#     ("left_child", NP_SIZE_t),
+#     ("right_child", NP_SIZE_t),
+#     ("feature", NP_SIZE_t),
+#     ("threshold", NP_DOUBLE_t),
+#     ("impurity", NP_DOUBLE_t),
+#     ("n_node_samples", NP_SIZE_t),
+#     ("weighted_n_node_samples", NP_DOUBLE_t)
+# ]
+#
+# @jitclass(spec_node)
+# class Node(object):
+#     # cdef struct Node:
+#     #     # Base storage structure for the nodes in a Tree object
+#     #
+#     #     SIZE_t left_child                    # id of the left child of the node
+#     #     SIZE_t right_child                   # id of the right child of the node
+#     #     SIZE_t feature                       # Feature used for splitting the node
+#     #     DOUBLE_t threshold                   # Threshold value at the node
+#     #     DOUBLE_t impurity                    # Impurity of the node (i.e., the value of the criterion)
+#     #     SIZE_t n_node_samples                # Number of samples at the node
+#     #     DOUBLE_t weighted_n_node_samples     # Weighted number of samples at the node
+#
+#     def __init__(self, left_child, right_child, feature, threshold, impurity,
+#                  n_node_samples, weighted_n_node_samples):
+#         self.left_child = left_child
+#         self.right_child = right_child
+#         self.feature = feature
+#         self.threshold = threshold
+#         self.impurity = impurity
+#         self.n_node_samples = n_node_samples
+#         self.weighted_n_node_samples = weighted_n_node_samples
+#
+#
+#
+#
+# @njit
+# def set_node(tree, idx, node):
+#     # It's a dtype
+#     nodes = tree.nodes
+#     node_dtype = nodes[idx]
+#     node_dtype["left_child"] = node.left_child
+#     node_dtype["right_child"] = node.right_child
+#     node_dtype["feature"] = node.feature
+#     node_dtype["threshold"] = node.threshold
+#     node_dtype["impurity"] = node.impurity
+#     node_dtype["n_node_samples"] = node.n_node_samples
+#     node_dtype["weighted_n_node_samples"] = node.weighted_n_node_samples
+#
+#
+# @njit
+# def get_node(tree, idx):
+#     # It's a jitclass object
+#     nodes = tree.nodes
+#     node = nodes[idx]
+#     return Node(
+#         node["left_child"],
+#         node["right_child"],
+#         node["feature"],
+#         node["threshold"],
+#         node["impurity"],
+#         node["n_node_samples"],
+#         node["weighted_n_node_samples"]
+#     )
+#
+#
+# # nodes = np.empty(n_nodes, dtype=node_dtype)
+#
+# NP_NODE_t = np.dtype(node_dtype)
+# NODE_t = from_dtype(NP_NODE_t)
+#
+#
+#
+# # >>> struct_dtype = np.dtype([('row', np.float64), ('col', np.float64)])
+# # >>> ty = numba.from_dtype(struct_dtype)
+# # >>> ty
+# # Record([('row', '<f8'), ('col', '<f8')])
+# # >>> ty[:, :]
+# # unaligned array(Record([('row', '<f8'), ('col', '<f8')]), 2d, A)
+# spec_tree = [
+#     ("nodes", NODE_t[::1])
+# ]
+#
+# @jitclass(spec_tree)
+# class Tree(object):
+#
+#     def __init__(self, n_nodes):
+#         self.nodes = np.empty(0, dtype=NP_NODE_t)
+#
+#
+# # node_dtype = [spec_node_dtype]
+#
+#
+#
+# @njit
+# def main2():
+#     n_nodes = 10
+#
+#     tree = Tree(n_nodes)
+#
+#     for i in range(n_nodes):
+#         node = Node(1, 2, 3.0, 4.0, 5.0, 6.0, 7.0)
+#         set_node(tree, i, node)
+#
+#     for i in range(n_nodes):
+#         node = get_node(tree, i)
+#
+#
+#
+#     # nodes[0]["feature"] = 123
+#
+#     # node = get_node(nodes, 2)
+#     # node = Node(0, 0, 0.0, 0.0, 0.0, 0.0, 0.0)
+#
+#     # cdef Node dummy;
+#     # NODE_DTYPE = np.asarray(<Node[:1]>(&dummy)).dtype
+#
+#     # nodes = np.empty(10, dtype=node_dtype)
+#     # print(node.left_child, node.right_child)
+#
+# tic = time()
+# main2()
+# toc = time()
+#
+# print(toc-tic)
+
+
 # import numpy as np
 # from numba import njit
 #
@@ -295,3 +435,4 @@ print(toc-tic)
 # def main():
 #
 #     x = np.empty()
+

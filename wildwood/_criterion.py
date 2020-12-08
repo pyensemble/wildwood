@@ -11,7 +11,7 @@
 # See _criterion.pyx for implementation details.
 
 import numpy as np
-from _utils import SIZE_t, NP_SIZE_t, UINT32_t, NP_UINT32_t, DOUBLE_t, NP_DOUBLE_t
+from ._utils import SIZE_t, NP_SIZE_t, UINT32_t, NP_UINT32_t, DOUBLE_t, NP_DOUBLE_t
 from numba import njit
 from numba.experimental import jitclass
 

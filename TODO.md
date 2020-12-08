@@ -1,23 +1,9 @@
 
-- Pour le tree : faut recoder les data structures 
 
-```python
-from ._utils cimport Stack
-from ._utils cimport StackRecord
-from ._utils cimport PriorityHeap
-from ._utils cimport PriorityHeapRecord
-from ._utils cimport safe_realloc
-from ._utils cimport sizet_ptr_to_ndarray
-```
+- Tester le Tree
+- Tester le Stack 
+- Finir le BestSplitter en particulier la methode node_split
 
-Et puis faut verifier qu'on peut mettre n'importe quel dtype dans un numpy array
-
-- ils mettent les nodes dans un numpy array !!
-- On peut faire un dtype et s'en servir dans numba
-- Comment ils allouent / decalouent ?
-- Faut bien comprendre la gestion de noeuds
-
--> C'est ok il suffit d'utiliser numba.from_dtype
 
 - Reprendre le code de scikit-learn en pure Python / Numba
 - Traduire la foret en numba
