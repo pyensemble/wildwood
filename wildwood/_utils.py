@@ -221,12 +221,12 @@ def stack_pop(stack):
 #         return 0
     top = stack.top
     # cdef StackRecord* stack = self.stack_
-    stack = stack.stack_
+    stack_ = stack.stack_
 
     if top <= 0:
         return -1
 
-    stack_record = stack[top - 1]
+    stack_record = stack_[top - 1]
     # res[0] = stack[top - 1]
     stack.top = top - 1
     # return 0

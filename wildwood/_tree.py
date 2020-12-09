@@ -31,11 +31,12 @@ from scipy.sparse import csr_matrix
 import numpy as np
 from ._utils import DTYPE_t, NP_DTYPE_t, DOUBLE_t, NP_DOUBLE_t, SIZE_t, NP_SIZE_t, \
     INT32_t, NP_UINT32_t, SIZE_MAX, jitclass, njit, get_numba_type, resize, INFINITY,\
-    Stack, stack_push, stack_pop, stack_is_empty
+    Stack, stack_push, stack_pop, stack_is_empty, EPSILON
 
 
-from ._splitter import Splitter, SplitRecord, splitter_init, splitter_node_reset, \
-    splitter_node_split, spec_split_record, splitter_node_value
+from ._splitter import splitter_init, splitter_node_reset, spec_split_record, \
+    splitter_node_value, BestSplitter, best_splitter_node_split, SplitRecord, \
+    best_splitter_init, gini_node_impurity, gini_children_impurity
 
 import numba
 
@@ -142,7 +143,7 @@ class Node(object):
 # =============================================================================
 
 spec_tree_builder = [
-    ("splitter", get_numba_type(Splitter)),
+    ("splitter", get_numba_type(BestSplitter)),
     ("min_samples_split", SIZE_t),
     ("min_samples_leaf", SIZE_t),
     ("min_weight_leaf", DOUBLE_t),
@@ -489,6 +490,9 @@ def depth_first_tree_builder_build(builder, tree, X, y, sample_weight):
     # TODO: faudra remettre ca
     # X, y, sample_weight = builder._check_input(X, y, sample_weight)
 
+    # This is the output split
+    split = SplitRecord()
+
     # cdef DOUBLE_t* sample_weight_ptr = NULL
     # if sample_weight is not None:
     #     sample_weight_ptr = <DOUBLE_t*> sample_weight.data
@@ -515,7 +519,9 @@ def depth_first_tree_builder_build(builder, tree, X, y, sample_weight):
 
     # Recursive partition (without actual recursion)
     # splitter.init(X, y, sample_weight_ptr)
-    splitter_init(splitter, X, y, sample_weight)
+
+    best_splitter_init(splitter, X, y, sample_weight)
+    # splitter_init(splitter, X, y, sample_weight)
 
     # cdef SIZE_t start
     # cdef SIZE_t end
@@ -548,7 +554,8 @@ def depth_first_tree_builder_build(builder, tree, X, y, sample_weight):
     # with nogil:
         # push root node onto stack
     # rc = stack.push(0, n_node_samples, 0, _TREE_UNDEFINED, 0, INFINITY, 0)
-    rc = stack.push(0, n_node_samples, 0, TREE_UNDEFINED, 0, INFINITY, 0)
+
+    rc = stack_push(stack, 0, n_node_samples, 0, TREE_UNDEFINED, 0, INFINITY, 0)
 
     # if rc == -1:
     #     # got return code -1 - out-of-memory
@@ -582,7 +589,12 @@ def depth_first_tree_builder_build(builder, tree, X, y, sample_weight):
                    weighted_n_node_samples < 2 * min_weight_leaf)
 
         if first:
-            impurity = splitter.node_impurity()
+
+            # TODO: some other way, only for gini here
+            # impurity = splitter.node_impurity()
+            # dans le code d'origine y'a splitter.node_impurity qui appelle
+            # self.criterion
+            impurity = gini_node_impurity(splitter.criterion)
             first = 0
 
         is_leaf = (is_leaf or
@@ -590,7 +602,8 @@ def depth_first_tree_builder_build(builder, tree, X, y, sample_weight):
 
         if not is_leaf:
             # splitter.node_split(impurity, &split, &n_constant_features)
-            splitter_node_split(splitter, impurity, split, n_constant_features)
+
+            best_splitter_node_split(splitter, impurity, split, n_constant_features)
             # If EPSILON=0 in the below comparison, float precision
             # issues stop splitting, producing trees that are
             # dissimilar to v0.18
@@ -598,9 +611,13 @@ def depth_first_tree_builder_build(builder, tree, X, y, sample_weight):
                        (split.improvement + EPSILON <
                         min_impurity_decrease))
 
-        node_id = tree._add_node(parent, is_left, is_leaf, split.feature,
+        node_id = tree_add_node(tree, parent, is_left, is_leaf, split.feature,
                                  split.threshold, impurity, n_node_samples,
                                  weighted_n_node_samples)
+
+        # node_id = tree._add_node(parent, is_left, is_leaf, split.feature,
+        #                          split.threshold, impurity, n_node_samples,
+        #                          weighted_n_node_samples)
 
         if node_id == SIZE_MAX:
             rc = -1
@@ -608,7 +625,10 @@ def depth_first_tree_builder_build(builder, tree, X, y, sample_weight):
 
         # Store value for all nodes, to facilitate tree/model
         # inspection and interpretation
-        splitter.node_value(tree.value + node_id * tree.value_stride)
+        # TODO: is this really useful ??? I don't think so
+        # splitter_node_value(splitter, tree.value + node_id * tree.value_stride)
+
+        # splitter.node_value(tree.value + node_id * tree.value_stride)
 
         if not is_leaf:
             # Push right child on stack
@@ -627,15 +647,15 @@ def depth_first_tree_builder_build(builder, tree, X, y, sample_weight):
             max_depth_seen = depth
 
     if rc >= 0:
-        rc = tree._resize_c(tree.node_count)
+        rc = tree_resize(tree, tree.node_count)
+        # rc = tree._resize_c(tree.node_count)
 
     if rc >= 0:
         tree.max_depth = max_depth_seen
-if rc == -1:
-    raise MemoryError()
 
-
-
+    # TODO: ca ne sert a rien et c'est merdique
+    if rc == -1:
+        raise MemoryError()
 
 
 # # Best first builder ----------------------------------------------------------
@@ -983,6 +1003,7 @@ class Tree(object):
         self.capacity = 0
 
         # self.value = NULL
+        self.value = np.empty(0, dtype=NP_DOUBLE_t)
         self.nodes = np.empty(0, dtype=NP_NODE_t)
 
 

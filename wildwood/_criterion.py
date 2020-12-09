@@ -52,9 +52,9 @@ from numba.experimental import jitclass
 #     def __init__(self):
 #         pass
 
-@njit
-def criterion_children_impurity(criterion):
-    pass
+# @njit
+# def criterion_children_impurity(criterion):
+#     pass
 
 
 @njit
@@ -76,7 +76,7 @@ def criterion_proxy_impurity_improvement(criterion):
 #
 #         return (- self.weighted_n_right * impurity_right
 #                 - self.weighted_n_left * impurity_left)
-    impurity_left, impurity_right = criterion_children_impurity(criterion)
+    impurity_left, impurity_right = gini_children_impurity(criterion)
     return (- criterion.weighted_n_right * impurity_right
             - criterion.weighted_n_left * impurity_left)
 
@@ -371,33 +371,59 @@ def classification_criterion_init(criterion, y, sample_weight, weighted_n_sample
 #         self.reset()
 #         return 0
 
+    criterion.y = y
+    criterion.sample_weight = sample_weight
+    criterion.samples = samples
+    criterion.start = start
+    criterion.end = end
+    criterion.n_node_samples = end - start
+    criterion.weighted_n_samples = weighted_n_samples
+    criterion.weighted_n_node_samples = 0.0
 
-#     cdef int reset(self) nogil except -1:
-#         """Reset the criterion at pos=start.
-#
-#         Returns -1 in case of failure to allocate memory (and raise MemoryError)
-#         or 0 otherwise.
-#         """
-#         self.pos = self.start
-#
-#         self.weighted_n_left = 0.0
-#         self.weighted_n_right = self.weighted_n_node_samples
-#
-#         cdef double* sum_total = self.sum_total
-#         cdef double* sum_left = self.sum_left
-#         cdef double* sum_right = self.sum_right
-#
-#         cdef SIZE_t* n_classes = self.n_classes
-#         cdef SIZE_t k
-#
-#         for k in range(self.n_outputs):
-#             memset(sum_left, 0, n_classes[k] * sizeof(double))
-#             memcpy(sum_right, sum_total, n_classes[k] * sizeof(double))
-#
-#             sum_total += self.sum_stride
-#             sum_left += self.sum_stride
-#             sum_right += self.sum_stride
-#         return 0
+    # cdef SIZE_t* n_classes = criterion.n_classes
+    # cdef double* sum_total = criterion.sum_total
+
+    n_classes = criterion.n_classes
+    sum_total = criterion.sum_total
+
+
+    # cdef SIZE_t i
+    # cdef SIZE_t p
+    # cdef SIZE_t k
+    # cdef SIZE_t c
+    # cdef DOUBLE_t w = 1.0
+    # cdef SIZE_t offset = 0
+
+    w = 1.0
+    offset = 0
+
+    for k in range(criterion.n_outputs):
+        # memset(sum_total + offset, 0, n_classes[k] * sizeof(double))
+        sum_total[offset:(offset + n_classes[k])] = 0
+        offset += criterion.sum_stride
+
+    for p in range(start, end):
+        i = samples[p]
+
+        # w is originally set to be 1.0, meaning that if no sample weights
+        # are given, the default weight of each sample is 1.0
+        # if sample_weight != NULL:
+        if sample_weight.size > 0:
+            w = sample_weight[i]
+
+        # Count weighted class frequency for each target
+        for k in range(criterion.n_outputs):
+            c = SIZE_t(criterion.y[i, k])
+            sum_total[k * criterion.sum_stride + c] += w
+
+        criterion.weighted_n_node_samples += w
+
+    # Reset to pos=start
+    # criterion.reset()
+    criterion_reset(criterion)
+    return 0
+
+
 #
 #     cdef int reverse_reset(self) nogil except -1:
 #         """Reset the criterion at pos=end.
@@ -510,7 +536,10 @@ def classification_criterion_init(criterion, y, sample_weight, weighted_n_sample
 #     cdef void children_impurity(self, double* impurity_left,
 #                                 double* impurity_right) nogil:
 #         pass
-#
+
+
+@njit
+def classification_criterion_node_value(criterion, dest):
 #     cdef void node_value(self, double* dest) nogil:
 #         """Compute the node value of samples[start:end] and save it into dest.
 #
@@ -527,6 +556,16 @@ def classification_criterion_init(criterion, y, sample_weight, weighted_n_sample
 #             memcpy(dest, sum_total, n_classes[k] * sizeof(double))
 #             dest += self.sum_stride
 #             sum_total += self.sum_stride
+
+    sum_total = criterion.sum_total
+    n_classes = criterion.n_classes
+
+    for k in range(criterion.n_outputs):
+        # memcpy(dest, sum_total, n_classes[k] * sizeof(double))
+
+        dest += criterion.sum_stride
+        sum_total += criterion.sum_stride
+
 #
 #
 # cdef class Entropy(ClassificationCriterion):
@@ -1525,15 +1564,16 @@ def classification_criterion_init(criterion, y, sample_weight, weighted_n_sample
     # Reset to pos=start
     # criterion.reset()
     criterion_reset(criterion)
-
-@njit
-def criterion_init(criterion, y, sample_weight, weighted_n_samples, samples, start,
-                   end):
-    pass
+#
+# @njit
+# def criterion_init(criterion, y, sample_weight, weighted_n_samples, samples, start,
+#                    end):
+#     pass
 
 
 @njit
 def criterion_reset(criterion):
+    #     ClassificationCriterion.reset
     #     cdef int reset(self) nogil except -1:
     #         """Reset the criterion at pos=start.
     #
@@ -1973,6 +2013,8 @@ def gini_node_impurity(criterion):
 #             sum_total += self.sum_stride
 #
 #         return gini / self.n_outputs
+
+    print(criterion)
 
     n_classes = criterion.n_classes
     sum_total = criterion.sum_total

@@ -38,13 +38,16 @@ from sklearn.utils.validation import check_is_fitted
 from sklearn.utils.validation import _deprecate_positional_args
 
 # from ._criterion import Criterion
-from ._splitter import Splitter
+from ._splitter import BestSplitter
 from ._tree import DepthFirstTreeBuilder
+
+from . import _tree
+
 # from ._tree import BestFirstTreeBuilder
 from ._tree import Tree
 # from ._tree import _build_pruned_tree_ccp
 # from ._tree import ccp_pruning_path
-from . import _tree, _splitter, _criterion
+from . import _tree, _splitter, _criterion, _utils
 
 __all__ = ["DecisionTreeClassifier",
            "DecisionTreeRegressor",
@@ -56,19 +59,22 @@ __all__ = ["DecisionTreeClassifier",
 # Types and constants
 # =============================================================================
 
-DTYPE = _tree.DTYPE
-DOUBLE = _tree.DOUBLE
+DTYPE = _utils.NP_DTYPE_t
+DOUBLE = _utils.NP_DOUBLE_t
 
-CRITERIA_CLF = {"gini": _criterion.Gini,
-                "entropy": _criterion.Entropy}
+CRITERIA_CLF = {
+    "gini": _criterion.Gini,
+    # "entropy": _criterion.Entropy
+}
 # CRITERIA_REG = {"mse": _criterion.MSE,
 #                 "friedman_mse": _criterion.FriedmanMSE,
 #                 "mae": _criterion.MAE,
 #                 "poisson": _criterion.Poisson}
 
-DENSE_SPLITTERS = {"best": _splitter.BestSplitter,
-                   # "random": _splitter.RandomSplitter
-                   }
+DENSE_SPLITTERS = {
+    "best": _splitter.BestSplitter,
+    # "random": _splitter.RandomSplitter
+}
 
 # SPARSE_SPLITTERS = {"best": _splitter.BestSparseSplitter,
 #                     "random": _splitter.RandomSparseSplitter}
@@ -143,7 +149,10 @@ class BaseDecisionTree(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
     def fit(self, X, y, sample_weight=None, check_input=True,
             X_idx_sorted="deprecated"):
 
-        random_state = check_random_state(self.random_state)
+        # TODO: reprendre cette methode, mettre des property pour les attributs de
+        #  classe
+        # random_state = check_random_state(self.random_state)
+        random_state = 42
 
         if self.ccp_alpha < 0.0:
             raise ValueError("ccp_alpha must be greater than or equal to 0")
@@ -337,34 +346,52 @@ class BaseDecisionTree(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
                           "the 'X_idx_sorted' parameter.", FutureWarning)
 
         # Build tree
+
+
         criterion = self.criterion
-        if not isinstance(criterion, Criterion):
-            if is_classification:
-                criterion = CRITERIA_CLF[self.criterion](self.n_outputs_,
-                                                         self.n_classes_)
-            else:
-                criterion = CRITERIA_REG[self.criterion](self.n_outputs_,
-                                                         n_samples)
+        # TODO: criterion est de toute facon un string
+        # if not isinstance(criterion, Criterion):
+        #     if is_classification:
+        #         criterion = CRITERIA_CLF[self.criterion](self.n_outputs_,
+        #                                                  self.n_classes_)
+        #     else:
+        #         criterion = CRITERIA_REG[self.criterion](self.n_outputs_,
+        #                                                  n_samples)
+
+        if is_classification:
+            criterion = CRITERIA_CLF[self.criterion](self.n_outputs_,
+                                                     self.n_classes_)
+        else:
+            raise NotImplementedError()
+                # criterion = CRITERIA_REG[self.criterion](self.n_outputs_,
+                #                                          n_samples)
 
         # SPLITTERS = SPARSE_SPLITTERS if issparse(X) else DENSE_SPLITTERS
         SPLITTERS = DENSE_SPLITTERS
 
-        splitter = self.splitter
-        if not isinstance(self.splitter, Splitter):
-            splitter = SPLITTERS[self.splitter](criterion,
-                                                self.max_features_,
-                                                min_samples_leaf,
-                                                min_weight_leaf,
-                                                random_state)
+        # splitter = self.splitter
+        # TODO: pareil ici de toute facon splitter est un string
+        # if not isinstance(self.splitter, Splitter):
+        #     splitter = SPLITTERS[self.splitter](criterion,
+        #                                         self.max_features_,
+        #                                         min_samples_leaf,
+        #                                         min_weight_leaf,
+        #                                         random_state)
+        splitter = SPLITTERS[self.splitter](criterion,
+                                            self.max_features_,
+                                            min_samples_leaf,
+                                            min_weight_leaf,
+                                            random_state)
 
         if is_classifier(self):
             self.tree_ = Tree(self.n_features_,
                               self.n_classes_, self.n_outputs_)
         else:
-            self.tree_ = Tree(self.n_features_,
-                              # TODO: tree should't need this in this case
-                              np.array([1] * self.n_outputs_, dtype=np.intp),
-                              self.n_outputs_)
+            raise NotImplementedError()
+            # self.tree_ = Tree(self.n_features_,
+            #                   # TODO: tree should't need this in this case
+            #                   np.array([1] * self.n_outputs_, dtype=np.intp),
+            #                   self.n_outputs_)
 
         # Use BestFirst if max_leaf_nodes given; use DepthFirst otherwise
         if max_leaf_nodes < 0:
@@ -375,22 +402,24 @@ class BaseDecisionTree(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
                                             self.min_impurity_decrease,
                                             min_impurity_split)
         else:
-            builder = BestFirstTreeBuilder(splitter, min_samples_split,
-                                           min_samples_leaf,
-                                           min_weight_leaf,
-                                           max_depth,
-                                           max_leaf_nodes,
-                                           self.min_impurity_decrease,
-                                           min_impurity_split)
+            # builder = BestFirstTreeBuilder(splitter, min_samples_split,
+            #                                min_samples_leaf,
+            #                                min_weight_leaf,
+            #                                max_depth,
+            #                                max_leaf_nodes,
+            #                                self.min_impurity_decrease,
+            #                                min_impurity_split)
+            raise NotImplementedError()
 
-        builder.build(self.tree_, X, y, sample_weight)
+        # builder.build(self.tree_, X, y, sample_weight)
+        _tree.depth_first_tree_builder_build(builder, self.tree_, X, y, sample_weight)
 
         if self.n_outputs_ == 1 and is_classifier(self):
             self.n_classes_ = self.n_classes_[0]
             self.classes_ = self.classes_[0]
 
-        self._prune_tree()
-
+        # self._prune_tree()
+        # TODO: on ne prune pas, quelle drole d'idee !!!
         return self
 
     def _validate_X_predict(self, X, check_input):

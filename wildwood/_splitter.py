@@ -17,10 +17,14 @@ import numpy as np
 from numba import njit
 from numba.experimental import jitclass
 
-from ._utils import int32, uint32, DOUBLE_t, NP_DOUBLE_t, SIZE_t, INT32_t, UINT32_t, \
-    INFINITY, NP_SIZE_t, DTYPE_t, NP_DTYPE_t
+from ._criterion import criterion_reset, criterion_update, \
+    criterion_impurity_improvement, classification_criterion_init
 
-from ._criterion import Gini, criterion_init
+from ._utils import int32, uint32, DOUBLE_t, NP_DOUBLE_t, SIZE_t, INT32_t, UINT32_t, \
+    INFINITY, NP_SIZE_t, DTYPE_t, NP_DTYPE_t, get_numba_type
+
+from ._criterion import Gini, classification_criterion_init, gini_children_impurity, \
+    gini_node_impurity, criterion_proxy_impurity_improvement
 
 from collections import namedtuple
 from numba import intp, int32, uint32, float64
@@ -33,14 +37,12 @@ from numpy import isnan
 NULL = np.nan
 
 
-@njit
-def _init_split(split, start_pos):
-    split[0] = 0
-    split.pos = start_pos
-    split.threshold = 0.0
-    split.improvement = -np.inf
-    split.impurity_left = np.inf
-    split.impurity_right = np.inf
+FEATURE_THRESHOLD = DTYPE_t(1e-7)
+
+# Constant to switch between algorithm non zero value extract algorithm
+# in SparseSplitter
+EXTRACT_NNZ_SWITCH = DTYPE_t(0.1)
+
 
 # cdef struct SplitRecord:
 #     # Data to track sample split
@@ -54,8 +56,6 @@ def _init_split(split, start_pos):
 #     double impurity_right  # Impurity of the right split.
 
 
-# On s'en fout des split_record... suffit de renvoyer un tuple
-
 spec_split_record = [
     ("feature", SIZE_t),
     ("pos", SIZE_t),
@@ -65,18 +65,25 @@ spec_split_record = [
     ("impurity_right", DOUBLE_t)
 ]
 
-
 @jitclass(spec_split_record)
 class SplitRecord(object):
 
-    def __init__(self, feature, pos, threshold, improvement, impurity_left,
-                 impurity_right):
-        self.feature = feature
-        self.pos = pos
-        self.threshold = threshold
-        self.improvement = improvement
-        self.impurity_left = impurity_left
-        self.impurity_right = impurity_right
+    # def __init__(self, feature, pos, threshold, improvement, impurity_left,
+    #              impurity_right):
+    #     self.feature = feature
+    #     self.pos = pos
+    #     self.threshold = threshold
+    #     self.improvement = improvement
+    #     self.impurity_left = impurity_left
+    #     self.impurity_right = impurity_right
+
+    def __init__(self):
+        self.impurity_left = INFINITY
+        self.impurity_right = INFINITY
+        self.pos = 0
+        self.feature = 0
+        self.threshold = 0.
+        self.improvement = -INFINITY
 
 
 # cdef inline void _init_split(SplitRecord* self, SIZE_t start_pos) nogil:
@@ -197,7 +204,7 @@ def _init_split(split_record, start_pos):
 
 
 spec_splitter = [
-    ("criterion", Gini.class_type.instance_type),
+    ("criterion", get_numba_type(Gini)),
     ("max_features", SIZE_t),
     ("min_samples_leaf", SIZE_t),
     ("min_weight_leaf", SIZE_t),
@@ -218,62 +225,7 @@ spec_splitter = [
     ("sample_weight", DOUBLE_t[::1]),
 ]
 
-# spec_best_splitter = spec_splitter +
 
-
-@jitclass(spec_splitter)
-class BestSplitter(object):
-
-    def __init__(self, criterion, max_features, min_samples_leaf, min_weight_leaf,
-                 random_state):
-        #     def __cinit__(self, Criterion criterion, SIZE_t max_features,
-        #                   SIZE_t min_samples_leaf, double min_weight_leaf,
-        #                   object random_state):
-        #         """
-        #         Parameters
-        #         ----------
-        #         criterion : Criterion
-        #             The criterion to measure the quality of a split.
-        #
-        #         max_features : SIZE_t
-        #             The maximal number of randomly selected features which can be
-        #             considered for a split.
-        #
-        #         min_samples_leaf : SIZE_t
-        #             The minimal number of samples each leaf can have, where splits
-        #             which would result in having less samples in a leaf are not
-        #             considered.
-        #
-        #         min_weight_leaf : double
-        #             The minimal weight each leaf can have, where the weight is the sum
-        #             of the weights of each sample in it.
-        #
-        #         random_state : object
-        #             The user inputted random state to be used for pseudo-randomness
-        #         """
-        #
-        #         self.criterion = criterion
-        #
-        #         self.samples = NULL
-        #         self.n_samples = 0
-        #         self.features = NULL
-        #         self.n_features = 0
-        #         self.feature_values = NULL
-        #
-        #         self.sample_weight = NULL
-        #
-        #         self.max_features = max_features
-        #         self.min_samples_leaf = min_samples_leaf
-        #         self.min_weight_leaf = min_weight_leaf
-        #         self.random_state = random_state
-        self.criterion = criterion
-        self.n_samples = 0
-        self.n_features = 0
-
-        self.max_features = max_features
-        self.min_samples_leaf = min_samples_leaf
-        self.min_weight_leaf = min_weight_leaf
-        self.random_state = random_state
 
 @njit
 def splitter_init(splitter, X, y, sample_weight):
@@ -347,10 +299,14 @@ def splitter_init(splitter, X, y, sample_weight):
         # self.rand_r_state = self.random_state.randint(0, RAND_R_MAX)
         n_samples = X.shape[0]
 
+        if sample_weight is None:
+            sample_weight = np.empty(0, dtype=NP_DOUBLE_t)
+
         # Create a new array which will be used to store nonzero
         # samples from the feature of interest
         # safe_realloc(&self.samples, n_samples)
         samples = np.empty(n_samples, dtype=NP_SIZE_t)
+        splitter.samples = samples
 
         # cdef SIZE_t i, j
         weighted_n_samples = 0.0
@@ -358,6 +314,8 @@ def splitter_init(splitter, X, y, sample_weight):
         j = 0
         for i in range(n_samples):
             # Only work with positively weighted samples
+            # print(sample_weight)
+
             if sample_weight.shape[0] == 0 or sample_weight[i] != 0.0:
                 samples[j] = i
                 j += 1
@@ -379,13 +337,15 @@ def splitter_init(splitter, X, y, sample_weight):
         for i in range(n_features):
             features[i] = i
 
+        splitter.features = features
+
         splitter.n_features = n_features
 
         # TODO: get correct dtype
         # safe_realloc(&self.feature_values, n_samples)
-        splitter.feature_values = np.empty(n_samples, dtype=DOUBLE_t)
+        splitter.feature_values = np.empty(n_samples, dtype=NP_DOUBLE_t)
         # safe_realloc(&self.constant_features, n_features)
-        splitter.constant_features = np.empty(n_features, dtype=SIZE_t)
+        splitter.constant_features = np.empty(n_features, dtype=NP_SIZE_t)
 
         splitter.y = y
 
@@ -443,13 +403,16 @@ def splitter_node_reset(splitter, start, end):
     splitter.end = end
 
     # TODO: faut appeler le bon...
-    criterion_init(splitter,
-                   splitter.y,
-                   splitter.sample_weight,
-                    splitter.weighted_n_samples,
-                            splitter.samples,
-                            start,
-                            end)
+
+    # print(splitter)
+
+    classification_criterion_init(splitter.criterion,
+                                  splitter.y,
+                                  splitter.sample_weight,
+                                  splitter.weighted_n_samples,
+                                  splitter.samples,
+                                  start,
+                                  end)
 
     # weighted_n_node_samples[0] = splitter.criterion.weighted_n_node_samples
     return splitter.criterion.weighted_n_node_samples
@@ -487,7 +450,6 @@ spec_base_dense_splitter = spec_splitter + [
 ]
 
 
-
 @njit
 def base_dense_splitter_init(splitter, X, y, sample_weight):
 #     cdef int init(self,
@@ -511,16 +473,69 @@ def base_dense_splitter_init(splitter, X, y, sample_weight):
 
 spec_best_splitter = spec_base_dense_splitter
 
-#
-# cdef class BestSplitter(BaseDenseSplitter):
-#     """Splitter for finding the best split."""
-#     def __reduce__(self):
-#         return (BestSplitter, (self.criterion,
-#                                self.max_features,
-#                                self.min_samples_leaf,
-#                                self.min_weight_leaf,
-#                                self.random_state), self.__getstate__())
-#
+
+@jitclass(spec_best_splitter)
+class BestSplitter(object):
+
+    def __init__(self, criterion, max_features, min_samples_leaf, min_weight_leaf,
+                 random_state):
+        #     def __cinit__(self, Criterion criterion, SIZE_t max_features,
+        #                   SIZE_t min_samples_leaf, double min_weight_leaf,
+        #                   object random_state):
+        #         """
+        #         Parameters
+        #         ----------
+        #         criterion : Criterion
+        #             The criterion to measure the quality of a split.
+        #
+        #         max_features : SIZE_t
+        #             The maximal number of randomly selected features which can be
+        #             considered for a split.
+        #
+        #         min_samples_leaf : SIZE_t
+        #             The minimal number of samples each leaf can have, where splits
+        #             which would result in having less samples in a leaf are not
+        #             considered.
+        #
+        #         min_weight_leaf : double
+        #             The minimal weight each leaf can have, where the weight is the sum
+        #             of the weights of each sample in it.
+        #
+        #         random_state : object
+        #             The user inputted random state to be used for pseudo-randomness
+        #         """
+        #
+        #         self.criterion = criterion
+        #
+        #         self.samples = NULL
+        #         self.n_samples = 0
+        #         self.features = NULL
+        #         self.n_features = 0
+        #         self.feature_values = NULL
+        #
+        #         self.sample_weight = NULL
+        #
+        #         self.max_features = max_features
+        #         self.min_samples_leaf = min_samples_leaf
+        #         self.min_weight_leaf = min_weight_leaf
+        #         self.random_state = random_state
+        self.criterion = criterion
+        self.n_samples = 0
+        self.n_features = 0
+
+        self.max_features = max_features
+        self.min_samples_leaf = min_samples_leaf
+        self.min_weight_leaf = min_weight_leaf
+        self.random_state = random_state
+
+
+@njit
+def best_splitter_init(splitter, X, y, sample_weight):
+    base_dense_splitter_init(splitter, X, y, sample_weight)
+
+
+@njit
+def best_splitter_node_split(splitter, impurity, split, n_constant_features):
 #     cdef int node_split(self, double impurity, SplitRecord* split,
 #                         SIZE_t* n_constant_features) nogil except -1:
 #         """Find the best split on node samples[start:end]
@@ -710,7 +725,233 @@ spec_best_splitter = spec_base_dense_splitter
 #         split[0] = best
 #         n_constant_features[0] = n_total_constants
 #         return 0
-#
+
+    # cdef SIZE_t* samples = self.samples
+    # cdef SIZE_t start = self.start
+    # cdef SIZE_t end = self.end
+    samples = splitter.samples
+    start = splitter.start
+    end = splitter.end
+
+    features = splitter.features
+    constant_features = splitter.constant_features
+    n_features = splitter.n_features
+
+    Xf = splitter.feature_values
+    max_features = splitter.max_features
+    min_samples_leaf = splitter.min_samples_leaf
+    min_weight_leaf = splitter.min_weight_leaf
+
+    # TODO: random_state me fait chier pour l'instant
+    # random_state = splitter.rand_r_state
+    random_state = 42
+
+
+    # cdef SplitRecord best, current
+    best = SplitRecord()
+    current = SplitRecord()
+
+    current_proxy_improvement = -INFINITY
+    best_proxy_improvement = -INFINITY
+
+    f_i = n_features
+    # cdef SIZE_t f_j
+    # cdef SIZE_t p
+    # cdef SIZE_t feature_idx_offset
+    # cdef SIZE_t feature_offset
+    # cdef SIZE_t i
+    # cdef SIZE_t j
+
+    # cdef SIZE_t n_visited_features = 0
+    n_visited_features = 0
+    # Number of features discovered to be constant during the split search
+    # cdef SIZE_t n_found_constants = 0
+    n_found_constants = 0
+    # Number of features known to be constant and drawn without replacement
+    # cdef SIZE_t n_drawn_constants = 0
+    n_drawn_constants = 0
+    # cdef SIZE_t n_known_constants = n_constant_features[0]
+    n_known_constants = n_constant_features
+    # n_total_constants = n_known_constants + n_found_constants
+    # cdef SIZE_t n_total_constants = n_known_constants
+    n_total_constants = n_known_constants
+    # cdef DTYPE_t current_feature_value
+    # cdef SIZE_t partition_end
+
+    _init_split(best, end)
+
+    # Sample up to max_features without replacement using a
+    # Fisher-Yates-based algorithm (using the local variables `f_i` and
+    # `f_j` to compute a permutation of the `features` array).
+    #
+    # Skip the CPU intensive evaluation of the impurity criterion for
+    # features that were already detected as constant (hence not suitable
+    # for good splitting) by ancestor nodes and save the information on
+    # newly discovered constant features to spare computation on descendant
+    # nodes.
+    while (f_i > n_total_constants and  # Stop early if remaining features
+                                        # are constant
+            (n_visited_features < max_features or
+             # At least one drawn features must be non constant
+             n_visited_features <= n_found_constants + n_drawn_constants)):
+
+        n_visited_features += 1
+
+        # Loop invariant: elements of features in
+        # - [:n_drawn_constant[ holds drawn and known constant features;
+        # - [n_drawn_constant:n_known_constant[ holds known constant
+        #   features that haven't been drawn yet;
+        # - [n_known_constant:n_total_constant[ holds newly found constant
+        #   features;
+        # - [n_total_constant:f_i[ holds features that haven't been drawn
+        #   yet and aren't constant apriori.
+        # - [f_i:n_features[ holds features that have been drawn
+        #   and aren't constant.
+
+        # Draw a feature at random
+        # f_j = rand_int(n_drawn_constants, f_i - n_found_constants,
+        #                random_state)
+        # TODO: numba only supports the first two arguments... no random_state :(
+        f_j = np.random.randint(n_drawn_constants, f_i - n_found_constants)
+
+        if f_j < n_known_constants:
+            # f_j in the interval [n_drawn_constants, n_known_constants[
+            features[n_drawn_constants], features[f_j] = features[f_j], features[n_drawn_constants]
+
+            n_drawn_constants += 1
+
+        else:
+            # f_j in the interval [n_known_constants, f_i - n_found_constants[
+            f_j += n_found_constants
+            # f_j in the interval [n_total_constants, f_i[
+            current.feature = features[f_j]
+
+            # Sort samples along that feature; by
+            # copying the values into an array and
+            # sorting the array in a manner which utilizes the cache more
+            # effectively.
+            for i in range(start, end):
+                Xf[i] = splitter.X[samples[i], current.feature]
+
+            # sort(Xf + start, samples + start, end - start)
+            print("start: ", start)
+
+            sort(Xf[start:], samples[start:], end - start)
+
+            if Xf[end - 1] <= Xf[start] + FEATURE_THRESHOLD:
+                features[f_j], features[n_total_constants] = features[n_total_constants], features[f_j]
+
+                n_found_constants += 1
+                n_total_constants += 1
+
+            else:
+                f_i -= 1
+                features[f_i], features[f_j] = features[f_j], features[f_i]
+
+                # Evaluate all splits
+                # splitter.criterion.reset()
+                criterion_reset(splitter.criterion)
+
+                p = start
+
+                while p < end:
+                    while (p + 1 < end and
+                           Xf[p + 1] <= Xf[p] + FEATURE_THRESHOLD):
+                        p += 1
+
+                    # (p + 1 >= end) or (X[samples[p + 1], current.feature] >
+                    #                    X[samples[p], current.feature])
+                    p += 1
+                    # (p >= end) or (X[samples[p], current.feature] >
+                    #                X[samples[p - 1], current.feature])
+
+                    if p < end:
+                        current.pos = p
+
+                        # Reject if min_samples_leaf is not guaranteed
+                        if (((current.pos - start) < min_samples_leaf) or
+                                ((end - current.pos) < min_samples_leaf)):
+                            continue
+
+                        # splitter.criterion.update(current.pos)
+                        criterion_update(splitter.criterion, current.pos)
+
+                        # Reject if min_weight_leaf is not satisfied
+                        if ((splitter.criterion.weighted_n_left < min_weight_leaf) or
+                                (splitter.criterion.weighted_n_right < min_weight_leaf)):
+                            continue
+
+                        # current_proxy_improvement =
+                        # splitter.criterion.proxy_impurity_improvement()
+                        criterion_proxy_impurity_improvement(splitter.criterion)
+
+                        if current_proxy_improvement > best_proxy_improvement:
+                            best_proxy_improvement = current_proxy_improvement
+                            # sum of halves is used to avoid infinite value
+                            current.threshold = Xf[p - 1] / 2.0 + Xf[p] / 2.0
+
+                            if ((current.threshold == Xf[p]) or
+                                (current.threshold == INFINITY) or
+                                (current.threshold == -INFINITY)):
+                                current.threshold = Xf[p - 1]
+
+                            # TODO: warning this might not do a copy here !
+                            best = current  # copy
+
+    # Reorganize into samples[start:best.pos] + samples[best.pos:end]
+    if best.pos < end:
+        partition_end = end
+        p = start
+
+        while p < partition_end:
+            if splitter.X[samples[p], best.feature] <= best.threshold:
+                p += 1
+
+            else:
+                partition_end -= 1
+
+                samples[p], samples[partition_end] = samples[partition_end], samples[p]
+
+        # splitter.criterion.reset()
+        criterion_reset(splitter.criterion)
+
+        # splitter.criterion.update(best.pos)
+        criterion_update(splitter.criterion, best.pos)
+
+        # splitter.criterion.children_impurity( & best.impurity_left,
+        #                                 &best.impurity_right)
+        impurity_left, impurity_right = criterion_children_impurity(splitter.criterion)
+        best.impurity_left = impurity_left
+        best.impurity_right = impurity_right
+
+
+        # best.improvement = splitter.criterion.impurity_improvement(
+        #     impurity, best.impurity_left, best.impurity_right)
+
+        best.improvement = criterion_impurity_improvement(impurity, best.impurity_left,
+                                                          best.impurity_right)
+
+    # Respect invariant for constant features: the original order of
+    # element in features[:n_known_constants] must be preserved for sibling
+    # and child nodes
+
+#   memcpy(features, constant_features, sizeof(SIZE_t) * n_known_constants)
+    features[:n_known_constants] = constant_features[:n_known_constants]
+
+    # Copy newly found constant features
+    # memcpy(constant_features + n_known_constants,
+    #        features + n_known_constants,
+    #        sizeof(SIZE_t) * n_found_constants)
+
+    constant_features[n_known_constants:(n_known_constants + n_found_constants)] = \
+        features[n_known_constants:(n_known_constants + n_found_constants)]
+
+    # Return values
+    # split[0] = best
+    # n_constant_features[0] = n_total_constants
+
+    return best, n_total_constants
+
 
 @njit
 def sort(Xf, samples, n):
@@ -947,17 +1188,6 @@ def heapsort(Xf, samples, n):
 # x = np.array([1, 3, np.nan, 2], dtype=NP_SIZE_t)
 
 
-from sklearn.datasets import make_circles
-
-n_samples = 150
-random_state = 42
-
-
-X, y = make_circles(n_samples=n_samples, noise=0.2, random_state=random_state)
-
-y = y.astype(NP_DOUBLE_t)
-
-# print(y[:10])
 
 # @njit
 # def main():
