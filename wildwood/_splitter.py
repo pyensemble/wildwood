@@ -221,11 +221,9 @@ spec_splitter = [
     ("feature_values", DOUBLE_t[::1]),
     ("start", SIZE_t),
     ("end", SIZE_t),
-    ("y", DOUBLE_t[::1]),
+    ("y", DOUBLE_t[:, ::1]),
     ("sample_weight", DOUBLE_t[::1]),
 ]
-
-
 
 @njit
 def splitter_init(splitter, X, y, sample_weight):
@@ -347,6 +345,11 @@ def splitter_init(splitter, X, y, sample_weight):
         # safe_realloc(&self.constant_features, n_features)
         splitter.constant_features = np.empty(n_features, dtype=NP_SIZE_t)
 
+        # print("coucou")
+        # print(y)
+        # print(splitter)
+        # print(splitter.y)
+
         splitter.y = y
 
         splitter.sample_weight = sample_weight
@@ -444,6 +447,8 @@ def splitter_node_impurity(splitter):
 #     cdef const DTYPE_t[:, :] X
 #
 #     cdef SIZE_t n_total_samples
+
+
 spec_base_dense_splitter = spec_splitter + [
     ("X", DTYPE_t[:, :]),
     ("n_total_samples", SIZE_t),
@@ -527,6 +532,8 @@ class BestSplitter(object):
         self.min_samples_leaf = min_samples_leaf
         self.min_weight_leaf = min_weight_leaf
         self.random_state = random_state
+
+        # self.y = np.empty((0, 1), dtype=NP_DOUBLE_t)
 
 
 @njit
@@ -920,7 +927,8 @@ def best_splitter_node_split(splitter, impurity, split, n_constant_features):
 
         # splitter.criterion.children_impurity( & best.impurity_left,
         #                                 &best.impurity_right)
-        impurity_left, impurity_right = criterion_children_impurity(splitter.criterion)
+        impurity_left, impurity_right = gini_children_impurity(
+            splitter.criterion)
         best.impurity_left = impurity_left
         best.impurity_right = impurity_right
 
@@ -928,8 +936,14 @@ def best_splitter_node_split(splitter, impurity, split, n_constant_features):
         # best.improvement = splitter.criterion.impurity_improvement(
         #     impurity, best.impurity_left, best.impurity_right)
 
-        best.improvement = criterion_impurity_improvement(impurity, best.impurity_left,
+        # print("best.impurity_left, best.impurity_right")
+        # print(best.impurity_left, best.impurity_right)
+
+        best.improvement = criterion_impurity_improvement(splitter.criterion,
+                                                          impurity,
+                                                          best.impurity_left,
                                                           best.impurity_right)
+
 
     # Respect invariant for constant features: the original order of
     # element in features[:n_known_constants] must be preserved for sibling

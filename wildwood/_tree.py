@@ -632,13 +632,17 @@ def depth_first_tree_builder_build(builder, tree, X, y, sample_weight):
 
         if not is_leaf:
             # Push right child on stack
-            rc = stack.push(split.pos, end, depth + 1, node_id, 0,
+            # rc = stack.push(split.pos, end, depth + 1, node_id, 0,
+            #                 split.impurity_right, n_constant_features)
+
+            rc = stack_push(stack, split.pos, end, depth + 1, node_id, 0,
                             split.impurity_right, n_constant_features)
+
             if rc == -1:
                 break
 
             # Push left child on stack
-            rc = stack.push(start, split.pos, depth + 1, node_id, 1,
+            rc = stack_push(stack, start, split.pos, depth + 1, node_id, 1,
                             split.impurity_left, n_constant_features)
             if rc == -1:
                 break

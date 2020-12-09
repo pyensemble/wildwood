@@ -77,8 +77,8 @@ def criterion_proxy_impurity_improvement(criterion):
 #         return (- self.weighted_n_right * impurity_right
 #                 - self.weighted_n_left * impurity_left)
     impurity_left, impurity_right = gini_children_impurity(criterion)
-    return (- criterion.weighted_n_right * impurity_right
-            - criterion.weighted_n_left * impurity_left)
+    return - criterion.weighted_n_right * impurity_right - criterion.weighted_n_left \
+           * impurity_left
 
 
 @njit
@@ -156,7 +156,7 @@ def criterion_impurity_improvement(criterion, impurity_parent, impurity_left,
 #     cdef double* sum_left           # Same as above, but for the left side of the split
 #     cdef double* sum_right          # same as above, but for the right side of the split
 spec_criterion = [
-    ("y", DOUBLE_t[::1]),
+    ("y", DOUBLE_t[:, ::1]),
     ("sample_weight", DOUBLE_t[::1]),
 
     ("samples", SIZE_t[::1]),  # A numpy array holding the sample indices
@@ -1827,7 +1827,8 @@ def criterion_update(criterion, new_pos):
             criterion.weighted_n_left += w
 
     else:
-        criterion.reverse_reset()
+        criterion_reverse_reset(criterion)
+        # criterion.reverse_reset()
 
         for p in range(end - 1, new_pos - 1, -1):
             i = samples[p]

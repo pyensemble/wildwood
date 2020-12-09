@@ -8,7 +8,7 @@ from wildwood._utils import NP_DOUBLE_t
 
 from wildwood._classes import DecisionTreeClassifier
 
-n_samples = 1500
+n_samples = 150
 random_state = 42
 
 

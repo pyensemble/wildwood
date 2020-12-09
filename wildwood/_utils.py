@@ -223,8 +223,9 @@ def stack_pop(stack):
     # cdef StackRecord* stack = self.stack_
     stack_ = stack.stack_
 
-    if top <= 0:
-        return -1
+    # TODO: en fait ce return on ne s'en sert pas apparemment...
+    # if top <= 0:
+    #     return -1
 
     stack_record = stack_[top - 1]
     # res[0] = stack[top - 1]
