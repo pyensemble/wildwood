@@ -1,5 +1,5 @@
 
-
+import matplotlib.pyplot as plt
 
 import pandas as pd
 from sklearn.datasets import make_circles
@@ -12,14 +12,20 @@ n_samples = 150
 random_state = 42
 
 
-X, y = make_circles(n_samples=n_samples, noise=0.2, random_state=random_state)
+X, y = make_circles(n_samples=n_samples, noise=0.1, factor=0.5,
+                    random_state=random_state)
 y = y.astype(NP_DOUBLE_t)
+
+# plt.scatter(X[:, 0], X[:, 1], c=y)
+# plt.show()
 
 clf = DecisionTreeClassifier()
 
 print(clf)
 
 clf.fit(X, y)
+
+
 
 from wildwood._tree import print_tree, get_nodes
 
