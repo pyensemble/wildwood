@@ -1,8 +1,10 @@
 
 
-- Tester le Tree
-- Tester le Stack 
-- Finir le BestSplitter en particulier la methode node_split
+
+- max_depth es chelou 
+
+- value est a part car taille inconnue au depart
+- Il me reste juste les values a gerer
 
 
 - Reprendre le code de scikit-learn en pure Python / Numba

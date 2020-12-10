@@ -172,10 +172,13 @@ spec_criterion = [
     ("weighted_n_left", DOUBLE_t),
     ("weighted_n_right", DOUBLE_t),
 
-    ("sum_stride", SIZE_t),
-    ("sum_total", DOUBLE_t[::1]),
-    ("sum_left", DOUBLE_t[::1]),
-    ("sum_right", DOUBLE_t[::1]),
+    # TODO: Si je comprends bien faut enlever sum_stride et mettre plutot avant
+    #  c'etait des tableaux 1D... faut voir si c'est F ou C major
+    # ("sum_stride", SIZE_t),
+    ("max_n_classes", SIZE_t),
+    ("sum_total", DOUBLE_t[:, ::1]),
+    ("sum_left", DOUBLE_t[:, ::1]),
+    ("sum_right", DOUBLE_t[:, ::1]),
 ]
 
 # cdef class ClassificationCriterion(Criterion):
@@ -255,9 +258,14 @@ class ClassificationCriterion(object):
 #                 self.sum_left == NULL or
 #                 self.sum_right == NULL):
 #             raise MemoryError()
-        # self.sample_weight = NULL
-        # self.samples = NULL
-        self.start = 0
+
+#         self.sample_weight = NULL
+#
+#         self.samples = NULL
+#         self.start = 0
+#         self.pos = 0
+#         self.end = 0
+#        self.start = 0
         self.pos = 0
         self.end = 0
 
@@ -275,29 +283,35 @@ class ClassificationCriterion(object):
         # self.n_classes = NULL
 
         # safe_realloc(&self.n_classes, n_outputs)
-        self.n_classes = np.empty(n_outputs, dtype=NP_UINT32_t)
+        self.n_classes = np.empty(n_outputs, dtype=NP_SIZE_t)
 
-        k = 0
-        sum_stride = 0
-
+        # k = 0
+        # sum_stride = 0
         # For each target, set the number of unique classes in that target,
         # and also compute the maximal stride of all targets
-        for k in range(n_outputs):
-            self.n_classes[k] = n_classes[k]
 
-            if n_classes[k] > sum_stride:
-                sum_stride = n_classes[k]
 
-        self.sum_stride = sum_stride
+        # for k in range(n_outputs):
+        #     self.n_classes[k] = n_classes[k]
+        #
+        #     if n_classes[k] > sum_stride:
+        #         sum_stride = n_classes[k]
 
-        n_elements = n_outputs * sum_stride
+        self.n_classes[:] = n_classes
+
+        self.max_n_classes = np.max(self.n_classes)
+
+        # self.sum_stride = sum_stride
+
+        # n_elements = n_outputs * sum_stride
 
         # self.sum_total = <double*> calloc(n_elements, sizeof(double))
         # self.sum_left = <double*> calloc(n_elements, sizeof(double))
         # self.sum_right = <double*> calloc(n_elements, sizeof(double))
-        self.sum_total = np.empty(n_elements, dtype=NP_DOUBLE_t)
-        self.sum_left = np.empty(n_elements, dtype=NP_DOUBLE_t)
-        self.sum_right = np.empty(n_elements, dtype=NP_DOUBLE_t)
+        shape = (self.n_outputs, self.max_n_classes)
+        self.sum_total = np.empty(shape, dtype=NP_DOUBLE_t)
+        self.sum_left = np.empty(shape, dtype=NP_DOUBLE_t)
+        self.sum_right = np.empty(shape, dtype=NP_DOUBLE_t)
 
 
 @njit
@@ -395,12 +409,14 @@ def classification_criterion_init(criterion, y, sample_weight, weighted_n_sample
     # cdef SIZE_t offset = 0
 
     w = 1.0
-    offset = 0
+    # offset = 0
 
-    for k in range(criterion.n_outputs):
-        # memset(sum_total + offset, 0, n_classes[k] * sizeof(double))
-        sum_total[offset:(offset + n_classes[k])] = 0
-        offset += criterion.sum_stride
+    # for k in range(criterion.n_outputs):
+    #     # memset(sum_total + offset, 0, n_classes[k] * sizeof(double))
+    #     sum_total[offset:(offset + n_classes[k])] = 0
+    #     offset += criterion.sum_stride
+
+    sum_total[:] = 0.0
 
     for p in range(start, end):
         i = samples[p]
@@ -408,13 +424,15 @@ def classification_criterion_init(criterion, y, sample_weight, weighted_n_sample
         # w is originally set to be 1.0, meaning that if no sample weights
         # are given, the default weight of each sample is 1.0
         # if sample_weight != NULL:
+        # TODO: faire ce test en dehors
         if sample_weight.size > 0:
             w = sample_weight[i]
 
         # Count weighted class frequency for each target
-        for k in range(criterion.n_outputs):
-            c = SIZE_t(criterion.y[i, k])
-            sum_total[k * criterion.sum_stride + c] += w
+        for n_output in range(criterion.n_outputs):
+            c = SIZE_t(criterion.y[i, n_output])
+            # sum_total[n_output * criterion.sum_stride + c] += w
+            sum_total[n_output, c] += w
 
         criterion.weighted_n_node_samples += w
 
@@ -539,7 +557,7 @@ def classification_criterion_init(criterion, y, sample_weight, weighted_n_sample
 
 
 @njit
-def classification_criterion_node_value(criterion, dest):
+def classification_criterion_node_value(criterion, dest, node_id):
 #     cdef void node_value(self, double* dest) nogil:
 #         """Compute the node value of samples[start:end] and save it into dest.
 #
@@ -558,13 +576,15 @@ def classification_criterion_node_value(criterion, dest):
 #             sum_total += self.sum_stride
 
     sum_total = criterion.sum_total
-    n_classes = criterion.n_classes
+    # n_classes = criterion.n_classes
+    #
+    # for k in range(criterion.n_outputs):
+    #     # memcpy(dest, sum_total, n_classes[k] * sizeof(double))
+    #
+    #     dest += criterion.sum_stride
+    #     sum_total += criterion.sum_stride
 
-    for k in range(criterion.n_outputs):
-        # memcpy(dest, sum_total, n_classes[k] * sizeof(double))
-
-        dest += criterion.sum_stride
-        sum_total += criterion.sum_stride
+    dest[node_id, :, :] = sum_total
 
 #
 #
@@ -649,8 +669,9 @@ def classification_criterion_node_value(criterion, dest):
 #
 #         impurity_left[0] = entropy_left / self.n_outputs
 #         impurity_right[0] = entropy_right / self.n_outputs
-#
-#
+
+
+
 # cdef class Gini(ClassificationCriterion):
 #     r"""Gini Index impurity criterion.
 #
@@ -1526,44 +1547,44 @@ def classification_criterion_node_value(criterion, dest):
 #                 poisson_loss += w * xlogy(y[i, k], y[i, k] / y_mean)
 #         return poisson_loss / (weight_sum * n_outputs)
 
-    criterion.y = y
-    criterion.sample_weight = sample_weight
-    criterion.samples = samples
-    criterion.start = start
-    criterion.end = end
-    criterion.n_node_samples = end - start
-    criterion.weighted_n_samples = weighted_n_samples
-    criterion.weighted_n_node_samples = 0.0
-
-    n_classes = criterion.n_classes
-    sum_total = criterion.sum_total
-
-    w = 1.0
-    offset = 0
-
-    for k in range(criterion.n_outputs):
-        # memset(sum_total + offset, 0, n_classes[k] * sizeof(double))
-        sum_total[offset, n_classes[k]] = 0
-        offset += criterion.sum_stride
-
-    for p in range(start, end):
-        i = samples[p]
-
-        # w is originally set to be 1.0, meaning that if no sample weights
-        # are given, the default weight of each sample is 1.0
-        if sample_weight.shape[0] != 0:
-            w = sample_weight[i]
-
-        # Count weighted class frequency for each target
-        for k in range(criterion.n_outputs):
-            c = SIZE_t(criterion.y[i, k])
-            sum_total[k * criterion.sum_stride + c] += w
-
-        criterion.weighted_n_node_samples += w
-
-    # Reset to pos=start
-    # criterion.reset()
-    criterion_reset(criterion)
+    # criterion.y = y
+    # criterion.sample_weight = sample_weight
+    # criterion.samples = samples
+    # criterion.start = start
+    # criterion.end = end
+    # criterion.n_node_samples = end - start
+    # criterion.weighted_n_samples = weighted_n_samples
+    # criterion.weighted_n_node_samples = 0.0
+    #
+    # n_classes = criterion.n_classes
+    # sum_total = criterion.sum_total
+    #
+    # w = 1.0
+    # offset = 0
+    #
+    # for k in range(criterion.n_outputs):
+    #     # memset(sum_total + offset, 0, n_classes[k] * sizeof(double))
+    #     sum_total[offset, n_classes[k]] = 0
+    #     offset += criterion.sum_stride
+    #
+    # for p in range(start, end):
+    #     i = samples[p]
+    #
+    #     # w is originally set to be 1.0, meaning that if no sample weights
+    #     # are given, the default weight of each sample is 1.0
+    #     if sample_weight.shape[0] != 0:
+    #         w = sample_weight[i]
+    #
+    #     # Count weighted class frequency for each target
+    #     for k in range(criterion.n_outputs):
+    #         c = SIZE_t(criterion.y[i, k])
+    #         sum_total[k * criterion.sum_stride + c] += w
+    #
+    #     criterion.weighted_n_node_samples += w
+    #
+    # # Reset to pos=start
+    # # criterion.reset()
+    # criterion_reset(criterion)
 #
 # @njit
 # def criterion_init(criterion, y, sample_weight, weighted_n_samples, samples, start,
@@ -1608,24 +1629,28 @@ def criterion_reset(criterion):
     sum_left = criterion.sum_left
     sum_right = criterion.sum_right
 
-    n_classes = criterion.n_classes
+    # n_classes = criterion.n_classes
+    # criterion.max
     # cdef SIZE_t k
-    idx_sum_total = 0
-    idx_sum_left = 0
-    idx_sum_right = 0
+    # idx_sum_total = 0
+    # idx_sum_left = 0
+    # idx_sum_right = 0
 
-    for k in range(criterion.n_outputs):
-        # memset(sum_left, 0, n_classes[k] * sizeof(double))
-        sum_left[idx_sum_left:n_classes[k]] = 0
-        # memcpy(sum_right, sum_total, n_classes[k] * sizeof(double))
-        sum_right[idx_sum_right:n_classes[k]] = sum_total[idx_sum_total:n_classes[k]]
+    # for k in range(criterion.n_outputs):
+    #     # memset(sum_left, 0, n_classes[k] * sizeof(double))
+    #     sum_left[idx_sum_left:n_classes[k]] = 0
+    #     # memcpy(sum_right, sum_total, n_classes[k] * sizeof(double))
+    #     sum_right[idx_sum_right:n_classes[k]] = sum_total[idx_sum_total:n_classes[k]]
+    #
+    #     # sum_total += criterion.sum_stride
+    #     idx_sum_total += criterion.sum_stride
+    #     # sum_left += criterion.sum_stride
+    #     idx_sum_left += criterion.sum_stride
+    #     # sum_right += criterion.sum_stride
+    #     idx_sum_right += criterion.sum_stride
 
-        # sum_total += criterion.sum_stride
-        idx_sum_total += criterion.sum_stride
-        # sum_left += criterion.sum_stride
-        idx_sum_left += criterion.sum_stride
-        # sum_right += criterion.sum_stride
-        idx_sum_right += criterion.sum_stride
+    sum_left[:, :] = 0
+    sum_right[:, :] = sum_total
 
 
 @njit
@@ -1664,22 +1689,25 @@ def criterion_reverse_reset(criterion):
     sum_left = criterion.sum_left
     sum_right = criterion.sum_right
 
-    n_classes = criterion.n_classes
+    # n_classes = criterion.n_classes
     # cdef SIZE_t k
 
-    idx_sum_total = 0
-    idx_sum_left = 0
-    idx_sum_right = 0
+    # idx_sum_total = 0
+    # idx_sum_left = 0
+    # idx_sum_right = 0
 
-    for k in range(criterion.n_outputs):
-        # memset(sum_right, 0, n_classes[k] * sizeof(double))
-        sum_right[idx_sum_right:n_classes[k]] = 0
-        # memcpy(sum_left, sum_total, n_classes[k] * sizeof(double))
-        sum_left[idx_sum_left:n_classes[k]] = sum_total[idx_sum_total:n_classes[k]]
-        # sum_total += criterion.sum_stride
-        idx_sum_total += criterion.sum_stride
-        idx_sum_left += criterion.sum_stride
-        idx_sum_right += criterion.sum_stride
+    # for k in range(criterion.n_outputs):
+    #     # memset(sum_right, 0, n_classes[k] * sizeof(double))
+    #     sum_right[idx_sum_right:n_classes[k]] = 0
+    #     # memcpy(sum_left, sum_total, n_classes[k] * sizeof(double))
+    #     sum_left[idx_sum_left:n_classes[k]] = sum_total[idx_sum_total:n_classes[k]]
+    #     # sum_total += criterion.sum_stride
+    #     idx_sum_total += criterion.sum_stride
+    #     idx_sum_left += criterion.sum_stride
+    #     idx_sum_right += criterion.sum_stride
+
+    sum_right[:, :] = 0
+    sum_left[:, :] = sum_total
 
 
 @njit
@@ -1817,12 +1845,14 @@ def criterion_update(criterion, new_pos):
             i = samples[p]
 
             #if sample_weight != NULL:
-            if sample_weight.shape[0] != 0:
+            if sample_weight.size > 0:
                 w = sample_weight[i]
 
             for k in range(criterion.n_outputs):
-                label_index = k * criterion.sum_stride + SIZE_t(criterion.y[i, k])
-                sum_left[label_index] += w
+                # label_index = k * criterion.sum_stride + SIZE_t(criterion.y[i, k])
+                c = SIZE_t(criterion.y[i, k])
+                sum_left[k, c] += w
+                # sum_left[label_index] += w
 
             criterion.weighted_n_left += w
 
@@ -1837,29 +1867,32 @@ def criterion_update(criterion, new_pos):
                 w = sample_weight[i]
 
             for k in range(criterion.n_outputs):
-                label_index = k * criterion.sum_stride + SIZE_t(criterion.y[i, k])
-                sum_left[label_index] -= w
+                # label_index = k * criterion.sum_stride + SIZE_t(criterion.y[i, k])
+                c = SIZE_t(criterion.y[i, k])
+                sum_left[k, c] -= w
 
             criterion.weighted_n_left -= w
 
     # Update right part statistics
     criterion.weighted_n_right = criterion.weighted_n_node_samples - criterion.weighted_n_left
 
-    idx_sum_total = 0
-    idx_sum_left = 0
-    idx_sum_right = 0
+    # idx_sum_total = 0
+    # idx_sum_left = 0
+    # idx_sum_right = 0
+    #
+    # for k in range(criterion.n_outputs):
+    #     # TODO : c'est pas terrible ca
+    #     for c in range(n_classes[k]):
+    #
+    #         # sum_right[c] = sum_total[c] - sum_left[c]
+    #         sum_right[idx_sum_right + c] = sum_total[idx_sum_total + c] - sum_left[
+    #             idx_sum_left + c]
+    #
+    #     idx_sum_total += criterion.sum_stride
+    #     idx_sum_left += criterion.sum_stride
+    #     idx_sum_right += criterion.sum_stride
 
-    for k in range(criterion.n_outputs):
-        # TODO : c'est pas terrible ca
-        for c in range(n_classes[k]):
-
-            # sum_right[c] = sum_total[c] - sum_left[c]
-            sum_right[idx_sum_right + c] = sum_total[idx_sum_total + c] - sum_left[
-                idx_sum_left + c]
-
-        idx_sum_total += criterion.sum_stride
-        idx_sum_left += criterion.sum_stride
-        idx_sum_right += criterion.sum_stride
+    sum_right[:] = sum_total - sum_left
 
     criterion.pos = new_pos
     return 0
@@ -1883,66 +1916,9 @@ class Gini(object):
     #         index = \sum_{k=0}^{K-1} count_k (1 - count_k)
     #               = 1 - \sum_{k=0}^{K-1} count_k ** 2
     #     """
-    # NB : copy paste of the __init__ of ClassificationCriterion
+
+    # NB : It's a copy paste of the __init__ of ClassificationCriterion
     def __init__(self, n_outputs, n_classes):
-        #     def __cinit__(self, SIZE_t n_outputs,
-        #                   np.ndarray[SIZE_t, ndim=1] n_classes):
-        #         """Initialize attributes for this criterion.
-        #
-        #         Parameters
-        #         ----------
-        #         n_outputs : SIZE_t
-        #             The number of targets, the dimensionality of the prediction
-        #         n_classes : numpy.ndarray, dtype=SIZE_t
-        #             The number of unique classes in each target
-        #         """
-        #         self.sample_weight = NULL
-        #
-        #         self.samples = NULL
-        #         self.start = 0
-        #         self.pos = 0
-        #         self.end = 0
-        #
-        #         self.n_outputs = n_outputs
-        #         self.n_samples = 0
-        #         self.n_node_samples = 0
-        #         self.weighted_n_node_samples = 0.0
-        #         self.weighted_n_left = 0.0
-        #         self.weighted_n_right = 0.0
-        #
-        #         # Count labels for each output
-        #         self.sum_total = NULL
-        #         self.sum_left = NULL
-        #         self.sum_right = NULL
-        #         self.n_classes = NULL
-        #
-        #         safe_realloc(&self.n_classes, n_outputs)
-        #
-        #         cdef SIZE_t k = 0
-        #         cdef SIZE_t sum_stride = 0
-        #
-        #         # For each target, set the number of unique classes in that target,
-        #         # and also compute the maximal stride of all targets
-        #         for k in range(n_outputs):
-        #             self.n_classes[k] = n_classes[k]
-        #
-        #             if n_classes[k] > sum_stride:
-        #                 sum_stride = n_classes[k]
-        #
-        #         self.sum_stride = sum_stride
-        #
-        #         cdef SIZE_t n_elements = n_outputs * sum_stride
-        #         self.sum_total = <double*> calloc(n_elements, sizeof(double))
-        #         self.sum_left = <double*> calloc(n_elements, sizeof(double))
-        #         self.sum_right = <double*> calloc(n_elements, sizeof(double))
-        #
-        #         if (self.sum_total == NULL or
-        #                 self.sum_left == NULL or
-        #                 self.sum_right == NULL):
-        #             raise MemoryError()
-        # self.sample_weight = NULL
-        # self.samples = NULL
-        self.start = 0
         self.pos = 0
         self.end = 0
 
@@ -1962,27 +1938,33 @@ class Gini(object):
         # safe_realloc(&self.n_classes, n_outputs)
         self.n_classes = np.empty(n_outputs, dtype=NP_SIZE_t)
 
-        k = 0
-        sum_stride = 0
-
+        # k = 0
+        # sum_stride = 0
         # For each target, set the number of unique classes in that target,
         # and also compute the maximal stride of all targets
-        for k in range(n_outputs):
-            self.n_classes[k] = n_classes[k]
 
-            if n_classes[k] > sum_stride:
-                sum_stride = n_classes[k]
 
-        self.sum_stride = sum_stride
+        # for k in range(n_outputs):
+        #     self.n_classes[k] = n_classes[k]
+        #
+        #     if n_classes[k] > sum_stride:
+        #         sum_stride = n_classes[k]
 
-        n_elements = n_outputs * sum_stride
+        self.n_classes[:] = n_classes
+
+        self.max_n_classes = np.max(self.n_classes)
+
+        # self.sum_stride = sum_stride
+
+        # n_elements = n_outputs * sum_stride
 
         # self.sum_total = <double*> calloc(n_elements, sizeof(double))
         # self.sum_left = <double*> calloc(n_elements, sizeof(double))
         # self.sum_right = <double*> calloc(n_elements, sizeof(double))
-        self.sum_total = np.empty(n_elements, dtype=NP_DOUBLE_t)
-        self.sum_left = np.empty(n_elements, dtype=NP_DOUBLE_t)
-        self.sum_right = np.empty(n_elements, dtype=NP_DOUBLE_t)
+        shape = (self.n_outputs, self.max_n_classes)
+        self.sum_total = np.empty(shape, dtype=NP_DOUBLE_t)
+        self.sum_left = np.empty(shape, dtype=NP_DOUBLE_t)
+        self.sum_right = np.empty(shape, dtype=NP_DOUBLE_t)
 
 @njit
 def gini_node_impurity(criterion):
@@ -2025,17 +2007,28 @@ def gini_node_impurity(criterion):
     # cdef SIZE_t k
     # cdef SIZE_t c
 
+    # for k in range(criterion.n_outputs):
+    #     sq_count = 0.0
+    #
+    #     for c in range(n_classes[k]):
+    #         count_k = sum_total[c]
+    #         sq_count += count_k * count_k
+    #
+    #     gini += 1.0 - sq_count / (criterion.weighted_n_node_samples *
+    #                               criterion.weighted_n_node_samples)
+    #
+    #     sum_total += criterion.sum_stride
+
+    # TODO: For loop since a label might have more classes than others... du coup on
+    #  ajouter plein de zeros mais ptet moins bon en terme de cache
     for k in range(criterion.n_outputs):
         sq_count = 0.0
-
         for c in range(n_classes[k]):
-            count_k = sum_total[c]
+            count_k = sum_total[k, c]
             sq_count += count_k * count_k
 
         gini += 1.0 - sq_count / (criterion.weighted_n_node_samples *
                                   criterion.weighted_n_node_samples)
-
-        sum_total += criterion.sum_stride
 
     return gini / criterion.n_outputs
 
@@ -2101,18 +2094,38 @@ def gini_children_impurity(criterion):
     # cdef SIZE_t k
     # cdef SIZE_t c
 
-    idx_sum_left = 0
-    idx_sum_right = 0
+    # idx_sum_left = 0
+    # idx_sum_right = 0
+    #
+    # for k in range(criterion.n_outputs):
+    #     sq_count_left = 0.0
+    #     sq_count_right = 0.0
+    #
+    #     for c in range(n_classes[k]):
+    #         count_k = sum_left[idx_sum_left + c]
+    #         sq_count_left += count_k * count_k
+    #
+    #         count_k = sum_right[idx_sum_right + c]
+    #         sq_count_right += count_k * count_k
+    #
+    #     gini_left += 1.0 - sq_count_left / (criterion.weighted_n_left *
+    #                                         criterion.weighted_n_left)
+    #
+    #     gini_right += 1.0 - sq_count_right / (criterion.weighted_n_right *
+    #                                           criterion.weighted_n_right)
+    #
+    #     idx_sum_left += criterion.sum_stride
+    #     idx_sum_right += criterion.sum_stride
 
     for k in range(criterion.n_outputs):
         sq_count_left = 0.0
         sq_count_right = 0.0
 
         for c in range(n_classes[k]):
-            count_k = sum_left[idx_sum_left + c]
+            count_k = sum_left[k, c]
             sq_count_left += count_k * count_k
 
-            count_k = sum_right[idx_sum_right + c]
+            count_k = sum_right[k, c]
             sq_count_right += count_k * count_k
 
         gini_left += 1.0 - sq_count_left / (criterion.weighted_n_left *
@@ -2121,7 +2134,8 @@ def gini_children_impurity(criterion):
         gini_right += 1.0 - sq_count_right / (criterion.weighted_n_right *
                                               criterion.weighted_n_right)
 
-        idx_sum_left += criterion.sum_stride
-        idx_sum_right += criterion.sum_stride
+        # idx_sum_left += criterion.sum_stride
+        # idx_sum_right += criterion.sum_stride
+
 
     return gini_left / criterion.n_outputs, gini_right / criterion.n_outputs

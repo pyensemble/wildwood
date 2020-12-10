@@ -31,7 +31,7 @@ from scipy.sparse import csr_matrix
 import numpy as np
 from ._utils import DTYPE_t, NP_DTYPE_t, DOUBLE_t, NP_DOUBLE_t, SIZE_t, NP_SIZE_t, \
     INT32_t, NP_UINT32_t, SIZE_MAX, jitclass, njit, get_numba_type, resize, INFINITY,\
-    Stack, stack_push, stack_pop, stack_is_empty, EPSILON
+    Stack, stack_push, stack_pop, stack_is_empty, EPSILON, resize3d
 
 
 from ._splitter import splitter_init, splitter_node_reset, spec_split_record, \
@@ -505,7 +505,11 @@ def depth_first_tree_builder_build(builder, tree, X, y, sample_weight):
     else:
         init_capacity = 2047
 
+    print("tree.max_depth: ", tree.max_depth)
+
     # tree._resize(init_capacity)
+    print("In depth_first_tree_builder_build calling tree_resize with init_capacity: "
+          "", init_capacity)
     tree_resize(tree, init_capacity)
 
     # Parameters
@@ -542,7 +546,7 @@ def depth_first_tree_builder_build(builder, tree, X, y, sample_weight):
     # cdef SIZE_t n_constant_features
     # cdef bint is_leaf
     # cdef bint first = 1
-    first = 1
+    first = True
     # cdef SIZE_t max_depth_seen = -1
     max_depth_seen = -1
     # cdef int rc = 0
@@ -595,15 +599,21 @@ def depth_first_tree_builder_build(builder, tree, X, y, sample_weight):
             # dans le code d'origine y'a splitter.node_impurity qui appelle
             # self.criterion
             impurity = gini_node_impurity(splitter.criterion)
-            first = 0
+            first = False
 
-        is_leaf = (is_leaf or
-                   (impurity <= min_impurity_split))
+        # print("impurity: ", impurity)
+        # print("min_impurity_split: ", min_impurity_split)
+        is_leaf = (is_leaf or (impurity <= min_impurity_split))
 
+        # print("is_leaf: ", is_leaf)
         if not is_leaf:
             # splitter.node_split(impurity, &split, &n_constant_features)
 
-            best_splitter_node_split(splitter, impurity, split, n_constant_features)
+            # TODO: Hmmm y'a un truc qui ne va pas là ! je suis censé renvoyer best,
+            #  n_constant_features et les deux derniers arguments ne sont pas utlisés
+            # best_splitter_node_split(splitter, impurity, split, n_constant_features)
+            split, n_total_constants = best_splitter_node_split(splitter, impurity, n_constant_features)
+
             # If EPSILON=0 in the below comparison, float precision
             # issues stop splitting, producing trees that are
             # dissimilar to v0.18
@@ -625,7 +635,9 @@ def depth_first_tree_builder_build(builder, tree, X, y, sample_weight):
 
         # Store value for all nodes, to facilitate tree/model
         # inspection and interpretation
-        # TODO: is this really useful ??? I don't think so
+        # TODO oui c'est important ca permet de calculer les predictions...
+
+        splitter_node_value(splitter, tree.values, node_id)
         # splitter_node_value(splitter, tree.value + node_id * tree.value_stride)
 
         # splitter.node_value(tree.value + node_id * tree.value_stride)
@@ -651,6 +663,8 @@ def depth_first_tree_builder_build(builder, tree, X, y, sample_weight):
             max_depth_seen = depth
 
     if rc >= 0:
+        print("In depth_first_tree_builder_build calling tree_resize "
+              "with tree.node_count: ", tree.node_count)
         rc = tree_resize(tree, tree.node_count)
         # rc = tree._resize_c(tree.node_count)
 
@@ -894,9 +908,14 @@ spec_tree = [
     ("max_depth", SIZE_t),
     ("node_count", SIZE_t),
     ("capacity", SIZE_t),
+    # This array contains information about the nodes
     ("nodes", NODE_t[::1]),
-    ("value", DOUBLE_t[::1]),
-    ("value_stride", SIZE_t)
+    # This array contains values allowing to compute the prediction of each node
+    # Its shape is (n_nodes, n_outputs, max_n_classes)
+    # TODO: IMPORTANT a priori ca serait mieux ::1 sur le premier axe mais l'init
+    #  avec shape (0, ., .) foire dans ce cas avec numba
+    ("values", DOUBLE_t[:, :, ::1]),
+    # ("values_stride", SIZE_t)
 ]
 
 
@@ -996,8 +1015,9 @@ class Tree(object):
         # safe_realloc(&self.n_classes, n_outputs)
         self.n_classes = np.empty(n_outputs, dtype=NP_SIZE_t)
         self.max_n_classes = np.max(n_classes)
-        self.value_stride = n_outputs * self.max_n_classes
+        # self.value_stride = n_outputs * self.max_n_classes
 
+        # TODO: no for loop here
         for k in range(n_outputs):
             self.n_classes[k] = n_classes[k]
 
@@ -1007,7 +1027,8 @@ class Tree(object):
         self.capacity = 0
 
         # self.value = NULL
-        self.value = np.empty(0, dtype=NP_DOUBLE_t)
+        self.values = np.empty((0, self.n_outputs, self.max_n_classes),
+                               dtype=NP_DOUBLE_t)
         self.nodes = np.empty(0, dtype=NP_NODE_t)
 
 
@@ -1083,6 +1104,8 @@ def tree_add_node(tree, parent, is_left, is_leaf, feature, threshold, impurity,
     node_id = tree.node_count
 
     if node_id >= tree.capacity:
+        print("In tree_add_node calling tree_resize with no capacity")
+        # tree_add_node
         tree_resize(tree)
         # TODO: qu'est ce qui se passe ici ?
         # if tree._resize_c() != 0:
@@ -1097,9 +1120,9 @@ def tree_add_node(tree, parent, is_left, is_leaf, feature, threshold, impurity,
 
     if parent != TREE_UNDEFINED:
         if is_left:
-            nodes[parent].left_child = node_id
+            nodes[parent]["left_child"] = node_id
         else:
-            nodes[parent].right_child = node_id
+            nodes[parent]["right_child"] = node_id
 
     if is_leaf:
         node["left_child"] = TREE_LEAF
@@ -1163,7 +1186,16 @@ def tree_resize(tree, capacity=SIZE_MAX):
 
     # TODO: When does this happen ?
     # if capacity == tree.capacity and tree.nodes != NULL:
-    if capacity == tree.capacity and tree.nodes.size > 0:
+
+    print("----------------")
+    print("In tree.resize with")
+    print("capacity: ", capacity)
+    print("tree.capacity: ", tree.capacity)
+    print("tree.nodes.size: ", tree.nodes.size)
+
+    # TODO: attention grosse difference ici
+    # if capacity == tree.capacity and tree.nodes.size > 0:
+    if capacity <= tree.capacity and tree.nodes.size > 0:
         return 0
 
     if capacity == SIZE_MAX:
@@ -1172,12 +1204,16 @@ def tree_resize(tree, capacity=SIZE_MAX):
         else:
             capacity = 2 * tree.capacity
 
+    print("new capacity: ", capacity)
+
     # safe_realloc( & tree.nodes, capacity)
     tree.nodes = resize(tree.nodes, capacity)
     # safe_realloc( & tree.value, capacity * tree.value_stride)
 
     # TODO: je ne comprends toujours pas tres bien a quoi sert ce value mais bon
-    tree.value = resize(tree.value, capacity * tree.value_stride, zeros=True)
+
+    # tree.value = resize3d(tree.values, capacity * tree.value_stride, zeros=True)
+    tree.values = resize3d(tree.values, capacity, zeros=True)
 
     # value memory is initialised to 0 to enable classifier argmax
     # if capacity > tree.capacity:
@@ -1240,7 +1276,6 @@ def tree_get_node_ndarray(tree):
 
 @njit
 def tree_predict(tree, X):
-    #
     #     cpdef np.ndarray predict(self, object X):
     #         """Predict target for X."""
     #         out = self._get_value_ndarray().take(self.apply(X), axis=0,
@@ -1248,7 +1283,15 @@ def tree_predict(tree, X):
     #         if self.n_outputs == 1:
     #             out = out.reshape(X.shape[0], self.max_n_classes)
     #         return out
-    pass
+
+    # out = tree._get_value_ndarray().take(tree_apply(tree, X), axis=0,
+    #                                      mode='clip')
+
+    out = tree.values.take(tree_apply(tree, X), axis=0)
+
+    if tree.n_outputs == 1:
+        out = out.reshape(X.shape[0], tree.max_n_classes)
+    return out
 
 @njit
 def tree_apply(tree, X):
@@ -1258,7 +1301,7 @@ def tree_apply(tree, X):
     #             return self._apply_sparse_csr(X)
     #         else:
     #             return self._apply_dense(X)
-    pass
+    return tree_apply_dense(tree, X)
 
 @njit
 def tree_apply_dense(tree, X):
@@ -1301,12 +1344,13 @@ def tree_apply_dense(tree, X):
     #         return out
 
     # Check input
-    if not isinstance(X, np.ndarray):
-        raise ValueError("X should be in np.ndarray format, got %s"
-                         % type(X))
-
-    if X.dtype != DTYPE_t:
-        raise ValueError("X.dtype should be np.float32, got %s" % X.dtype)
+    # TODO: ces checks sont inutiles non ? On en fait deja avant dans la classe python
+    # if not isinstance(X, np.ndarray):
+    #     raise ValueError("X should be in np.ndarray format, got %s"
+    #                      % type(X))
+    #
+    # if X.dtype != DTYPE_t:
+    #     raise ValueError("X.dtype should be np.float32, got %s" % X.dtype)
 
     # Extract input
     # cdef const DTYPE_t[:, :] X_ndarray = X

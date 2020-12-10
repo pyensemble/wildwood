@@ -23,7 +23,7 @@ from math import ceil
 import numpy as np
 from scipy.sparse import issparse
 
-from sklearn.base import BaseEstimator
+from sklearn.base import BaseEstimator, check_array
 from sklearn.base import ClassifierMixin
 from sklearn.base import clone
 from sklearn.base import RegressorMixin
@@ -426,8 +426,10 @@ class BaseDecisionTree(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
     def _validate_X_predict(self, X, check_input):
         """Validate the training data on predict (probabilities)."""
         if check_input:
-            X = self._validate_data(X, dtype=DTYPE, accept_sparse="csr",
-                                    reset=False)
+
+            X = check_array(X, accept_sparse="csr", dtype=DTYPE)
+            # X = self._validate_data(X, dtype=DTYPE, accept_sparse="csr",
+            #                         reset=False)
             if issparse(X) and (X.indices.dtype != np.intc or
                                 X.indptr.dtype != np.intc):
                 raise ValueError("No support for np.int64 index based "
@@ -462,7 +464,10 @@ class BaseDecisionTree(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
         """
         check_is_fitted(self)
         X = self._validate_X_predict(X, check_input)
-        proba = self.tree_.predict(X)
+
+        # proba = self.tree_.predict(X)
+
+        proba = _tree.tree_predict(self.tree_, X)
         n_samples = X.shape[0]
 
         # Classification
@@ -954,7 +959,9 @@ class DecisionTreeClassifier(ClassifierMixin, BaseDecisionTree):
         """
         check_is_fitted(self)
         X = self._validate_X_predict(X, check_input)
-        proba = self.tree_.predict(X)
+
+        # proba = self.tree_.predict(X)
+        proba = _tree.tree_predict(self.tree_, X)
 
         if self.n_outputs_ == 1:
             proba = proba[:, :self.n_classes_]

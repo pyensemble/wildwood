@@ -31,89 +31,89 @@ import numpy as np
 
 
 
-
-@njit
-def numpy_sort(Xf, samples, n):
-    idx = np.argsort(Xf)
-    Xf = Xf[idx]
-    samples = samples[idx]
-
-
-
-@njit
-def numba_sort(Xf, samples, n):
-    sort(Xf, samples, n)
-
-
-@njit
-def compile():
-    print('JIT Compile')
-    n = 10
-    Xf = np.random.randn(n)
-    samples = np.arange(0, n)
-    numpy_sort(Xf, samples, n)
-    numba_sort(Xf, samples, n)
-
-
-compile()
-
-
-print("One big")
-n_repeat = 5
-n = 10_000_000
-
-total_time_numba = 0
-total_time_numpy = 0
-
-for i in range(n_repeat):
-    # Generate data
-    Xf = np.random.randn(n)
-    samples = np.arange(0, n)
-
-    # Time numpy
-    tic = time()
-    numpy_sort(Xf, samples, n)
-    toc = time()
-    total_time_numpy += toc - tic
-
-    # Time numba
-    tic = time()
-    numba_sort(Xf, samples, n)
-    toc = time()
-    total_time_numba += toc - tic
-
-
-print("numpy: ", total_time_numpy)
-print("numba: ", total_time_numba)
-
-
-print("Many small")
-n_repeat = 5_000
-n = 10_000
-
-total_time_numba = 0
-total_time_numpy = 0
-
-for i in range(n_repeat):
-    # Generate data
-    Xf = np.random.randn(n)
-    samples = np.arange(0, n)
-
-    # Time numpy
-    tic = time()
-    numpy_sort(Xf, samples, n)
-    toc = time()
-    total_time_numpy += toc - tic
-
-    # Time numba
-    tic = time()
-    numba_sort(Xf, samples, n)
-    toc = time()
-    total_time_numba += toc - tic
-
-
-print("numpy: ", total_time_numpy)
-print("numba: ", total_time_numba)
+#
+# @njit
+# def numpy_sort(Xf, samples, n):
+#     idx = np.argsort(Xf)
+#     Xf = Xf[idx]
+#     samples = samples[idx]
+# 
+# 
+# 
+# @njit
+# def numba_sort(Xf, samples, n):
+#     sort(Xf, samples, n)
+# 
+# 
+# @njit
+# def compile():
+#     print('JIT Compile')
+#     n = 10
+#     Xf = np.random.randn(n)
+#     samples = np.arange(0, n)
+#     numpy_sort(Xf, samples, n)
+#     numba_sort(Xf, samples, n)
+# 
+# 
+# compile()
+# 
+# 
+# print("One big")
+# n_repeat = 5
+# n = 10_000_000
+# 
+# total_time_numba = 0
+# total_time_numpy = 0
+# 
+# for i in range(n_repeat):
+#     # Generate data
+#     Xf = np.random.randn(n)
+#     samples = np.arange(0, n)
+# 
+#     # Time numpy
+#     tic = time()
+#     numpy_sort(Xf, samples, n)
+#     toc = time()
+#     total_time_numpy += toc - tic
+# 
+#     # Time numba
+#     tic = time()
+#     numba_sort(Xf, samples, n)
+#     toc = time()
+#     total_time_numba += toc - tic
+# 
+# 
+# print("numpy: ", total_time_numpy)
+# print("numba: ", total_time_numba)
+# 
+# 
+# print("Many small")
+# n_repeat = 5_000
+# n = 10_000
+# 
+# total_time_numba = 0
+# total_time_numpy = 0
+# 
+# for i in range(n_repeat):
+#     # Generate data
+#     Xf = np.random.randn(n)
+#     samples = np.arange(0, n)
+# 
+#     # Time numpy
+#     tic = time()
+#     numpy_sort(Xf, samples, n)
+#     toc = time()
+#     total_time_numpy += toc - tic
+# 
+#     # Time numba
+#     tic = time()
+#     numba_sort(Xf, samples, n)
+#     toc = time()
+#     total_time_numba += toc - tic
+# 
+# 
+# print("numpy: ", total_time_numpy)
+# print("numba: ", total_time_numba)
 
 
     # print("Xf: ", Xf)
@@ -142,17 +142,33 @@ print("numba: ", total_time_numba)
 # print(l)
 
 
-#
-# spec = [(
-#     ("a", uint32)
-# )]
-# @jitclass(spec)
-# class A(object):
-#
-#     def __init__(self, a):
-#         self.a = a
-#
-#
+
+spec = [(
+    ("a", uint32)
+)]
+@jitclass(spec)
+class A(object):
+
+    def __init__(self, a):
+        self.a = a
+
+
+@njit
+def main():
+
+    a = A(42)
+    b = A(13)
+    print(a.a, b.a)  # 42 13
+
+    a = b
+    print(a.a, b.a)  # 13 13
+
+    b.a = 27
+    print(a.a, b.a)  # 13 27
+
+main()
+
+
 #
 # @jitclass(spec)
 # class B(object):

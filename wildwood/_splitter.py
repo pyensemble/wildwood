@@ -18,7 +18,7 @@ from numba import njit
 from numba.experimental import jitclass
 
 from ._criterion import criterion_reset, criterion_update, \
-    criterion_impurity_improvement, classification_criterion_init
+    criterion_impurity_improvement, classification_criterion_init, classification_criterion_node_value
 
 from ._utils import int32, uint32, DOUBLE_t, NP_DOUBLE_t, SIZE_t, INT32_t, UINT32_t, \
     INFINITY, NP_SIZE_t, DTYPE_t, NP_DTYPE_t, get_numba_type
@@ -84,6 +84,16 @@ class SplitRecord(object):
         self.feature = 0
         self.threshold = 0.
         self.improvement = -INFINITY
+
+
+@njit
+def split_record_copy(to_record, from_record):
+    to_record.impurity_left = from_record.impurity_left
+    to_record.impurity_right = from_record.impurity_right
+    to_record.pos = from_record.pos
+    to_record.feature = from_record.feature
+    to_record.threshold = from_record.threshold
+    to_record.improvement = from_record.improvement
 
 
 # cdef inline void _init_split(SplitRecord* self, SIZE_t start_pos) nogil:
@@ -422,13 +432,12 @@ def splitter_node_reset(splitter, start, end):
 
 
 @njit
-def splitter_node_value(splitter, dest):
+def splitter_node_value(splitter, values, node_id):
     # cdef void node_value(self, double* dest) nogil:
     #     """Copy the value of node samples[start:end] into dest."""
     #
     #     self.criterion.node_value(dest)
-
-    splitter.criterion.node_value(dest)
+    classification_criterion_node_value(splitter.criterion, values, node_id)
 
 
 @njit
@@ -440,7 +449,6 @@ def splitter_node_impurity(splitter):
     # TODO: criterion_node_impurity(splitter.criterion, splitter)
 
     return splitter.criterion.node_impurity()
-
 
 
 # cdef class BaseDenseSplitter(Splitter):
@@ -542,7 +550,7 @@ def best_splitter_init(splitter, X, y, sample_weight):
 
 
 @njit
-def best_splitter_node_split(splitter, impurity, split, n_constant_features):
+def best_splitter_node_split(splitter, impurity, n_constant_features):
 #     cdef int node_split(self, double impurity, SplitRecord* split,
 #                         SIZE_t* n_constant_features) nogil except -1:
 #         """Find the best split on node samples[start:end]
@@ -841,7 +849,7 @@ def best_splitter_node_split(splitter, impurity, split, n_constant_features):
                 Xf[i] = splitter.X[samples[i], current.feature]
 
             # sort(Xf + start, samples + start, end - start)
-            print("start: ", start)
+            # print("start: ", start)
 
             sort(Xf[start:], samples[start:], end - start)
 
@@ -890,7 +898,10 @@ def best_splitter_node_split(splitter, impurity, split, n_constant_features):
 
                         # current_proxy_improvement =
                         # splitter.criterion.proxy_impurity_improvement()
-                        criterion_proxy_impurity_improvement(splitter.criterion)
+                        current_proxy_improvement = criterion_proxy_impurity_improvement(splitter.criterion)
+
+                        # print("best_proxy_improvement: ", best_proxy_improvement)
+                        # print("current_proxy_improvement: ", current_proxy_improvement)
 
                         if current_proxy_improvement > best_proxy_improvement:
                             best_proxy_improvement = current_proxy_improvement
@@ -903,7 +914,8 @@ def best_splitter_node_split(splitter, impurity, split, n_constant_features):
                                 current.threshold = Xf[p - 1]
 
                             # TODO: warning this might not do a copy here !
-                            best = current  # copy
+                            # best = current  # copy
+                            split_record_copy(best, current)
 
     # Reorganize into samples[start:best.pos] + samples[best.pos:end]
     if best.pos < end:
