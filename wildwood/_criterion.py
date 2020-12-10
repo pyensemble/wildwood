@@ -1997,7 +1997,7 @@ def gini_node_impurity(criterion):
 #
 #         return gini / self.n_outputs
 
-    print(criterion)
+    # print(criterion)
 
     n_classes = criterion.n_classes
     sum_total = criterion.sum_total

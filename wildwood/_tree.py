@@ -505,11 +505,11 @@ def depth_first_tree_builder_build(builder, tree, X, y, sample_weight):
     else:
         init_capacity = 2047
 
-    print("tree.max_depth: ", tree.max_depth)
+    # print("tree.max_depth: ", tree.max_depth)
 
     # tree._resize(init_capacity)
-    print("In depth_first_tree_builder_build calling tree_resize with init_capacity: "
-          "", init_capacity)
+    # print("In depth_first_tree_builder_build calling tree_resize with init_capacity: "
+    #       "", init_capacity)
     tree_resize(tree, init_capacity)
 
     # Parameters
@@ -663,8 +663,8 @@ def depth_first_tree_builder_build(builder, tree, X, y, sample_weight):
             max_depth_seen = depth
 
     if rc >= 0:
-        print("In depth_first_tree_builder_build calling tree_resize "
-              "with tree.node_count: ", tree.node_count)
+        # print("In depth_first_tree_builder_build calling tree_resize "
+        #       "with tree.node_count: ", tree.node_count)
         rc = tree_resize(tree, tree.node_count)
         # rc = tree._resize_c(tree.node_count)
 
@@ -1104,7 +1104,7 @@ def tree_add_node(tree, parent, is_left, is_leaf, feature, threshold, impurity,
     node_id = tree.node_count
 
     if node_id >= tree.capacity:
-        print("In tree_add_node calling tree_resize with no capacity")
+        # print("In tree_add_node calling tree_resize with no capacity")
         # tree_add_node
         tree_resize(tree)
         # TODO: qu'est ce qui se passe ici ?
@@ -1187,11 +1187,11 @@ def tree_resize(tree, capacity=SIZE_MAX):
     # TODO: When does this happen ?
     # if capacity == tree.capacity and tree.nodes != NULL:
 
-    print("----------------")
-    print("In tree.resize with")
-    print("capacity: ", capacity)
-    print("tree.capacity: ", tree.capacity)
-    print("tree.nodes.size: ", tree.nodes.size)
+    # print("----------------")
+    # print("In tree.resize with")
+    # print("capacity: ", capacity)
+    # print("tree.capacity: ", tree.capacity)
+    # print("tree.nodes.size: ", tree.nodes.size)
 
     # TODO: attention grosse difference ici
     # if capacity == tree.capacity and tree.nodes.size > 0:
@@ -1204,7 +1204,7 @@ def tree_resize(tree, capacity=SIZE_MAX):
         else:
             capacity = 2 * tree.capacity
 
-    print("new capacity: ", capacity)
+    # print("new capacity: ", capacity)
 
     # safe_realloc( & tree.nodes, capacity)
     tree.nodes = resize(tree.nodes, capacity)
@@ -1274,7 +1274,7 @@ def tree_get_node_ndarray(tree):
     #         return arr
     pass
 
-@njit
+# @njit
 def tree_predict(tree, X):
     #     cpdef np.ndarray predict(self, object X):
     #         """Predict target for X."""
@@ -1287,11 +1287,14 @@ def tree_predict(tree, X):
     # out = tree._get_value_ndarray().take(tree_apply(tree, X), axis=0,
     #                                      mode='clip')
 
-    out = tree.values.take(tree_apply(tree, X), axis=0)
+    # TODO: numba n'accepte pas l'option axis
+    idx_leaves = tree_apply(tree, X)
+    out = tree.values.take(idx_leaves, axis=0)
 
     if tree.n_outputs == 1:
         out = out.reshape(X.shape[0], tree.max_n_classes)
     return out
+
 
 @njit
 def tree_apply(tree, X):
