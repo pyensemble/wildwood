@@ -14,17 +14,39 @@ _splitter.pyx code into numba
 
 from math import log as ln
 import numpy as np
-from numba import njit
-from numba.experimental import jitclass
 
-from ._criterion import criterion_reset, criterion_update, \
-    criterion_impurity_improvement, classification_criterion_init, classification_criterion_node_value
+from ._criterion import (
+    criterion_reset,
+    criterion_update,
+    criterion_impurity_improvement,
+    classification_criterion_init,
+    # classification_criterion_node_value,
+)
 
-from ._utils import int32, uint32, DOUBLE_t, NP_DOUBLE_t, SIZE_t, INT32_t, UINT32_t, \
-    INFINITY, NP_SIZE_t, DTYPE_t, NP_DTYPE_t, get_numba_type
+from ._utils import (
+    njit,
+    jitclass,
+    int32,
+    uint32,
+    DOUBLE_t,
+    NP_DOUBLE_t,
+    SIZE_t,
+    INT32_t,
+    UINT32_t,
+    INFINITY,
+    NP_SIZE_t,
+    DTYPE_t,
+    NP_DTYPE_t,
+    get_numba_type,
+)
 
-from ._criterion import Gini, classification_criterion_init, gini_children_impurity, \
-    gini_node_impurity, criterion_proxy_impurity_improvement
+from ._criterion import (
+    Gini,
+    classification_criterion_init,
+    gini_children_impurity,
+    gini_node_impurity,
+    criterion_proxy_impurity_improvement,
+)
 
 from collections import namedtuple
 from numba import intp, int32, uint32, float64
@@ -62,8 +84,9 @@ spec_split_record = [
     ("threshold", DOUBLE_t),
     ("improvement", DOUBLE_t),
     ("impurity_left", DOUBLE_t),
-    ("impurity_right", DOUBLE_t)
+    ("impurity_right", DOUBLE_t),
 ]
+
 
 @jitclass(spec_split_record)
 class SplitRecord(object):
@@ -82,7 +105,7 @@ class SplitRecord(object):
         self.impurity_right = INFINITY
         self.pos = 0
         self.feature = 0
-        self.threshold = 0.
+        self.threshold = 0.0
         self.improvement = -INFINITY
 
 
@@ -109,7 +132,7 @@ def _init_split(split_record, start_pos):
     split_record.impurity_right = INFINITY
     split_record.pos = start_pos
     split_record.feature = 0
-    split_record.threshold = 0.
+    split_record.threshold = 0.0
     split_record.improvement = -INFINITY
 
 
@@ -218,15 +241,15 @@ spec_splitter = [
     ("max_features", SIZE_t),
     ("min_samples_leaf", SIZE_t),
     ("min_weight_leaf", SIZE_t),
-    ("random_state", UINT32_t), # TODO: this is wrong
+    ("random_state", UINT32_t),  # TODO: this is wrong
     ("rand_r_state", UINT32_t),
     ("max_features", SIZE_t),
     ("samples", SIZE_t[::1]),  # A numpy array holding the sample indices
-    ("n_samples", SIZE_t),        # It's X.shape[0]
+    ("n_samples", SIZE_t),  # It's X.shape[0]
     ("weighted_n_samples", DOUBLE_t),
-    ("features", SIZE_t[::1]),      # Feature indices in X
-    ("constant_features", SIZE_t[::1]), # Constant feature indices
-    ("n_features", SIZE_t),   # It's X.shape[0]
+    ("features", SIZE_t[::1]),  # Feature indices in X
+    ("constant_features", SIZE_t[::1]),  # Constant feature indices
+    ("n_features", SIZE_t),  # It's X.shape[0]
     ("max_features", SIZE_t),
     ("feature_values", DOUBLE_t[::1]),
     ("start", SIZE_t),
@@ -235,150 +258,152 @@ spec_splitter = [
     ("sample_weight", DOUBLE_t[::1]),
 ]
 
+
 @njit
 def splitter_init(splitter, X, y, sample_weight):
-#     cdef int init(self,
-#                    object X,
-#                    const DOUBLE_t[:, ::1] y,
-#                    DOUBLE_t* sample_weight) except -1:
-#         """Initialize the splitter.
-#
-#         Take in the input data X, the target Y, and optional sample weights.
-#
-#         Returns -1 in case of failure to allocate memory (and raise MemoryError)
-#         or 0 otherwise.
-#
-#         Parameters
-#         ----------
-#         X : object
-#             This contains the inputs. Usually it is a 2d numpy array.
-#
-#         y : ndarray, dtype=DOUBLE_t
-#             This is the vector of targets, or true labels, for the samples
-#
-#         sample_weight : DOUBLE_t*
-#             The weights of the samples, where higher weighted samples are fit
-#             closer than lower weight samples. If not provided, all samples
-#             are assumed to have uniform weight.
-#         """
-#
-#         self.rand_r_state = self.random_state.randint(0, RAND_R_MAX)
-#         cdef SIZE_t n_samples = X.shape[0]
-#
-#         # Create a new array which will be used to store nonzero
-#         # samples from the feature of interest
-#         cdef SIZE_t* samples = safe_realloc(&self.samples, n_samples)
-#
-#         cdef SIZE_t i, j
-#         cdef double weighted_n_samples = 0.0
-#         j = 0
-#
-#         for i in range(n_samples):
-#             # Only work with positively weighted samples
-#             if sample_weight == NULL or sample_weight[i] != 0.0:
-#                 samples[j] = i
-#                 j += 1
-#
-#             if sample_weight != NULL:
-#                 weighted_n_samples += sample_weight[i]
-#             else:
-#                 weighted_n_samples += 1.0
-#
-#         # Number of samples is number of positively weighted samples
-#         self.n_samples = j
-#         self.weighted_n_samples = weighted_n_samples
-#
-#         cdef SIZE_t n_features = X.shape[1]
-#         cdef SIZE_t* features = safe_realloc(&self.features, n_features)
-#
-#         for i in range(n_features):
-#             features[i] = i
-#
-#         self.n_features = n_features
-#
-#         safe_realloc(&self.feature_values, n_samples)
-#         safe_realloc(&self.constant_features, n_features)
-#
-#         self.y = y
-#
-#         self.sample_weight = sample_weight
-#         return 0
+    #     cdef int init(self,
+    #                    object X,
+    #                    const DOUBLE_t[:, ::1] y,
+    #                    DOUBLE_t* sample_weight) except -1:
+    #         """Initialize the splitter.
+    #
+    #         Take in the input data X, the target Y, and optional sample weights.
+    #
+    #         Returns -1 in case of failure to allocate memory (and raise MemoryError)
+    #         or 0 otherwise.
+    #
+    #         Parameters
+    #         ----------
+    #         X : object
+    #             This contains the inputs. Usually it is a 2d numpy array.
+    #
+    #         y : ndarray, dtype=DOUBLE_t
+    #             This is the vector of targets, or true labels, for the samples
+    #
+    #         sample_weight : DOUBLE_t*
+    #             The weights of the samples, where higher weighted samples are fit
+    #             closer than lower weight samples. If not provided, all samples
+    #             are assumed to have uniform weight.
+    #         """
+    #
+    #         self.rand_r_state = self.random_state.randint(0, RAND_R_MAX)
+    #         cdef SIZE_t n_samples = X.shape[0]
+    #
+    #         # Create a new array which will be used to store nonzero
+    #         # samples from the feature of interest
+    #         cdef SIZE_t* samples = safe_realloc(&self.samples, n_samples)
+    #
+    #         cdef SIZE_t i, j
+    #         cdef double weighted_n_samples = 0.0
+    #         j = 0
+    #
+    #         for i in range(n_samples):
+    #             # Only work with positively weighted samples
+    #             if sample_weight == NULL or sample_weight[i] != 0.0:
+    #                 samples[j] = i
+    #                 j += 1
+    #
+    #             if sample_weight != NULL:
+    #                 weighted_n_samples += sample_weight[i]
+    #             else:
+    #                 weighted_n_samples += 1.0
+    #
+    #         # Number of samples is number of positively weighted samples
+    #         self.n_samples = j
+    #         self.weighted_n_samples = weighted_n_samples
+    #
+    #         cdef SIZE_t n_features = X.shape[1]
+    #         cdef SIZE_t* features = safe_realloc(&self.features, n_features)
+    #
+    #         for i in range(n_features):
+    #             features[i] = i
+    #
+    #         self.n_features = n_features
+    #
+    #         safe_realloc(&self.feature_values, n_samples)
+    #         safe_realloc(&self.constant_features, n_features)
+    #
+    #         self.y = y
+    #
+    #         self.sample_weight = sample_weight
+    #         return 0
 
-        # self.rand_r_state = self.random_state.randint(0, RAND_R_MAX)
-        n_samples = X.shape[0]
+    # self.rand_r_state = self.random_state.randint(0, RAND_R_MAX)
+    n_samples = X.shape[0]
 
-        if sample_weight is None:
-            sample_weight = np.empty(0, dtype=NP_DOUBLE_t)
+    if sample_weight is None:
+        sample_weight = np.empty(0, dtype=NP_DOUBLE_t)
 
-        # Create a new array which will be used to store nonzero
-        # samples from the feature of interest
-        # safe_realloc(&self.samples, n_samples)
-        samples = np.empty(n_samples, dtype=NP_SIZE_t)
-        splitter.samples = samples
+    # Create a new array which will be used to store nonzero
+    # samples from the feature of interest
+    # safe_realloc(&self.samples, n_samples)
+    samples = np.empty(n_samples, dtype=NP_SIZE_t)
+    splitter.samples = samples
 
-        # cdef SIZE_t i, j
-        weighted_n_samples = 0.0
+    # cdef SIZE_t i, j
+    weighted_n_samples = 0.0
 
-        j = 0
-        for i in range(n_samples):
-            # Only work with positively weighted samples
-            # print(sample_weight)
+    j = 0
+    for i in range(n_samples):
+        # Only work with positively weighted samples
+        # print(sample_weight)
 
-            if sample_weight.shape[0] == 0 or sample_weight[i] != 0.0:
-                samples[j] = i
-                j += 1
+        if sample_weight.shape[0] == 0 or sample_weight[i] != 0.0:
+            samples[j] = i
+            j += 1
 
-            if sample_weight.shape[0] != 0:
-                weighted_n_samples += sample_weight[i]
-            else:
-                weighted_n_samples += 1.0
+        if sample_weight.shape[0] != 0:
+            weighted_n_samples += sample_weight[i]
+        else:
+            weighted_n_samples += 1.0
 
-        # print("weighted_n_samples: ", weighted_n_samples)
-        # Number of samples is number of positively weighted samples
-        splitter.n_samples = j
-        splitter.weighted_n_samples = weighted_n_samples
+    # print("weighted_n_samples: ", weighted_n_samples)
+    # Number of samples is number of positively weighted samples
+    splitter.n_samples = j
+    splitter.weighted_n_samples = weighted_n_samples
 
-        n_features = X.shape[1]
-        # cdef SIZE_t* features = safe_realloc(&self.features, n_features)
-        features = np.empty(n_features, dtype=NP_SIZE_t)
+    n_features = X.shape[1]
+    # cdef SIZE_t* features = safe_realloc(&self.features, n_features)
+    features = np.empty(n_features, dtype=NP_SIZE_t)
 
-        for i in range(n_features):
-            features[i] = i
+    for i in range(n_features):
+        features[i] = i
 
-        splitter.features = features
+    splitter.features = features
 
-        splitter.n_features = n_features
+    splitter.n_features = n_features
 
-        # TODO: get correct dtype
-        # safe_realloc(&self.feature_values, n_samples)
-        splitter.feature_values = np.empty(n_samples, dtype=NP_DOUBLE_t)
-        # safe_realloc(&self.constant_features, n_features)
-        splitter.constant_features = np.empty(n_features, dtype=NP_SIZE_t)
+    # TODO: get correct dtype
+    # safe_realloc(&self.feature_values, n_samples)
+    splitter.feature_values = np.empty(n_samples, dtype=NP_DOUBLE_t)
+    # safe_realloc(&self.constant_features, n_features)
+    splitter.constant_features = np.empty(n_features, dtype=NP_SIZE_t)
 
-        # print("coucou")
-        # print(y)
-        # print(splitter)
-        # print(splitter.y)
+    # print("coucou")
+    # print(y)
+    # print(splitter)
+    # print(splitter.y)
 
-        splitter.y = y
+    splitter.y = y
 
-        splitter.sample_weight = sample_weight
+    splitter.sample_weight = sample_weight
 
-    # The samples vector `samples` is maintained by the Splitter object such
-    # that the samples contained in a node are contiguous. With this setting,
-    # `node_split` reorganizes the node samples `samples[start:end]` in two
-    # subsets `samples[start:pos]` and `samples[pos:end]`.
 
-    # The 1-d  `features` array of size n_features contains the features
-    # indices and allows fast sampling without replacement of features.
+# The samples vector `samples` is maintained by the Splitter object such
+# that the samples contained in a node are contiguous. With this setting,
+# `node_split` reorganizes the node samples `samples[start:end]` in two
+# subsets `samples[start:pos]` and `samples[pos:end]`.
 
-    # The 1-d `constant_features` array of size n_features holds in
-    # `constant_features[:n_constant_features]` the feature ids with
-    # constant values for all the samples that reached a specific node.
-    # The value `n_constant_features` is given by the parent node to its
-    # child nodes.  The content of the range `[n_constant_features:]` is left
-    # undefined, but preallocated for performance reasons
-    # This allows optimization with depth-based tree building.
+# The 1-d  `features` array of size n_features contains the features
+# indices and allows fast sampling without replacement of features.
+
+# The 1-d `constant_features` array of size n_features holds in
+# `constant_features[:n_constant_features]` the feature ids with
+# constant values for all the samples that reached a specific node.
+# The value `n_constant_features` is given by the parent node to its
+# child nodes.  The content of the range `[n_constant_features:]` is left
+# undefined, but preallocated for performance reasons
+# This allows optimization with depth-based tree building.
 
 
 @njit
@@ -419,25 +444,27 @@ def splitter_node_reset(splitter, start, end):
 
     # print(splitter)
 
-    classification_criterion_init(splitter.criterion,
-                                  splitter.y,
-                                  splitter.sample_weight,
-                                  splitter.weighted_n_samples,
-                                  splitter.samples,
-                                  start,
-                                  end)
+    classification_criterion_init(
+        splitter.criterion,
+        splitter.y,
+        splitter.sample_weight,
+        splitter.weighted_n_samples,
+        splitter.samples,
+        start,
+        end,
+    )
 
     # weighted_n_node_samples[0] = splitter.criterion.weighted_n_node_samples
     return splitter.criterion.weighted_n_node_samples
 
-
-@njit
-def splitter_node_value(splitter, values, node_id):
-    # cdef void node_value(self, double* dest) nogil:
-    #     """Copy the value of node samples[start:end] into dest."""
-    #
-    #     self.criterion.node_value(dest)
-    classification_criterion_node_value(splitter.criterion, values, node_id)
+#
+# @njit
+# def splitter_node_value(splitter, values, node_id):
+#     # cdef void node_value(self, double* dest) nogil:
+#     #     """Copy the value of node samples[start:end] into dest."""
+#     #
+#     #     self.criterion.node_value(dest)
+#     classification_criterion_node_value(splitter.criterion, values, node_id)
 
 
 @njit
@@ -465,21 +492,21 @@ spec_base_dense_splitter = spec_splitter + [
 
 @njit
 def base_dense_splitter_init(splitter, X, y, sample_weight):
-#     cdef int init(self,
-#                   object X,
-#                   const DOUBLE_t[:, ::1] y,
-#                   DOUBLE_t* sample_weight) except -1:
-#         """Initialize the splitter
-#
-#         Returns -1 in case of failure to allocate memory (and raise MemoryError)
-#         or 0 otherwise.
-#         """
-#
-#         # Call parent init
-#         Splitter.init(self, X, y, sample_weight)
-#
-#         self.X = X
-#         return 0
+    #     cdef int init(self,
+    #                   object X,
+    #                   const DOUBLE_t[:, ::1] y,
+    #                   DOUBLE_t* sample_weight) except -1:
+    #         """Initialize the splitter
+    #
+    #         Returns -1 in case of failure to allocate memory (and raise MemoryError)
+    #         or 0 otherwise.
+    #         """
+    #
+    #         # Call parent init
+    #         Splitter.init(self, X, y, sample_weight)
+    #
+    #         self.X = X
+    #         return 0
     splitter_init(splitter, X, y, sample_weight)
     splitter.X = X
 
@@ -489,9 +516,9 @@ spec_best_splitter = spec_base_dense_splitter
 
 @jitclass(spec_best_splitter)
 class BestSplitter(object):
-
-    def __init__(self, criterion, max_features, min_samples_leaf, min_weight_leaf,
-                 random_state):
+    def __init__(
+        self, criterion, max_features, min_samples_leaf, min_weight_leaf, random_state
+    ):
         #     def __cinit__(self, Criterion criterion, SIZE_t max_features,
         #                   SIZE_t min_samples_leaf, double min_weight_leaf,
         #                   object random_state):
@@ -551,195 +578,6 @@ def best_splitter_init(splitter, X, y, sample_weight):
 
 @njit
 def best_splitter_node_split(splitter, impurity, n_constant_features):
-#     cdef int node_split(self, double impurity, SplitRecord* split,
-#                         SIZE_t* n_constant_features) nogil except -1:
-#         """Find the best split on node samples[start:end]
-#
-#         Returns -1 in case of failure to allocate memory (and raise MemoryError)
-#         or 0 otherwise.
-#         """
-#         # Find the best split
-#         cdef SIZE_t* samples = self.samples
-#         cdef SIZE_t start = self.start
-#         cdef SIZE_t end = self.end
-#
-#         cdef SIZE_t* features = self.features
-#         cdef SIZE_t* constant_features = self.constant_features
-#         cdef SIZE_t n_features = self.n_features
-#
-#         cdef DTYPE_t* Xf = self.feature_values
-#         cdef SIZE_t max_features = self.max_features
-#         cdef SIZE_t min_samples_leaf = self.min_samples_leaf
-#         cdef double min_weight_leaf = self.min_weight_leaf
-#         cdef UINT32_t* random_state = &self.rand_r_state
-#
-#         cdef SplitRecord best, current
-#         cdef double current_proxy_improvement = -INFINITY
-#         cdef double best_proxy_improvement = -INFINITY
-#
-#         cdef SIZE_t f_i = n_features
-#         cdef SIZE_t f_j
-#         cdef SIZE_t p
-#         cdef SIZE_t feature_idx_offset
-#         cdef SIZE_t feature_offset
-#         cdef SIZE_t i
-#         cdef SIZE_t j
-#
-#         cdef SIZE_t n_visited_features = 0
-#         # Number of features discovered to be constant during the split search
-#         cdef SIZE_t n_found_constants = 0
-#         # Number of features known to be constant and drawn without replacement
-#         cdef SIZE_t n_drawn_constants = 0
-#         cdef SIZE_t n_known_constants = n_constant_features[0]
-#         # n_total_constants = n_known_constants + n_found_constants
-#         cdef SIZE_t n_total_constants = n_known_constants
-#         cdef DTYPE_t current_feature_value
-#         cdef SIZE_t partition_end
-#
-#         _init_split(&best, end)
-#
-#         # Sample up to max_features without replacement using a
-#         # Fisher-Yates-based algorithm (using the local variables `f_i` and
-#         # `f_j` to compute a permutation of the `features` array).
-#         #
-#         # Skip the CPU intensive evaluation of the impurity criterion for
-#         # features that were already detected as constant (hence not suitable
-#         # for good splitting) by ancestor nodes and save the information on
-#         # newly discovered constant features to spare computation on descendant
-#         # nodes.
-#         while (f_i > n_total_constants and  # Stop early if remaining features
-#                                             # are constant
-#                 (n_visited_features < max_features or
-#                  # At least one drawn features must be non constant
-#                  n_visited_features <= n_found_constants + n_drawn_constants)):
-#
-#             n_visited_features += 1
-#
-#             # Loop invariant: elements of features in
-#             # - [:n_drawn_constant[ holds drawn and known constant features;
-#             # - [n_drawn_constant:n_known_constant[ holds known constant
-#             #   features that haven't been drawn yet;
-#             # - [n_known_constant:n_total_constant[ holds newly found constant
-#             #   features;
-#             # - [n_total_constant:f_i[ holds features that haven't been drawn
-#             #   yet and aren't constant apriori.
-#             # - [f_i:n_features[ holds features that have been drawn
-#             #   and aren't constant.
-#
-#             # Draw a feature at random
-#             f_j = rand_int(n_drawn_constants, f_i - n_found_constants,
-#                            random_state)
-#
-#             if f_j < n_known_constants:
-#                 # f_j in the interval [n_drawn_constants, n_known_constants[
-#                 features[n_drawn_constants], features[f_j] = features[f_j], features[n_drawn_constants]
-#
-#                 n_drawn_constants += 1
-#
-#             else:
-#                 # f_j in the interval [n_known_constants, f_i - n_found_constants[
-#                 f_j += n_found_constants
-#                 # f_j in the interval [n_total_constants, f_i[
-#                 current.feature = features[f_j]
-#
-#                 # Sort samples along that feature; by
-#                 # copying the values into an array and
-#                 # sorting the array in a manner which utilizes the cache more
-#                 # effectively.
-#                 for i in range(start, end):
-#                     Xf[i] = self.X[samples[i], current.feature]
-#
-#                 sort(Xf + start, samples + start, end - start)
-#
-#                 if Xf[end - 1] <= Xf[start] + FEATURE_THRESHOLD:
-#                     features[f_j], features[n_total_constants] = features[n_total_constants], features[f_j]
-#
-#                     n_found_constants += 1
-#                     n_total_constants += 1
-#
-#                 else:
-#                     f_i -= 1
-#                     features[f_i], features[f_j] = features[f_j], features[f_i]
-#
-#                     # Evaluate all splits
-#                     self.criterion.reset()
-#                     p = start
-#
-#                     while p < end:
-#                         while (p + 1 < end and
-#                                Xf[p + 1] <= Xf[p] + FEATURE_THRESHOLD):
-#                             p += 1
-#
-#                         # (p + 1 >= end) or (X[samples[p + 1], current.feature] >
-#                         #                    X[samples[p], current.feature])
-#                         p += 1
-#                         # (p >= end) or (X[samples[p], current.feature] >
-#                         #                X[samples[p - 1], current.feature])
-#
-#                         if p < end:
-#                             current.pos = p
-#
-#                             # Reject if min_samples_leaf is not guaranteed
-#                             if (((current.pos - start) < min_samples_leaf) or
-#                                     ((end - current.pos) < min_samples_leaf)):
-#                                 continue
-#
-#                             self.criterion.update(current.pos)
-#
-#                             # Reject if min_weight_leaf is not satisfied
-#                             if ((self.criterion.weighted_n_left < min_weight_leaf) or
-#                                     (self.criterion.weighted_n_right < min_weight_leaf)):
-#                                 continue
-#
-#                             current_proxy_improvement = self.criterion.proxy_impurity_improvement()
-#
-#                             if current_proxy_improvement > best_proxy_improvement:
-#                                 best_proxy_improvement = current_proxy_improvement
-#                                 # sum of halves is used to avoid infinite value
-#                                 current.threshold = Xf[p - 1] / 2.0 + Xf[p] / 2.0
-#
-#                                 if ((current.threshold == Xf[p]) or
-#                                     (current.threshold == INFINITY) or
-#                                     (current.threshold == -INFINITY)):
-#                                     current.threshold = Xf[p - 1]
-#
-#                                 best = current  # copy
-#
-#         # Reorganize into samples[start:best.pos] + samples[best.pos:end]
-#         if best.pos < end:
-#             partition_end = end
-#             p = start
-#
-#             while p < partition_end:
-#                 if self.X[samples[p], best.feature] <= best.threshold:
-#                     p += 1
-#
-#                 else:
-#                     partition_end -= 1
-#
-#                     samples[p], samples[partition_end] = samples[partition_end], samples[p]
-#
-#             self.criterion.reset()
-#             self.criterion.update(best.pos)
-#             self.criterion.children_impurity(&best.impurity_left,
-#                                              &best.impurity_right)
-#             best.improvement = self.criterion.impurity_improvement(
-#                 impurity, best.impurity_left, best.impurity_right)
-#
-#         # Respect invariant for constant features: the original order of
-#         # element in features[:n_known_constants] must be preserved for sibling
-#         # and child nodes
-#         memcpy(features, constant_features, sizeof(SIZE_t) * n_known_constants)
-#
-#         # Copy newly found constant features
-#         memcpy(constant_features + n_known_constants,
-#                features + n_known_constants,
-#                sizeof(SIZE_t) * n_found_constants)
-#
-#         # Return values
-#         split[0] = best
-#         n_constant_features[0] = n_total_constants
-#         return 0
 
     # cdef SIZE_t* samples = self.samples
     # cdef SIZE_t start = self.start
@@ -760,7 +598,6 @@ def best_splitter_node_split(splitter, impurity, n_constant_features):
     # TODO: random_state me fait chier pour l'instant
     # random_state = splitter.rand_r_state
     random_state = 42
-
 
     # cdef SplitRecord best, current
     best = SplitRecord()
@@ -804,11 +641,17 @@ def best_splitter_node_split(splitter, impurity, n_constant_features):
     # for good splitting) by ancestor nodes and save the information on
     # newly discovered constant features to spare computation on descendant
     # nodes.
-    while (f_i > n_total_constants and  # Stop early if remaining features
-                                        # are constant
-            (n_visited_features < max_features or
-             # At least one drawn features must be non constant
-             n_visited_features <= n_found_constants + n_drawn_constants)):
+    while (
+        f_i > n_total_constants
+        and  # Stop early if remaining features
+        # are constant
+        (
+            n_visited_features < max_features
+            or
+            # At least one drawn features must be non constant
+            n_visited_features <= n_found_constants + n_drawn_constants
+        )
+    ):
 
         n_visited_features += 1
 
@@ -831,7 +674,10 @@ def best_splitter_node_split(splitter, impurity, n_constant_features):
 
         if f_j < n_known_constants:
             # f_j in the interval [n_drawn_constants, n_known_constants[
-            features[n_drawn_constants], features[f_j] = features[f_j], features[n_drawn_constants]
+            features[n_drawn_constants], features[f_j] = (
+                features[f_j],
+                features[n_drawn_constants],
+            )
 
             n_drawn_constants += 1
 
@@ -845,8 +691,10 @@ def best_splitter_node_split(splitter, impurity, n_constant_features):
             # copying the values into an array and
             # sorting the array in a manner which utilizes the cache more
             # effectively.
-            for i in range(start, end):
-                Xf[i] = splitter.X[samples[i], current.feature]
+
+            # for i in range(start, end):
+            #     Xf[i] = splitter.X[samples[i], current.feature]
+            Xf[start:end] = splitter.X[samples[start:end], current.feature]
 
             # sort(Xf + start, samples + start, end - start)
             # print("start: ", start)
@@ -854,7 +702,10 @@ def best_splitter_node_split(splitter, impurity, n_constant_features):
             sort(Xf[start:], samples[start:], end - start)
 
             if Xf[end - 1] <= Xf[start] + FEATURE_THRESHOLD:
-                features[f_j], features[n_total_constants] = features[n_total_constants], features[f_j]
+                features[f_j], features[n_total_constants] = (
+                    features[n_total_constants],
+                    features[f_j],
+                )
 
                 n_found_constants += 1
                 n_total_constants += 1
@@ -870,8 +721,7 @@ def best_splitter_node_split(splitter, impurity, n_constant_features):
                 p = start
 
                 while p < end:
-                    while (p + 1 < end and
-                           Xf[p + 1] <= Xf[p] + FEATURE_THRESHOLD):
+                    while p + 1 < end and Xf[p + 1] <= Xf[p] + FEATURE_THRESHOLD:
                         p += 1
 
                     # (p + 1 >= end) or (X[samples[p + 1], current.feature] >
@@ -884,21 +734,37 @@ def best_splitter_node_split(splitter, impurity, n_constant_features):
                         current.pos = p
 
                         # Reject if min_samples_leaf is not guaranteed
-                        if (((current.pos - start) < min_samples_leaf) or
-                                ((end - current.pos) < min_samples_leaf)):
+                        if ((current.pos - start) < min_samples_leaf) or (
+                            (end - current.pos) < min_samples_leaf
+                        ):
                             continue
 
                         # splitter.criterion.update(current.pos)
                         criterion_update(splitter.criterion, current.pos)
 
                         # Reject if min_weight_leaf is not satisfied
-                        if ((splitter.criterion.weighted_n_left < min_weight_leaf) or
-                                (splitter.criterion.weighted_n_right < min_weight_leaf)):
+                        if (splitter.criterion.weighted_n_left < min_weight_leaf) or (
+                            splitter.criterion.weighted_n_right < min_weight_leaf
+                        ):
                             continue
 
                         # current_proxy_improvement =
                         # splitter.criterion.proxy_impurity_improvement()
-                        current_proxy_improvement = criterion_proxy_impurity_improvement(splitter.criterion)
+
+                        # current_proxy_improvement = criterion_proxy_impurity_improvement(
+                        #     splitter.criterion
+                        # )
+
+                        criterion = splitter.criterion
+
+                        current_proxy_improvement = criterion_proxy_impurity_improvement(
+                            criterion.n_outputs,
+                            criterion.n_classes,
+                            criterion.sum_left,
+                            criterion.sum_right,
+                            criterion.weighted_n_left,
+                            criterion.weighted_n_right,
+                        )
 
                         # print("best_proxy_improvement: ", best_proxy_improvement)
                         # print("current_proxy_improvement: ", current_proxy_improvement)
@@ -908,9 +774,11 @@ def best_splitter_node_split(splitter, impurity, n_constant_features):
                             # sum of halves is used to avoid infinite value
                             current.threshold = Xf[p - 1] / 2.0 + Xf[p] / 2.0
 
-                            if ((current.threshold == Xf[p]) or
-                                (current.threshold == INFINITY) or
-                                (current.threshold == -INFINITY)):
+                            if (
+                                (current.threshold == Xf[p])
+                                or (current.threshold == INFINITY)
+                                or (current.threshold == -INFINITY)
+                            ):
                                 current.threshold = Xf[p - 1]
 
                             # TODO: warning this might not do a copy here !
@@ -939,11 +807,22 @@ def best_splitter_node_split(splitter, impurity, n_constant_features):
 
         # splitter.criterion.children_impurity( & best.impurity_left,
         #                                 &best.impurity_right)
+
+        # impurity_left, impurity_right = gini_children_impurity(splitter.criterion)
+
+        criterion = splitter.criterion
+
         impurity_left, impurity_right = gini_children_impurity(
-            splitter.criterion)
+            criterion.n_outputs,
+            criterion.n_classes,
+            criterion.sum_left,
+            criterion.sum_right,
+            criterion.weighted_n_left,
+            criterion.weighted_n_right,
+        )
+
         best.impurity_left = impurity_left
         best.impurity_right = impurity_right
-
 
         # best.improvement = splitter.criterion.impurity_improvement(
         #     impurity, best.impurity_left, best.impurity_right)
@@ -951,17 +830,28 @@ def best_splitter_node_split(splitter, impurity, n_constant_features):
         # print("best.impurity_left, best.impurity_right")
         # print(best.impurity_left, best.impurity_right)
 
-        best.improvement = criterion_impurity_improvement(splitter.criterion,
-                                                          impurity,
-                                                          best.impurity_left,
-                                                          best.impurity_right)
+        # best.improvement = criterion_impurity_improvement(
+        #     splitter.criterion, impurity, best.impurity_left, best.impurity_right
+        # )
+
+        best.improvement = criterion_impurity_improvement(
+            criterion.weighted_n_samples,
+            criterion.weighted_n_node_samples,
+            criterion.weighted_n_left,
+            criterion.weighted_n_right,
+            impurity,
+            best.impurity_left,
+            best.impurity_right,
+        )
+
+
 
 
     # Respect invariant for constant features: the original order of
     # element in features[:n_known_constants] must be preserved for sibling
     # and child nodes
 
-#   memcpy(features, constant_features, sizeof(SIZE_t) * n_known_constants)
+    #   memcpy(features, constant_features, sizeof(SIZE_t) * n_known_constants)
     features[:n_known_constants] = constant_features[:n_known_constants]
 
     # Copy newly found constant features
@@ -969,8 +859,9 @@ def best_splitter_node_split(splitter, impurity, n_constant_features):
     #        features + n_known_constants,
     #        sizeof(SIZE_t) * n_found_constants)
 
-    constant_features[n_known_constants:(n_known_constants + n_found_constants)] = \
-        features[n_known_constants:(n_known_constants + n_found_constants)]
+    constant_features[
+        n_known_constants : (n_known_constants + n_found_constants)
+    ] = features[n_known_constants : (n_known_constants + n_found_constants)]
 
     # Return values
     # split[0] = best
@@ -1010,24 +901,24 @@ def swap(Xf, samples, i, j):
 
 @njit
 def median3(Xf, n):
-# cdef inline DTYPE_t median3(DTYPE_t* Xf, SIZE_t n) nogil:
-#     # Median of three pivot selection, after Bentley and McIlroy (1993).
-#     # Engineering a sort function. SP&E. Requires 8/3 comparisons on average.
-#     cdef DTYPE_t a = Xf[0], b = Xf[n / 2], c = Xf[n - 1]
-#     if a < b:
-#         if b < c:
-#             return b
-#         elif a < c:
-#             return c
-#         else:
-#             return a
-#     elif b < c:
-#         if a < c:
-#             return a
-#         else:
-#             return c
-#     else:
-#         return b
+    # cdef inline DTYPE_t median3(DTYPE_t* Xf, SIZE_t n) nogil:
+    #     # Median of three pivot selection, after Bentley and McIlroy (1993).
+    #     # Engineering a sort function. SP&E. Requires 8/3 comparisons on average.
+    #     cdef DTYPE_t a = Xf[0], b = Xf[n / 2], c = Xf[n - 1]
+    #     if a < b:
+    #         if b < c:
+    #             return b
+    #         elif a < c:
+    #             return c
+    #         else:
+    #             return a
+    #     elif b < c:
+    #         if a < c:
+    #             return a
+    #         else:
+    #             return c
+    #     else:
+    #         return b
     # TODO: is this really n // 2 or n / 2
     a = Xf[0]
     b = Xf[n // 2]
@@ -1052,39 +943,39 @@ def median3(Xf, n):
 # # (robust to repeated elements, e.g. lots of zero features).
 @njit
 def introsort(Xf, samples, n, maxd):
-# cdef void introsort(DTYPE_t* Xf, SIZE_t *samples,
-#                     SIZE_t n, int maxd) nogil:
-#     cdef DTYPE_t pivot
-#     cdef SIZE_t i, l, r
-#
-#     while n > 1:
-#         if maxd <= 0:   # max depth limit exceeded ("gone quadratic")
-#             heapsort(Xf, samples, n)
-#             return
-#         maxd -= 1
-#
-#         pivot = median3(Xf, n)
-#
-#         # Three-way partition.
-#         i = l = 0
-#         r = n
-#         while i < r:
-#             if Xf[i] < pivot:
-#                 swap(Xf, samples, i, l)
-#                 i += 1
-#                 l += 1
-#             elif Xf[i] > pivot:
-#                 r -= 1
-#                 swap(Xf, samples, i, r)
-#             else:
-#                 i += 1
-#
-#         introsort(Xf, samples, l, maxd)
-#         Xf += r
-#         samples += r
-#         n -= r
+    # cdef void introsort(DTYPE_t* Xf, SIZE_t *samples,
+    #                     SIZE_t n, int maxd) nogil:
+    #     cdef DTYPE_t pivot
+    #     cdef SIZE_t i, l, r
+    #
+    #     while n > 1:
+    #         if maxd <= 0:   # max depth limit exceeded ("gone quadratic")
+    #             heapsort(Xf, samples, n)
+    #             return
+    #         maxd -= 1
+    #
+    #         pivot = median3(Xf, n)
+    #
+    #         # Three-way partition.
+    #         i = l = 0
+    #         r = n
+    #         while i < r:
+    #             if Xf[i] < pivot:
+    #                 swap(Xf, samples, i, l)
+    #                 i += 1
+    #                 l += 1
+    #             elif Xf[i] > pivot:
+    #                 r -= 1
+    #                 swap(Xf, samples, i, r)
+    #             else:
+    #                 i += 1
+    #
+    #         introsort(Xf, samples, l, maxd)
+    #         Xf += r
+    #         samples += r
+    #         n -= r
     while n > 1:
-        if maxd <= 0:   # max depth limit exceeded ("gone quadratic")
+        if maxd <= 0:  # max depth limit exceeded ("gone quadratic")
             heapsort(Xf, samples, n)
             return
         maxd -= 1
@@ -1114,30 +1005,31 @@ def introsort(Xf, samples, n, maxd):
         samples = samples[r:]
         n -= r
 
+
 #
 @njit
 def sift_down(Xf, samples, start, end):
-# cdef inline void sift_down(DTYPE_t* Xf, SIZE_t* samples,
-#                            SIZE_t start, SIZE_t end) nogil:
-#     # Restore heap order in Xf[start:end] by moving the max element to start.
-#     cdef SIZE_t child, maxind, root
-#
-#     root = start
-#     while True:
-#         child = root * 2 + 1
-#
-#         # find max of root, left child, right child
-#         maxind = root
-#         if child < end and Xf[maxind] < Xf[child]:
-#             maxind = child
-#         if child + 1 < end and Xf[maxind] < Xf[child + 1]:
-#             maxind = child + 1
-#
-#         if maxind == root:
-#             break
-#         else:
-#             swap(Xf, samples, root, maxind)
-#             root = maxind
+    # cdef inline void sift_down(DTYPE_t* Xf, SIZE_t* samples,
+    #                            SIZE_t start, SIZE_t end) nogil:
+    #     # Restore heap order in Xf[start:end] by moving the max element to start.
+    #     cdef SIZE_t child, maxind, root
+    #
+    #     root = start
+    #     while True:
+    #         child = root * 2 + 1
+    #
+    #         # find max of root, left child, right child
+    #         maxind = root
+    #         if child < end and Xf[maxind] < Xf[child]:
+    #             maxind = child
+    #         if child + 1 < end and Xf[maxind] < Xf[child + 1]:
+    #             maxind = child + 1
+    #
+    #         if maxind == root:
+    #             break
+    #         else:
+    #             swap(Xf, samples, root, maxind)
+    #             root = maxind
 
     root = start
     while True:
@@ -1159,24 +1051,24 @@ def sift_down(Xf, samples, start, end):
 
 @njit
 def heapsort(Xf, samples, n):
-# cdef void heapsort(DTYPE_t* Xf, SIZE_t* samples, SIZE_t n) nogil:
-#     cdef SIZE_t start, end
-#
-#     # heapify
-#     start = (n - 2) / 2
-#     end = n
-#     while True:
-#         sift_down(Xf, samples, start, end)
-#         if start == 0:
-#             break
-#         start -= 1
-#
-#     # sort by shrinking the heap, putting the max element immediately after it
-#     end = n - 1
-#     while end > 0:
-#         swap(Xf, samples, 0, end)
-#         sift_down(Xf, samples, 0, end)
-#         end = end - 1
+    # cdef void heapsort(DTYPE_t* Xf, SIZE_t* samples, SIZE_t n) nogil:
+    #     cdef SIZE_t start, end
+    #
+    #     # heapify
+    #     start = (n - 2) / 2
+    #     end = n
+    #     while True:
+    #         sift_down(Xf, samples, start, end)
+    #         if start == 0:
+    #             break
+    #         start -= 1
+    #
+    #     # sort by shrinking the heap, putting the max element immediately after it
+    #     end = n - 1
+    #     while end > 0:
+    #         swap(Xf, samples, 0, end)
+    #         sift_down(Xf, samples, 0, end)
+    #         end = end - 1
 
     # heapify
     start = (n - 2) // 2
@@ -1212,7 +1104,6 @@ def heapsort(Xf, samples, n):
 #     print(split)
 
 # x = np.array([1, 3, np.nan, 2], dtype=NP_SIZE_t)
-
 
 
 # @njit
