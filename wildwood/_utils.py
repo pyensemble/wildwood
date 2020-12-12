@@ -1,5 +1,5 @@
 import numpy as np
-from numba import boolean, float32, float64, intp, int32, uint32, from_dtype
+from numba import boolean, float32, float64, intp, int32, uint8, uint32, from_dtype
 from numba import njit as njit_
 from numba.experimental import jitclass as jitclass_
 from math import log2
@@ -7,7 +7,7 @@ from math import log2
 # Lazy to change everywhere when numba people decide that jitclass is not
 # experimental anymore
 jitclass = jitclass_
-njit = njit_(fastmath=True, nogil=True, cache=True)
+njit = njit_(fastmath=False, nogil=True, cache=False, boundscheck=False)
 
 BOOL_t = boolean
 NP_BOOL_t = np.bool
@@ -21,6 +21,9 @@ INT32_t = int32
 NP_INT32_t = np.int32
 UINT32_t = uint32
 NP_UINT32_t = np.uint32
+UINT8_t = uint8
+NP_UINT8_t = np.uint8
+
 
 INFINITY = np.inf
 EPSILON = np.finfo("double").eps

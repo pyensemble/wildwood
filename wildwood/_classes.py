@@ -37,6 +37,8 @@ from sklearn.utils.multiclass import check_classification_targets
 from sklearn.utils.validation import check_is_fitted
 from sklearn.utils.validation import _deprecate_positional_args
 
+from numba import _helperlib
+
 # from ._criterion import Criterion
 from ._splitter import BestSplitter
 from ._tree import DepthFirstTreeBuilder
@@ -149,10 +151,13 @@ class BaseDecisionTree(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
     def fit(self, X, y, sample_weight=None, check_input=True,
             X_idx_sorted="deprecated"):
 
+        # print("Training {clf}".format(clf=self.__class__.__name__))
+        # print("With X: ", X)
+
         # TODO: reprendre cette methode, mettre des property pour les attributs de
         #  classe
         # random_state = check_random_state(self.random_state)
-        random_state = 42
+        # random_state = 42
 
         if self.ccp_alpha < 0.0:
             raise ValueError("ccp_alpha must be greater than or equal to 0")
@@ -382,7 +387,7 @@ class BaseDecisionTree(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
                                             self.max_features_,
                                             min_samples_leaf,
                                             min_weight_leaf,
-                                            random_state)
+                                            self.random_state)
 
         if is_classifier(self):
             self.tree_ = Tree(self.n_features_,
@@ -413,11 +418,24 @@ class BaseDecisionTree(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
             raise NotImplementedError()
 
         # builder.build(self.tree_, X, y, sample_weight)
-        _tree.depth_first_tree_builder_build(builder, self.tree_, X, y, sample_weight)
+
+        # TODO: Let's pre-sort the features
+        print("Computing X_idx_sort...")
+        X_idx_sort = np.argsort(X, axis=0).astype(np.intp)
+        print("Done...")
+
+        # TODO: set the random_state
+        self._set_random_state()
+
+        _tree.depth_first_tree_builder_build(builder, self.tree_, X, y,
+                                             sample_weight, X_idx_sort)
 
         if self.n_outputs_ == 1 and is_classifier(self):
             self.n_classes_ = self.n_classes_[0]
             self.classes_ = self.classes_[0]
+
+        self._put_back_random_state()
+
 
         # self._prune_tree()
         # TODO: on ne prune pas, quelle drole d'idee !!!
@@ -546,6 +564,57 @@ class BaseDecisionTree(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
         """
         X = self._validate_X_predict(X, check_input)
         return self.tree_.decision_path(X)
+
+
+    def _set_random_state(self):
+        # This uses a trick by Alexandre Gramfort,
+        #   see https://github.com/numba/numba/issues/3249
+        if self._random_state >= 0:
+            ## if self._using_numba:
+            r = np.random.RandomState(self._random_state)
+            ptr = _helperlib.rnd_get_np_state_ptr()
+            ints, index = r.get_state()[1:3]
+            _helperlib.rnd_set_state(ptr, (index, [int(x) for x in ints]))
+            self._ptr = ptr
+            self._r = r
+            # else:
+            #     np.random.seed(self._random_state)
+
+    def _put_back_random_state(self):
+        # This uses a trick by Alexandre Gramfort,
+        #   see https://github.com/numba/numba/issues/3249
+        if self._random_state >= 0:
+            # if self._using_numba:
+            ptr = self._ptr
+            r = self._r
+            index, ints = _helperlib.rnd_get_state(ptr)
+            r.set_state(("MT19937", ints, index, 0, 0.0))
+
+
+    @property
+    def random_state(self):
+        """:obj:`int` or :obj:`None`: Controls the randomness involved in the trees."""
+        if self._random_state == -1:
+            return 0
+        else:
+            return self._random_state
+
+    @random_state.setter
+    def random_state(self, val):
+        # if self.no_python:
+        #     raise ValueError(
+        #         "You cannot modify `random_state` after calling `partial_fit`"
+        #     )
+        # else:
+        if val is None:
+            self._random_state = -1
+        elif not isinstance(val, int):
+            raise ValueError("`random_state` must be of type `int`")
+        elif val < 0:
+            raise ValueError("`random_state` must be >= 0")
+        else:
+            self._random_state = val
+
 
     # def _prune_tree(self):
     #     """Prune tree using Minimal Cost-Complexity Pruning."""

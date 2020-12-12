@@ -343,6 +343,7 @@ def criterion_update(criterion, new_pos):
     #     idx_sum_left += criterion.sum_stride
     #     idx_sum_right += criterion.sum_stride
 
+    # c'est ok ?
     sum_right[:] = sum_total - sum_left
 
     criterion.pos = new_pos
