@@ -387,7 +387,7 @@ class DepthFirstTreeBuilder(object):
 
 
 @njit
-def depth_first_tree_builder_build(builder, tree, X, y, sample_weight):
+def depth_first_tree_builder_build(builder, tree, X, y, sample_weight, idx_samples_sort):
     """Build a decision tree from the training set (X, y)."""
 
     # check input
@@ -521,7 +521,7 @@ def depth_first_tree_builder_build(builder, tree, X, y, sample_weight):
             #  n_constant_features et les deux derniers arguments ne sont pas utlisés
             # best_splitter_node_split(splitter, impurity, split, n_constant_features)
             split, n_total_constants = best_splitter_node_split(
-                splitter, impurity, n_constant_features
+                splitter, impurity, n_constant_features, idx_samples_sort
             )
 
             # If EPSILON=0 in the below comparison, float precision

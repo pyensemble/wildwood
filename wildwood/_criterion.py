@@ -7,7 +7,6 @@
 #
 # License: BSD 3 clause
 
-# See _criterion.pyx for implementation details.
 
 import numpy as np
 from ._utils import (
@@ -56,9 +55,6 @@ def criterion_impurity_improvement(
     impurity_left,
     impurity_right,
 ):
-    #     cdef double impurity_improvement(self, double impurity_parent,
-    #                                      double impurity_left,
-    #                                      double impurity_right) nogil:
     #         """Compute the improvement in impurity.
     #
     #         This method computes the improvement in impurity when a split occurs.
@@ -94,35 +90,6 @@ def criterion_impurity_improvement(
     )
 
 
-# cdef class Criterion:
-#     # The criterion computes the impurity of a node and the reduction of
-#     # impurity of a split on that node. It also computes the output statistics
-#     # such as the mean in regression and class probabilities in classification.
-#
-#     # Internal structures
-#     cdef const DOUBLE_t[:, ::1] y        # Values of y
-#     cdef DOUBLE_t* sample_weight         # Sample weights
-#
-#     cdef SIZE_t* samples                 # Sample indices in X, y
-#     cdef SIZE_t start                    # samples[start:pos] are the samples in the left node
-#     cdef SIZE_t pos                      # samples[pos:end] are the samples in the right node
-#     cdef SIZE_t end
-#
-#     cdef SIZE_t n_outputs                # Number of outputs
-#     cdef SIZE_t n_samples                # Number of samples
-#     cdef SIZE_t n_node_samples           # Number of samples in the node (end-start)
-#     cdef double weighted_n_samples       # Weighted number of samples (in total)
-#     cdef double weighted_n_node_samples  # Weighted number of samples in the node
-#     cdef double weighted_n_left          # Weighted number of samples in the left node
-#     cdef double weighted_n_right         # Weighted number of samples in the right node
-#
-#     cdef double* sum_total          # For classification criteria, the sum of the
-#                                     # weighted count of each label. For regression,
-#                                     # the sum of w*y. sum_total[k] is equal to
-#                                     # sum_{i=start}^{end-1} w[samples[i]]*y[samples[i], k],
-#                                     # where k is output index.
-#     cdef double* sum_left           # Same as above, but for the left side of the split
-#     cdef double* sum_right          # same as above, but for the right side of the split
 spec_criterion = [
     ("y", DOUBLE_t[:, ::1]),
     ("sample_weight", DOUBLE_t[::1]),
@@ -144,10 +111,6 @@ spec_criterion = [
 ]
 
 spec_classification_criterion = spec_criterion + [("n_classes", SIZE_t[::1])]
-
-# spec_regression_criterion = spec_criterion + [
-#     ("sq_sum_total", DOUBLE_t),
-# ]
 
 
 @jitclass(spec_classification_criterion)
@@ -220,23 +183,6 @@ def classification_criterion_init(
     return 0
 
 
-# @njit
-# def classification_criterion_node_value(criterion, dest, node_id):
-#     #     cdef void node_value(self, double* dest) nogil:
-#     #         """Compute the node value of samples[start:end] and save it into dest.
-#     #
-#     #         Parameters
-#     #         ----------
-#     #         dest : double pointer
-#     #             The memory address which we will save the node value into.
-#     #         """
-#     #         cdef double* sum_total = self.sum_total
-#     #         cdef SIZE_t* n_classes = self.n_classes
-#     #         cdef SIZE_t k
-#
-#     sum_total = criterion.sum_total
-#     dest[node_id, :, :] = sum_total
-
 
 @njit
 def criterion_reset(criterion):
@@ -289,19 +235,19 @@ def criterion_update(criterion, new_pos):
     # and that sum_total is known, we are going to update
     # sum_left from the direction that require the least amount
     # of computations, i.e. from pos to new_pos or from end to new_po.
+
+    has_sample_weight = sample_weight.size > 0
+
     if (new_pos - pos) <= (end - new_pos):
         for p in range(pos, new_pos):
             i = samples[p]
 
-            # if sample_weight != NULL:
-            if sample_weight.size > 0:
+            if has_sample_weight:
                 w = sample_weight[i]
 
             for k in range(criterion.n_outputs):
-                # label_index = k * criterion.sum_stride + SIZE_t(criterion.y[i, k])
                 c = SIZE_t(criterion.y[i, k])
                 sum_left[k, c] += w
-                # sum_left[label_index] += w
 
             criterion.weighted_n_left += w
 
@@ -312,7 +258,7 @@ def criterion_update(criterion, new_pos):
         for p in range(end - 1, new_pos - 1, -1):
             i = samples[p]
 
-            if sample_weight.shape[0] != 0:
+            if has_sample_weight:
                 w = sample_weight[i]
 
             for k in range(criterion.n_outputs):
@@ -405,39 +351,6 @@ def gini_node_impurity(n_outputs, n_classes, sum_total, weighted_n_node_samples)
         gini += 1.0 - sq_count / weighted_n_node_samples_sq
 
     return gini / n_outputs
-
-
-# @njit
-# def gini_children_impurity(criterion):
-#     n_classes = criterion.n_classes
-#     sum_left = criterion.sum_left
-#     sum_right = criterion.sum_right
-#     gini_left = 0.0
-#     gini_right = 0.0
-#
-#     for k in range(criterion.n_outputs):
-#         sq_count_left = 0.0
-#         sq_count_right = 0.0
-#
-#         for c in range(n_classes[k]):
-#             count_k = sum_left[k, c]
-#             sq_count_left += count_k * count_k
-#
-#             count_k = sum_right[k, c]
-#             sq_count_right += count_k * count_k
-#
-#         gini_left += 1.0 - sq_count_left / (
-#             criterion.weighted_n_left * criterion.weighted_n_left
-#         )
-#
-#         gini_right += 1.0 - sq_count_right / (
-#             criterion.weighted_n_right * criterion.weighted_n_right
-#         )
-#
-#         # idx_sum_left += criterion.sum_stride
-#         # idx_sum_right += criterion.sum_stride
-#
-#     return gini_left / criterion.n_outputs, gini_right / criterion.n_outputs
 
 
 @njit

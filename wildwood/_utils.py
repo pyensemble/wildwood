@@ -7,7 +7,7 @@ from math import log2
 # Lazy to change everywhere when numba people decide that jitclass is not
 # experimental anymore
 jitclass = jitclass_
-njit = njit_(fastmath=True, nogil=True, cache=True)
+njit = njit_(fastmath=True)
 
 BOOL_t = boolean
 NP_BOOL_t = np.bool

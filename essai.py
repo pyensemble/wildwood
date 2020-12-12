@@ -9,71 +9,172 @@ from time import time
 from numba import uint32
 
 from wildwood._splitter import sort
-
-from wildwood._utils import SIZE_t, DOUBLE_t, NP_SIZE_t, NP_DOUBLE_t
-
+#
+# from wildwood._utils import SIZE_t, DOUBLE_t, NP_SIZE_t, NP_DOUBLE_t
+#
 import numpy as np
+#
+from cffi import FFI
 
-# # Node = namedtuple("Node", ["left", "right", "parent"])
+from numba.core.typing import cffi_utils
+
+# file "example_build.py"
+
+from cffi import FFI
+
+
+ffibuilder = FFI()
+
+ffibuilder.cdef("int foo(int *, int *, int);")
+
+ffibuilder.set_source("_example",
+r"""
+    static int foo(int *buffer_in, int *buffer_out, int x)
+    {
+        /* some algorithm that is seriously faster in C than in Python */
+    }
+""")
+
+
+if __name__ == "__main__":
+    ffibuilder.compile(verbose=True)
+
+
+# file "example.py"
+
+import _ffi, lib
+
+from _example import ffi, lib
+
+buffer_in = ffi.new("int[]", 1000)
+# initialize buffer_in here...
+
+# easier to do all buffer allocations in Python and pass them to C,
+# even for output-only arguments
+buffer_out = ffi.new("int[]", 1000)
+
+result = lib.foo(buffer_in, buffer_out, 1000)
+
+
+from numba import cfunc, types, carray
+
+# c_sig = types.void(types.CPointer(types.double),
+#                    types.CPointer(types.double),
+#                    types.intc, types.intc)
+#
+# @cfunc(c_sig)
+# def my_callback(in_, out, m, n):
+#     in_array = carray(in_, (m, n))
+#     out_array = carray(out, (m, n))
+#     for i in range(m):
+#         for j in range(n):
+#             out_array[i, j] = 2 * in_array[i, j]
+
+# c_sig = types.double(types.CPointer(types.double), types.intp)
+#
+#
+# @cfunc(c_sig)
+# def my_callback(in_, n):
+#     # in_array = carray(in_, (m, n))
+#     # out_array = carray(out, (m, n))
+#     s = 0
+#     i = 0
+#
+#     types.voidptr
+#
+#     while i != n:
+#         s += in_[i]
+#         i += 1
+#         # Pointer arithmetics slang
+#         in_ = in_ + types.CPointer(types.double)(1)
+#
+#     return s
 #
 
-spec = [("X", DOUBLE_t[:, ::1])]
+
+# Get the function signature from *my_func*
+# sig = cffi_utils.map_type(ffi.typeof('my_func'), use_record_dtype=True)
+
+# Make the cfunc
+# from numba import cfunc, carray
+#
+# @cfunc(sig)
+# def foo(ptr, n):
+#    base = carray(ptr, n)  # view pointer as an array of my_struct
+#    tmp = 0
+#    for i in range(n):
+#       tmp += base[i].i1 * base[i].f2 / base[i].d3
+#       tmp += base[i].af4.sum()  # nested arrays are like normal numpy array
+#    return tmp
 
 
-@jitclass(spec)
-class C(object):
-    def __init__(self, n_samples, n_features):
-        self.X = np.ones((n_samples, n_features))
+# @njit
+# def main():
+#     x = np.linspace(0.0, 10.0, 11)
 
 
-@njit
-def sum1(c):
-    n_samples, n_features = c.X.shape
-    s = 0.0
-    for i in range(n_samples):
-        for j in range(n_features):
-            s += c.X[i, j]
+# print(foo(x, 11))
 
-    return s
-
-
-@njit
-def sum2(X):
-    n_samples, n_features = X.shape
-    s = 0.0
-    for i in range(n_samples):
-        for j in range(n_features):
-            s += X[i, j]
-
-    return s
-
-
-n_samples = 3
-n_features = 2
-
-c = C(n_samples, n_features)
-X = np.ones((n_samples, n_features), dtype=NP_DOUBLE_t)
-X = np.ascontiguousarray(X)
-u = sum1(c)
-v = sum2(X)
-
-n_samples = 500_000
-n_features = 5000
-X = np.ones((n_samples, n_features), dtype=NP_DOUBLE_t)
-X = np.ascontiguousarray(X)
-
-c = C(n_samples, n_features)
-
-tic = time()
-u = sum1(c)
-toc = time()
-print(toc - tic)
-
-
-tic = time()
-v = sum2(X)
-toc = time()
-print(toc - tic)
+# # # Node = namedtuple("Node", ["left", "right", "parent"])
+# #
+#
+# spec = [("X", DOUBLE_t[:, ::1])]
+#
+#
+# @jitclass(spec)
+# class C(object):
+#     def __init__(self, n_samples, n_features):
+#         self.X = np.ones((n_samples, n_features))
+#
+#
+# @njit
+# def sum1(c):
+#     n_samples, n_features = c.X.shape
+#     s = 0.0
+#     for i in range(n_samples):
+#         for j in range(n_features):
+#             s += c.X[i, j]
+#
+#     return s
+#
+#
+# @njit
+# def sum2(X):
+#     n_samples, n_features = X.shape
+#     s = 0.0
+#     for i in range(n_samples):
+#         for j in range(n_features):
+#             s += X[i, j]
+#
+#     return s
+#
+#
+# n_samples = 3
+# n_features = 2
+#
+# c = C(n_samples, n_features)
+# X = np.ones((n_samples, n_features), dtype=NP_DOUBLE_t)
+# X = np.ascontiguousarray(X)
+# u = sum1(c)
+# v = sum2(X)
+#
+# n_samples = 500_000
+# n_features = 5000
+# X = np.ones((n_samples, n_features), dtype=NP_DOUBLE_t)
+# X = np.ascontiguousarray(X)
+#
+# c = C(n_samples, n_features)
+#
+# tic = time()
+# u = sum1(c)
+# toc = time()
+# print(toc - tic)
+#
+#
+# tic = time()
+# v = sum2(X)
+# toc = time()
+# print(toc - tic)
 
 
 # cdef struct StackRecord:

@@ -20,6 +20,10 @@ snakeviz main_tree.prof
 ```
 le gros du temps est dans best_splitter_node_split
 
+Et manifestement dans l'algorithme de tri, a etudier de plus près ?
+
+- Utiliser la strategie de pre-tri ?
+
 - virer les jitclass autant que possible -> faire un test a part, accès à des
  tableaux via des attributes de classes en permanence -> lent en numba, pert la
   vectorisation ?

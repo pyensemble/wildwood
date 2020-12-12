@@ -577,7 +577,7 @@ def best_splitter_init(splitter, X, y, sample_weight):
 
 
 @njit
-def best_splitter_node_split(splitter, impurity, n_constant_features):
+def best_splitter_node_split(splitter, impurity, n_constant_features, idx_samples_sort):
 
     # cdef SIZE_t* samples = self.samples
     # cdef SIZE_t start = self.start
@@ -591,6 +591,7 @@ def best_splitter_node_split(splitter, impurity, n_constant_features):
     n_features = splitter.n_features
 
     Xf = splitter.feature_values
+
     max_features = splitter.max_features
     min_samples_leaf = splitter.min_samples_leaf
     min_weight_leaf = splitter.min_weight_leaf
@@ -694,12 +695,21 @@ def best_splitter_node_split(splitter, impurity, n_constant_features):
 
             # for i in range(start, end):
             #     Xf[i] = splitter.X[samples[i], current.feature]
+
             Xf[start:end] = splitter.X[samples[start:end], current.feature]
 
-            # sort(Xf + start, samples + start, end - start)
+            # The index of samples sorted according to the current feature
+            # idx_samples = idx_samples_sort[start:end, current.feature]
+            # Xf[start:end] = splitter.X[idx_samples, current.feature]
+            # samples[start:end] = idx_samples
+            # [start:end]
+            # print(Xf[start:end])
+
+            sort(Xf + start, samples + start, end - start)
             # print("start: ", start)
 
-            sort(Xf[start:], samples[start:], end - start)
+            # TODO: c'est le tri qui prend beaucoup de temps
+            # sort(Xf[start:], samples[start:], end - start)
 
             if Xf[end - 1] <= Xf[start] + FEATURE_THRESHOLD:
                 features[f_j], features[n_total_constants] = (
@@ -895,7 +905,6 @@ def swap(Xf, samples, i, j):
     #     Xf[i], Xf[j] = Xf[j], Xf[i]
     #     samples[i], samples[j] = samples[j], samples[i]
     Xf[i], Xf[j] = Xf[j], Xf[i]
-
     samples[i], samples[j] = samples[j], samples[i]
 
 
@@ -919,7 +928,6 @@ def median3(Xf, n):
     #             return c
     #     else:
     #         return b
-    # TODO: is this really n // 2 or n / 2
     a = Xf[0]
     b = Xf[n // 2]
     c = Xf[n - 1]
@@ -974,6 +982,8 @@ def introsort(Xf, samples, n, maxd):
     #         Xf += r
     #         samples += r
     #         n -= r
+
+    # offset = 0
     while n > 1:
         if maxd <= 0:  # max depth limit exceeded ("gone quadratic")
             heapsort(Xf, samples, n)
@@ -983,7 +993,8 @@ def introsort(Xf, samples, n, maxd):
         pivot = median3(Xf, n)
 
         # Three-way partition.
-        i = l = 0
+        i = 0
+        l = 0
         r = n
         while i < r:
             if Xf[i] < pivot:
@@ -1003,6 +1014,7 @@ def introsort(Xf, samples, n, maxd):
         Xf = Xf[r:]
         # samples += r
         samples = samples[r:]
+        # offset += r
         n -= r
 
 
