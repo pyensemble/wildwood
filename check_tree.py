@@ -18,32 +18,51 @@ logging.basicConfig(
 
 np.set_printoptions(precision=2)
 
+#
+# logging.info("JIT compiling...")
+# tic = time()
+# X, y = make_circles(n_samples=5, noise=0.2, factor=0.5, random_state=1)
+# clf = DecisionTreeClassifier(min_samples_split=3)
+# clf.fit(X, y)
+# clf.predict_proba(X)
+# toc = time()
+# logging.info("Spent {time} compiling.".format(time=toc - tic))
 
-logging.info("JIT compiling...")
-tic = time()
-X, y = make_circles(n_samples=5, noise=0.2, factor=0.5, random_state=1)
-clf = DecisionTreeClassifier(min_samples_split=3)
-clf.fit(X, y)
-clf.predict_proba(X)
-toc = time()
-logging.info("Spent {time} compiling.".format(time=toc - tic))
 
 n_samples = 150
+
+# n_samples = 1_000_000
+
+
+# n_samples = 10
 random_state = 42
 
+data_random_state = 123
 
 datasets = [
     (
         "circles",
-        make_circles(n_samples=n_samples, noise=0.2, factor=0.5, random_state=1),
+        make_circles(
+            n_samples=n_samples, noise=0.2, factor=0.5, random_state=data_random_state
+        ),
     ),
-    ("moons", make_moons(n_samples=n_samples, noise=0.3, random_state=0)),
+    (
+        "moons",
+        make_moons(n_samples=n_samples, noise=0.3, random_state=data_random_state),
+    ),
 ]
 
+clf_kwargs = {"min_samples_split": 2, "random_state": random_state}
+
+
+# classifiers = [
+#     ("tree", DecisionTreeClassifier),
+#     ("sk_tree", SkDecisionTreeClassifier)
+# ]
+
 classifiers = [
-    ("tree", DecisionTreeClassifier(min_samples_split=3)),
-    ("sk_tree", SkDecisionTreeClassifier(min_samples_split=3, random_state=42)),
-    ("sk_extra", SkExtraTreeClassifier(min_samples_split=3, random_state=42))
+    ("tree", DecisionTreeClassifier(**clf_kwargs)),
+    ("sk_tree", SkDecisionTreeClassifier(**clf_kwargs)),
 ]
 
 

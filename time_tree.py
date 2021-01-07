@@ -32,7 +32,8 @@ toc = time()
 print("Spent {time} compiling.".format(time=toc - tic))
 
 
-n_samples = 1_000_000
+n_samples = 200_000
+# n_samples = 100_000
 random_state = 42
 
 
@@ -44,10 +45,19 @@ datasets = [
     ("moons", make_moons(n_samples=n_samples, noise=0.3, random_state=0)),
 ]
 
+clf_kwargs = {"min_samples_split": 2, "random_state": random_state}
+
+
+# classifiers = [
+#     ("tree", DecisionTreeClassifier(**clf_kwargs)),
+#     ("sk_tree", SkDecisionTreeClassifier(**clf_kwargs)),
+#     ("sk_extra", SkExtraTreeClassifier(**clf_kwargs))
+# ]
+
 classifiers = [
-    ("tree", DecisionTreeClassifier(min_samples_split=3)),
-    ("sk_tree", SkDecisionTreeClassifier(min_samples_split=3, random_state=42)),
-    ("sk_extra", SkExtraTreeClassifier(min_samples_split=3, random_state=42))
+    ("tree", DecisionTreeClassifier),
+    ("sk_tree", SkDecisionTreeClassifier),
+    ("sk_extra", SkExtraTreeClassifier)
 ]
 
 
@@ -71,7 +81,8 @@ for data_name, (X, y) in datasets:
         X, y, test_size=0.3, random_state=42
     )
 
-    for clf_name, clf in classifiers:
+    for clf_name, Clf in classifiers:
+        clf = Clf(**clf_kwargs)
         tic = time()
         clf.fit(X_train, y_train)
         toc = time()
