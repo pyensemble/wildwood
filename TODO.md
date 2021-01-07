@@ -1,4 +1,38 @@
 
+
+# TODO
+
+1. Coder le histogram binning
+    X Nombre variable de modalités pour chaque feature 
+    - Que de passe-t-il si on a une feature categorielle avec plus que 255 modalités ?
+    - On gère les NA comme LightGBM : on met la modalite NA a la fin
+    - Le truc de sklearn met les NA en bin 255 et c'est tout
+    
+    -> pour l'instant on utilise le truc de sklearn.ensemble.experimental
+
+2. Coder `wildwood.BinaryClassifier`
+    - C'est la foret pour classif binaire
+    - Coder les properties avec toutes les options 
+    - Coder le bootstrap: faut le faire des maintenant car on peut pas dupliquer les
+     data, et ca impacte tout le reste du code (faut se trimbaler samples_train
+     , samples_valid partout)
+
+3. Calcul des splits : `_splitting.py`
+    - On reprend du code de pygbm
+    - Une fonction qui calcule ls splits pour une feature
+    - Pre-calcul de tous les histogrammes ou : maintenir en memoire plein d
+    'histogrammes pour toutes les features
+    - Faut balayer dans de la gauche vers la droite si pas de donnee manquante, et
+     aussi de la droite vers la gauche si il y a des NA dans cette feature   
+
+
+4. Calcul des criteres d'impurety
+
+
+5. ERM et MOM
+
+
+
 # Avancement
 
 - 2020 / 12 / 18 : presque exactement les meme resultats de scikit, sauf avec

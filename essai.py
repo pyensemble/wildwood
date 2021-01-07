@@ -13,47 +13,104 @@ from wildwood._splitter import sort
 # from wildwood._utils import SIZE_t, DOUBLE_t, NP_SIZE_t, NP_DOUBLE_t
 #
 import numpy as np
-#
+from sklearn.utils import check_random_state
+
+from wildwood._utils import MAX_INT
+
+
+def _generate_train_valid_samples(random_state, n_samples):
+    """
+    This functions generates "in-the-bag" (train) and "out-of-the-bag" samples
+
+    Parameters
+    ----------
+    random_state : None or int or RandomState
+        Allows to specify the RandomState used for random splitting
+
+    n_samples : int
+        Total number of samples
+
+    Returns
+    -------
+    output : tuple of theer numpy arrays
+        * output[0] contains the indices of the training samples
+        * output[1] contains the indices of the validation samples
+        * output[2] contains the counts of the training samples
+    """
+    random_instance = check_random_state(random_state)
+    # Sample the bootstrap samples (uniform sampling with replacement)
+
+    sample_indices = random_instance.randint(0, n_samples, n_samples)
+    sample_counts = np.bincount(sample_indices, minlength=n_samples)
+    indices = np.arange(n_samples)
+    valid_mask = sample_counts == 0
+    # For very small samples, we might end up with empty validation...
+    if valid_mask.sum() == 0:
+        return _generate_train_valid_samples((random_state + 1) % MAX_INT, n_samples)
+    else:
+        print("sample_indices: ", sample_indices)
+        # print("sample_counts: ", sample_counts)
+        train_mask = np.logical_not(valid_mask)
+        train_indices = indices[train_mask]
+        valid_indices = indices[valid_mask]
+        train_indices_count = sample_counts[train_mask]
+        return train_indices, valid_indices, train_indices_count
+
+
+# random_state = np.random.randint(0, 1_000_000)
+
+random_state = 586241
+# random_state = 42
+print("random_state: ", random_state)
+train_indices, valid_indices, train_indices_count = _generate_train_valid_samples(random_state, 3)
+
+print("train_indices: ", train_indices)
+print("valid_indices: ", valid_indices)
+print("train_indices_count: ", train_indices_count)
+
+
 from cffi import FFI
 
 from numba.core.typing import cffi_utils
 
+
+
 # file "example_build.py"
 
-from cffi import FFI
+# from cffi import FFI
 
 
-ffibuilder = FFI()
-
-ffibuilder.cdef("int foo(int *, int *, int);")
-
-ffibuilder.set_source("_example",
-r"""
-    static int foo(int *buffer_in, int *buffer_out, int x)
-    {
-        /* some algorithm that is seriously faster in C than in Python */
-    }
-""")
-
-
-if __name__ == "__main__":
-    ffibuilder.compile(verbose=True)
-
-
-# file "example.py"
-
-import _ffi, lib
-
-from _example import ffi, lib
-
-buffer_in = ffi.new("int[]", 1000)
-# initialize buffer_in here...
-
-# easier to do all buffer allocations in Python and pass them to C,
-# even for output-only arguments
-buffer_out = ffi.new("int[]", 1000)
-
-result = lib.foo(buffer_in, buffer_out, 1000)
+# ffibuilder = FFI()
+#
+# ffibuilder.cdef("int foo(int *, int *, int);")
+#
+# ffibuilder.set_source("_example",
+# r"""
+#     static int foo(int *buffer_in, int *buffer_out, int x)
+#     {
+#         /* some algorithm that is seriously faster in C than in Python */
+#     }
+# """)
+#
+#
+# if __name__ == "__main__":
+#     ffibuilder.compile(verbose=True)
+#
+#
+# # file "example.py"
+#
+# import _ffi, lib
+#
+# from _example import ffi, lib
+#
+# buffer_in = ffi.new("int[]", 1000)
+# # initialize buffer_in here...
+#
+# # easier to do all buffer allocations in Python and pass them to C,
+# # even for output-only arguments
+# buffer_out = ffi.new("int[]", 1000)
+#
+# result = lib.foo(buffer_in, buffer_out, 1000)
 
 
 from numba import cfunc, types, carray

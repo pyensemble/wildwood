@@ -28,6 +28,7 @@ NP_UINT8_t = np.uint8
 INFINITY = np.inf
 EPSILON = np.finfo("double").eps
 
+MAX_INT = np.iinfo(np.int32).max
 SIZE_MAX = np.iinfo(NP_SIZE_t).max
 
 
