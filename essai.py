@@ -1,4 +1,3 @@
-
 from numba import njit
 from heapq import heappush
 from collections import namedtuple
@@ -18,6 +17,65 @@ import numpy as np
 # # Node = namedtuple("Node", ["left", "right", "parent"])
 #
 
+spec = [("X", DOUBLE_t[:, ::1])]
+
+
+@jitclass(spec)
+class C(object):
+    def __init__(self, n_samples, n_features):
+        self.X = np.ones((n_samples, n_features))
+
+
+@njit
+def sum1(c):
+    n_samples, n_features = c.X.shape
+    s = 0.0
+    for i in range(n_samples):
+        for j in range(n_features):
+            s += c.X[i, j]
+
+    return s
+
+
+@njit
+def sum2(X):
+    n_samples, n_features = X.shape
+    s = 0.0
+    for i in range(n_samples):
+        for j in range(n_features):
+            s += X[i, j]
+
+    return s
+
+
+n_samples = 3
+n_features = 2
+
+c = C(n_samples, n_features)
+X = np.ones((n_samples, n_features), dtype=NP_DOUBLE_t)
+X = np.ascontiguousarray(X)
+u = sum1(c)
+v = sum2(X)
+
+n_samples = 500_000
+n_features = 5000
+X = np.ones((n_samples, n_features), dtype=NP_DOUBLE_t)
+X = np.ascontiguousarray(X)
+
+c = C(n_samples, n_features)
+
+tic = time()
+u = sum1(c)
+toc = time()
+print(toc - tic)
+
+
+tic = time()
+v = sum2(X)
+toc = time()
+print(toc - tic)
+
+
 # cdef struct StackRecord:
 #     SIZE_t start
 #     SIZE_t end
@@ -28,23 +86,20 @@ import numpy as np
 #     SIZE_t n_constant_features
 
 
-
-
-
 #
 # @njit
 # def numpy_sort(Xf, samples, n):
 #     idx = np.argsort(Xf)
 #     Xf = Xf[idx]
 #     samples = samples[idx]
-# 
-# 
-# 
+#
+#
+#
 # @njit
 # def numba_sort(Xf, samples, n):
 #     sort(Xf, samples, n)
-# 
-# 
+#
+#
 # @njit
 # def compile():
 #     print('JIT Compile')
@@ -53,78 +108,76 @@ import numpy as np
 #     samples = np.arange(0, n)
 #     numpy_sort(Xf, samples, n)
 #     numba_sort(Xf, samples, n)
-# 
-# 
+#
+#
 # compile()
-# 
-# 
+#
+#
 # print("One big")
 # n_repeat = 5
 # n = 10_000_000
-# 
+#
 # total_time_numba = 0
 # total_time_numpy = 0
-# 
+#
 # for i in range(n_repeat):
 #     # Generate data
 #     Xf = np.random.randn(n)
 #     samples = np.arange(0, n)
-# 
+#
 #     # Time numpy
 #     tic = time()
 #     numpy_sort(Xf, samples, n)
 #     toc = time()
 #     total_time_numpy += toc - tic
-# 
+#
 #     # Time numba
 #     tic = time()
 #     numba_sort(Xf, samples, n)
 #     toc = time()
 #     total_time_numba += toc - tic
-# 
-# 
+#
+#
 # print("numpy: ", total_time_numpy)
 # print("numba: ", total_time_numba)
-# 
-# 
+#
+#
 # print("Many small")
 # n_repeat = 5_000
 # n = 10_000
-# 
+#
 # total_time_numba = 0
 # total_time_numpy = 0
-# 
+#
 # for i in range(n_repeat):
 #     # Generate data
 #     Xf = np.random.randn(n)
 #     samples = np.arange(0, n)
-# 
+#
 #     # Time numpy
 #     tic = time()
 #     numpy_sort(Xf, samples, n)
 #     toc = time()
 #     total_time_numpy += toc - tic
-# 
+#
 #     # Time numba
 #     tic = time()
 #     numba_sort(Xf, samples, n)
 #     toc = time()
 #     total_time_numba += toc - tic
-# 
-# 
+#
+#
 # print("numpy: ", total_time_numpy)
 # print("numba: ", total_time_numba)
 
 
-    # print("Xf: ", Xf)
+# print("Xf: ", Xf)
 
-    # print("samples: ", samples)
-    # sort(Xf, samples, n)
+# print("samples: ", samples)
+# sort(Xf, samples, n)
 
-    # print("Xf: ", Xf)
-    # print("samples: ", samples)
-
-
+# print("Xf: ", Xf)
+# print("samples: ", samples)
 
 
 #
@@ -142,31 +195,72 @@ import numpy as np
 # print(l)
 
 
+# spec = [(("a", uint32))]
+#
+#
+# @jitclass(spec)
+# class A(object):
+#     def __init__(self, a):
+#         self.a = a
+#
 
-spec = [(
-    ("a", uint32)
-)]
-@jitclass(spec)
-class A(object):
 
-    def __init__(self, a):
-        self.a = a
+# @njit(DOUBLE_t(DOUBLE_t[:, ::1]))
+# def sum1(X):
+#     n_samples, n_features = X.shape
+#     s = 0.0
+#     for i in range(n_samples):
+#         for j in range(n_features):
+#             s += X[i, j]
+#
+#     return s
+#
+#
+# @njit(DOUBLE_t(DOUBLE_t[:, ::1]))
+# def sum2(X):
+#     n_samples, n_features = X.shape
+#     s = 0.0
+#     for j in range(n_features):
+#         for i in range(n_samples):
+#             s += X[i, j]
+#
+#     return s
+#
+#
+# n_samples = 3
+# n_features = 2
+# X = np.ones((3, 2), dtype=NP_DOUBLE_t)
+# X = np.ascontiguousarray(X)
+# # X = np.asfortranarray(X)
+# u = sum1(X)
+# v = sum2(X)
+#
+# n_samples = 500_000
+# n_features = 1000
+# X = np.ones((n_samples, n_features), dtype=NP_DOUBLE_t)
+# X = np.ascontiguousarray(X)
+#
+# tic = time()
+# u = sum1(X)
+# toc = time()
+# print(toc - tic)
+#
+#
+# tic = time()
+# v = sum2(X)
+# toc = time()
+# print(toc - tic)
 
 
-@njit
-def main():
-
-    a = A(42)
-    b = A(13)
-    print(a.a, b.a)  # 42 13
-
-    a = b
-    print(a.a, b.a)  # 13 13
-
-    b.a = 27
-    print(a.a, b.a)  # 13 27
-
-main()
+# a = A(42)
+# b = A(13)
+# print(a.a, b.a)  # 42 13
+#
+# a = b
+# print(a.a, b.a)  # 13 13
+#
+# b.a = 27
+# print(a.a, b.a)  # 13 27
 
 
 #
@@ -360,7 +454,6 @@ main()
 # returns 3
 
 
-
 #
 #
 # @njit
@@ -451,4 +544,3 @@ main()
 # def main():
 #
 #     x = np.empty()
-

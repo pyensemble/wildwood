@@ -1,6 +1,5 @@
-
 import numpy as np
-from numba import boolean, float32, float64, intp, int32, uint32, from_dtype
+from numba import boolean, float32, float64, intp, int32, uint8, uint32, from_dtype
 from numba import njit as njit_
 from numba.experimental import jitclass as jitclass_
 from math import log2
@@ -8,7 +7,7 @@ from math import log2
 # Lazy to change everywhere when numba people decide that jitclass is not
 # experimental anymore
 jitclass = jitclass_
-njit = njit_
+njit = njit_(fastmath=False, nogil=True, cache=False, boundscheck=False)
 
 BOOL_t = boolean
 NP_BOOL_t = np.bool
@@ -22,9 +21,12 @@ INT32_t = int32
 NP_INT32_t = np.int32
 UINT32_t = uint32
 NP_UINT32_t = np.uint32
+UINT8_t = uint8
+NP_UINT8_t = np.uint8
+
 
 INFINITY = np.inf
-EPSILON = np.finfo('double').eps
+EPSILON = np.finfo("double").eps
 
 SIZE_MAX = np.iinfo(NP_SIZE_t).max
 
@@ -56,7 +58,7 @@ def resize(a, new_size, zeros=False):
         new = np.zeros(new_size, a.dtype)
     else:
         new = np.empty(new_size, a.dtype)
-    new[:a.size] = a
+    new[: a.size] = a
     return new
 
 
@@ -105,18 +107,14 @@ spec_stack_record_dtype = [
     ("parent", NP_SIZE_t),
     ("is_left", NP_BOOL_t),
     ("impurity", NP_DOUBLE_t),
-    ("n_constant_features", NP_SIZE_t)
+    ("n_constant_features", NP_SIZE_t),
 ]
 
 NP_STACK_RECORD_t = np.dtype(spec_stack_record_dtype)
 STACK_RECORD_t = from_dtype(NP_STACK_RECORD_t)
 
 
-spec_stack = [
-    ("capacity", SIZE_t),
-    ("top", SIZE_t),
-    ("stack_", STACK_RECORD_t[::1])
-]
+spec_stack = [("capacity", SIZE_t), ("top", SIZE_t), ("stack_", STACK_RECORD_t[::1])]
 
 
 @jitclass(spec_stack)
@@ -147,8 +145,9 @@ class Stack(object):
 
 
 @njit
-def stack_push(stack, start, end, depth, parent, is_left, impurity,
-               n_constant_features):
+def stack_push(
+    stack, start, end, depth, parent, is_left, impurity, n_constant_features
+):
     #     cdef int push(self, SIZE_t start, SIZE_t end, SIZE_t depth, SIZE_t parent,
     #                   bint is_left, double impurity,
     #                   SIZE_t n_constant_features) nogil except -1:
@@ -214,21 +213,21 @@ def stack_is_empty(stack):
 @njit
 def stack_pop(stack):
     #     cdef int pop(self, StackRecord* res) nogil:
-#         """Remove the top element from the stack and copy to ``res``.
-#
-#         Returns 0 if pop was successful (and ``res`` is set); -1
-#         otherwise.
-#         """
-#         cdef SIZE_t top = self.top
-#         cdef StackRecord* stack = self.stack_
-#
-#         if top <= 0:
-#             return -1
-#
-#         res[0] = stack[top - 1]
-#         self.top = top - 1
-#
-#         return 0
+    #         """Remove the top element from the stack and copy to ``res``.
+    #
+    #         Returns 0 if pop was successful (and ``res`` is set); -1
+    #         otherwise.
+    #         """
+    #         cdef SIZE_t top = self.top
+    #         cdef StackRecord* stack = self.stack_
+    #
+    #         if top <= 0:
+    #             return -1
+    #
+    #         res[0] = stack[top - 1]
+    #         self.top = top - 1
+    #
+    #         return 0
     top = stack.top
     # cdef StackRecord* stack = self.stack_
     stack_ = stack.stack_
@@ -254,20 +253,23 @@ def print_stack(stack):
 
 def get_records(stack):
     import pandas as pd
+
     nodes = stack.nodes
     columns = [col_name for col_name, _ in spec_stack_record_dtype]
     # columns = ["left_child"]
 
     return pd.DataFrame.from_records(
-        (tuple(node[col] for col in columns) for i, node in enumerate(nodes) if i <
-         stack.node_count),
-        columns=columns
+        (
+            tuple(node[col] for col in columns)
+            for i, node in enumerate(nodes)
+            if i < stack.node_count
+        ),
+        columns=columns,
     )
+
 
 stack = Stack(3)
 
 print_stack(stack)
 
 print()
-
-
