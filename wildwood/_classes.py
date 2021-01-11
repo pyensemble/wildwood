@@ -41,16 +41,16 @@ from numba import _helperlib
 
 # from ._criterion import Criterion
 from ._splitter import BestSplitter
-from ._tree import DepthFirstTreeBuilder
+from ._tree_old import DepthFirstTreeBuilder
 
-from . import _tree
+from . import _tree_old
 
 # from ._tree import BestFirstTreeBuilder
-from ._tree import Tree
+from ._tree_old import Tree
 
 # from ._tree import _build_pruned_tree_ccp
 # from ._tree import ccp_pruning_path
-from . import _tree, _splitter, _criterion, _utils
+from . import _tree_old, _splitter, _criterion, _utils
 
 __all__ = [
     "DecisionTreeClassifier",
@@ -64,8 +64,8 @@ __all__ = [
 # Types and constants
 # =============================================================================
 
-DTYPE = _utils.NP_DTYPE_t
-DOUBLE = _utils.NP_DOUBLE_t
+DTYPE = _utils.np_dtype_t
+DOUBLE = _utils.np_double_t
 
 CRITERIA_CLF = {
     "gini": _criterion.Gini,
@@ -453,8 +453,8 @@ class BaseDecisionTree(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
         # TODO: set the random_state
         self._set_random_state()
 
-        _tree.depth_first_tree_builder_build(builder, self.tree_, X, y,
-                                             sample_weight, X_idx_sort)
+        _tree_old.depth_first_tree_builder_build(builder, self.tree_, X, y,
+                                                 sample_weight, X_idx_sort)
 
         if self.n_outputs_ == 1 and is_classifier(self):
             self.n_classes_ = self.n_classes_[0]
@@ -513,7 +513,7 @@ class BaseDecisionTree(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
 
         # proba = self.tree_.predict(X)
 
-        proba = _tree.tree_predict(self.tree_, X)
+        proba = _tree_old.tree_predict(self.tree_, X)
         n_samples = X.shape[0]
 
         # Classification
@@ -1066,7 +1066,7 @@ class DecisionTreeClassifier(ClassifierMixin, BaseDecisionTree):
         X = self._validate_X_predict(X, check_input)
 
         # proba = self.tree_.predict(X)
-        proba = _tree.tree_predict(self.tree_, X)
+        proba = _tree_old.tree_predict(self.tree_, X)
 
         if self.n_outputs_ == 1:
             proba = proba[:, : self.n_classes_]

@@ -14,8 +14,8 @@ from ._utils import (
     NP_SIZE_t,
     UINT32_t,
     NP_UINT32_t,
-    DOUBLE_t,
-    NP_DOUBLE_t,
+    double_t,
+    np_double_t,
     jitclass,
     njit,
 )
@@ -91,8 +91,8 @@ def criterion_impurity_improvement(
 
 
 spec_criterion = [
-    ("y", DOUBLE_t[:, ::1]),
-    ("sample_weight", DOUBLE_t[::1]),
+    ("y", double_t[:, ::1]),
+    ("sample_weight", double_t[::1]),
     ("samples", SIZE_t[::1]),  # A numpy array holding the sample indices
     ("start", SIZE_t),
     ("pos", SIZE_t),
@@ -100,14 +100,14 @@ spec_criterion = [
     ("n_samples", SIZE_t),  # It's X.shape[0]
     ("n_node_samples", SIZE_t),  # It's X.shape[0]
     ("n_outputs", SIZE_t),
-    ("weighted_n_samples", DOUBLE_t),
-    ("weighted_n_node_samples", DOUBLE_t),
-    ("weighted_n_left", DOUBLE_t),
-    ("weighted_n_right", DOUBLE_t),
+    ("weighted_n_samples", double_t),
+    ("weighted_n_node_samples", double_t),
+    ("weighted_n_left", double_t),
+    ("weighted_n_right", double_t),
     ("max_n_classes", SIZE_t),
-    ("sum_total", DOUBLE_t[:, ::1]),
-    ("sum_left", DOUBLE_t[:, ::1]),
-    ("sum_right", DOUBLE_t[:, ::1]),
+    ("sum_total", double_t[:, ::1]),
+    ("sum_left", double_t[:, ::1]),
+    ("sum_right", double_t[:, ::1]),
 ]
 
 spec_classification_criterion = spec_criterion + [("n_classes", SIZE_t[::1])]
@@ -133,9 +133,9 @@ class ClassificationCriterion(object):
         self.max_n_classes = np.max(self.n_classes)
 
         shape = (self.n_outputs, self.max_n_classes)
-        self.sum_total = np.empty(shape, dtype=NP_DOUBLE_t)
-        self.sum_left = np.empty(shape, dtype=NP_DOUBLE_t)
-        self.sum_right = np.empty(shape, dtype=NP_DOUBLE_t)
+        self.sum_total = np.empty(shape, dtype=np_double_t)
+        self.sum_left = np.empty(shape, dtype=np_double_t)
+        self.sum_right = np.empty(shape, dtype=np_double_t)
 
 
 @njit
@@ -331,9 +331,9 @@ class Gini(object):
         self.max_n_classes = np.max(self.n_classes)
 
         shape = (self.n_outputs, self.max_n_classes)
-        self.sum_total = np.empty(shape, dtype=NP_DOUBLE_t)
-        self.sum_left = np.empty(shape, dtype=NP_DOUBLE_t)
-        self.sum_right = np.empty(shape, dtype=NP_DOUBLE_t)
+        self.sum_total = np.empty(shape, dtype=np_double_t)
+        self.sum_left = np.empty(shape, dtype=np_double_t)
+        self.sum_right = np.empty(shape, dtype=np_double_t)
 
 
 @njit

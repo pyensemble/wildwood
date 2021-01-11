@@ -28,8 +28,8 @@ from ._utils import (
     jitclass,
     int32,
     uint32,
-    DOUBLE_t,
-    NP_DOUBLE_t,
+    double_t,
+    np_double_t,
     SIZE_t,
     INT32_t,
     UINT32_t,
@@ -38,8 +38,8 @@ from ._utils import (
     UINT8_t,
     NP_UINT8_t,
     NP_BOOL_t,
-    DTYPE_t,
-    NP_DTYPE_t,
+    dtype_t,
+    np_dtype_t,
     get_numba_type,
 )
 
@@ -58,20 +58,20 @@ from ._criterion import (
 NULL = np.nan
 
 
-FEATURE_THRESHOLD = DTYPE_t(1e-7)
+FEATURE_THRESHOLD = dtype_t(1e-7)
 
 # Constant to switch between algorithm non zero value extract algorithm
 # in SparseSplitter
-EXTRACT_NNZ_SWITCH = DTYPE_t(0.1)
+EXTRACT_NNZ_SWITCH = dtype_t(0.1)
 
 
 spec_split_record = [
     ("feature", SIZE_t),
     ("pos", SIZE_t),
-    ("threshold", DOUBLE_t),
-    ("improvement", DOUBLE_t),
-    ("impurity_left", DOUBLE_t),
-    ("impurity_right", DOUBLE_t),
+    ("threshold", double_t),
+    ("improvement", double_t),
+    ("impurity_left", double_t),
+    ("impurity_right", double_t),
 ]
 
 
@@ -116,16 +116,16 @@ spec_splitter = [
     ("max_features", SIZE_t),
     ("samples", SIZE_t[::1]),  # A numpy array holding the sample indices
     ("n_samples", SIZE_t),  # It's X.shape[0]
-    ("weighted_n_samples", DOUBLE_t),
+    ("weighted_n_samples", double_t),
     ("features", SIZE_t[::1]),  # Feature indices in X
     ("constant_features", SIZE_t[::1]),  # Constant feature indices
     ("n_features", SIZE_t),  # It's X.shape[0]
     ("max_features", SIZE_t),
-    ("feature_values", DOUBLE_t[::1]),
+    ("feature_values", double_t[::1]),
     ("start", SIZE_t),
     ("end", SIZE_t),
-    ("y", DOUBLE_t[:, ::1]),
-    ("sample_weight", DOUBLE_t[::1]),
+    ("y", double_t[:, ::1]),
+    ("sample_weight", double_t[::1]),
 ]
 
 
@@ -208,7 +208,7 @@ def splitter_init(splitter, X, y, sample_weight):
     n_samples = X.shape[0]
 
     if sample_weight is None:
-        sample_weight = np.empty(0, dtype=NP_DOUBLE_t)
+        sample_weight = np.empty(0, dtype=np_double_t)
 
     # Create a new array which will be used to store nonzero
     # samples from the feature of interest
@@ -247,7 +247,7 @@ def splitter_init(splitter, X, y, sample_weight):
 
     # TODO: get correct dtype
     # safe_realloc(&self.feature_values, n_samples)
-    splitter.feature_values = np.empty(n_samples, dtype=NP_DOUBLE_t)
+    splitter.feature_values = np.empty(n_samples, dtype=np_double_t)
     # safe_realloc(&self.constant_features, n_features)
     splitter.constant_features = np.empty(n_features, dtype=NP_SIZE_t)
 
@@ -304,7 +304,7 @@ def splitter_node_impurity(splitter):
 
 
 spec_base_dense_splitter = spec_splitter + [
-    ("X", DTYPE_t[:, :]),
+    ("X", dtype_t[:, :]),
     ("n_total_samples", SIZE_t),
     ("node_mask", UINT8_t[::1])
 ]

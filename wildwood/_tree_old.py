@@ -1,9 +1,53 @@
+# # cython: cdivision=True
+# # cython: boundscheck=False
+# # cython: wraparound=False
+#
+# # Authors: Gilles Louppe <g.louppe@gmail.com>
+# #          Peter Prettenhofer <peter.prettenhofer@gmail.com>
+# #          Brian Holt <bdholt1@gmail.com>
+# #          Noel Dawe <noel@dawe.me>
+# #          Satrajit Gosh <satrajit.ghosh@gmail.com>
+# #          Lars Buitinck
+# #          Arnaud Joly <arnaud.v.joly@gmail.com>
+# #          Joel Nothman <joel.nothman@gmail.com>
+# #          Fares Hedayati <fares.hedayati@gmail.com>
+# #          Jacob Schreiber <jmschreiber91@gmail.com>
+# #          Nelson Liu <nelson@nelsonliu.me>
+# #
+# # License: BSD 3 clause
+
+
+# See _tree.pyx for details.
+
+import numpy as np
+
+from scipy.sparse import issparse
+from scipy.sparse import csc_matrix
+from scipy.sparse import csr_matrix
 
 
 import numpy as np
 from ._utils import (
-
-    np_intp, nb_intp, np_bool, np_float32, from_dtype
+    dtype_t,
+    np_dtype_t,
+    double_t,
+    np_double_t,
+    SIZE_t,
+    NP_SIZE_t,
+    INT32_t,
+    NP_UINT32_t,
+    SIZE_MAX,
+    jitclass,
+    njit,
+    get_numba_type,
+    resize,
+    INFINITY,
+    Stack,
+    stack_push,
+    stack_pop,
+    stack_is_empty,
+    EPSILON,
+    resize3d,
 )
 
 
@@ -21,185 +65,6 @@ from ._splitter import (
 )
 
 import numba
-
-
-spec_stack_record_dtype = [
-    ("start", np_intp),
-    ("end", np_intp),
-    ("depth", np_intp),
-    ("parent", np_intp),
-    ("is_left", np_bool),
-    ("impurity", np_float32),
-    ("n_constant_features", np_intp),
-]
-
-np_stack_record = np.dtype(spec_stack_record_dtype)
-nb_stack_record = from_dtype(np_stack_record)
-
-
-spec_stack = [("capacity", nb_intp), ("top", nb_intp), ("stack_", nb_stack_record[::1])]
-
-# TODO: J'en suis ICI ICI ICI 2021 / 01 / 11
-
-
-@jitclass(spec_stack)
-class Stack(object):
-    # cdef class Stack:
-    #     """A LIFO data structure.
-    #
-    #     Attributes
-    #     ----------
-    #     capacity : SIZE_t
-    #         The elements the stack can hold; if more added then ``self.stack_``
-    #         needs to be resized.
-    #
-    #     top : SIZE_t
-    #         The number of elements currently on the stack.
-    #
-    #     stack : StackRecord pointer
-    #         The stack of records (upward in the stack corresponds to the right).
-    #     """
-    def __init__(self, capacity):
-        #     def __cinit__(self, SIZE_t capacity):
-        #         self.capacity = capacity
-        #         self.top = 0
-        #         self.stack_ = <StackRecord*> malloc(capacity * sizeof(StackRecord))
-        self.capacity = capacity
-        self.top = 0
-        self.stack_ = np.empty(capacity, dtype=NP_STACK_RECORD_t)
-
-
-@njit
-def stack_push(
-    stack, start, end, depth, parent, is_left, impurity, n_constant_features
-):
-    #     cdef int push(self, SIZE_t start, SIZE_t end, SIZE_t depth, SIZE_t parent,
-    #                   bint is_left, double impurity,
-    #                   SIZE_t n_constant_features) nogil except -1:
-    #         """Push a new element onto the stack.
-    #
-    #         Return -1 in case of failure to allocate memory (and raise MemoryError)
-    #         or 0 otherwise.
-    #         """
-    #         cdef SIZE_t top = self.top
-    #         cdef StackRecord* stack = NULL
-    #
-    #         # Resize if capacity not sufficient
-    #         if top >= self.capacity:
-    #             self.capacity *= 2
-    #             # Since safe_realloc can raise MemoryError, use `except -1`
-    #             safe_realloc(&self.stack_, self.capacity)
-    #
-    #         stack = self.stack_
-    #         stack[top].start = start
-    #         stack[top].end = end
-    #         stack[top].depth = depth
-    #         stack[top].parent = parent
-    #         stack[top].is_left = is_left
-    #         stack[top].impurity = impurity
-    #         stack[top].n_constant_features = n_constant_features
-    #
-    #         # Increment stack pointer
-    #         self.top = top + 1
-    #         return 0
-
-    top = stack.top
-    stack_ = stack.stack_
-    # cdef StackRecord* stack = NULL
-
-    # Resize if capacity not sufficient
-    if top >= stack.capacity:
-        stack.capacity = 2 * stack.capacity
-        # Since safe_realloc can raise MemoryError, use `except -1`
-        # safe_realloc( & self.stack_, self.capacity)
-        stack.stack_ = resize(stack_, stack.capacity)
-
-    stack_top = stack.stack_[top]
-    stack_top["start"] = start
-    stack_top["end"] = end
-    stack_top["depth"] = depth
-    stack_top["parent"] = parent
-    stack_top["is_left"] = is_left
-    stack_top["impurity"] = impurity
-    stack_top["n_constant_features"] = n_constant_features
-
-    # We have one more record in the stack
-    stack.top = top + 1
-    return 0
-
-
-@njit
-def stack_is_empty(stack):
-    #     cdef bint is_empty(self) nogil:
-    #         return self.top <= 0
-    return stack.top <= 0
-
-
-@njit
-def stack_pop(stack):
-    #     cdef int pop(self, StackRecord* res) nogil:
-    #         """Remove the top element from the stack and copy to ``res``.
-    #
-    #         Returns 0 if pop was successful (and ``res`` is set); -1
-    #         otherwise.
-    #         """
-    #         cdef SIZE_t top = self.top
-    #         cdef StackRecord* stack = self.stack_
-    #
-    #         if top <= 0:
-    #             return -1
-    #
-    #         res[0] = stack[top - 1]
-    #         self.top = top - 1
-    #
-    #         return 0
-    top = stack.top
-    # cdef StackRecord* stack = self.stack_
-    stack_ = stack.stack_
-
-    # TODO: en fait ce return on ne s'en sert pas apparemment...
-    # if top <= 0:
-    #     return -1
-
-    stack_record = stack_[top - 1]
-    # res[0] = stack[top - 1]
-    stack.top = top - 1
-    # return 0
-    return stack_record
-
-
-def print_stack(stack):
-    s = "Stack("
-    s += "capacity={capacity}".format(capacity=stack.capacity)
-    s += ", top={top}".format(top=stack.top)
-    s += ")"
-    print(s)
-
-
-def get_records(stack):
-    import pandas as pd
-
-    nodes = stack.nodes
-    columns = [col_name for col_name, _ in spec_stack_record_dtype]
-    # columns = ["left_child"]
-
-    return pd.DataFrame.from_records(
-        (
-            tuple(node[col] for col in columns)
-            for i, node in enumerate(nodes)
-            if i < stack.node_count
-        ),
-        columns=columns,
-    )
-
-
-stack = Stack(3)
-
-print_stack(stack)
-
-print()
-
-
 
 
 spec_node = [
