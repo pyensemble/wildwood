@@ -18,55 +18,13 @@ from sklearn.utils import check_random_state
 from wildwood._utils import MAX_INT
 
 
-def _generate_train_valid_samples(random_state, n_samples):
-    """
-    This functions generates "in-the-bag" (train) and "out-of-the-bag" samples
+from wildwood._tree import Stack, print_stack
 
-    Parameters
-    ----------
-    random_state : None or int or RandomState
-        Allows to specify the RandomState used for random splitting
+stack = Stack(3)
 
-    n_samples : int
-        Total number of samples
+print_stack(stack)
 
-    Returns
-    -------
-    output : tuple of theer numpy arrays
-        * output[0] contains the indices of the training samples
-        * output[1] contains the indices of the validation samples
-        * output[2] contains the counts of the training samples
-    """
-    random_instance = check_random_state(random_state)
-    # Sample the bootstrap samples (uniform sampling with replacement)
-
-    sample_indices = random_instance.randint(0, n_samples, n_samples)
-    sample_counts = np.bincount(sample_indices, minlength=n_samples)
-    indices = np.arange(n_samples)
-    valid_mask = sample_counts == 0
-    # For very small samples, we might end up with empty validation...
-    if valid_mask.sum() == 0:
-        return _generate_train_valid_samples((random_state + 1) % MAX_INT, n_samples)
-    else:
-        print("sample_indices: ", sample_indices)
-        # print("sample_counts: ", sample_counts)
-        train_mask = np.logical_not(valid_mask)
-        train_indices = indices[train_mask]
-        valid_indices = indices[valid_mask]
-        train_indices_count = sample_counts[train_mask]
-        return train_indices, valid_indices, train_indices_count
-
-
-# random_state = np.random.randint(0, 1_000_000)
-
-random_state = 586241
-# random_state = 42
-print("random_state: ", random_state)
-train_indices, valid_indices, train_indices_count = _generate_train_valid_samples(random_state, 3)
-
-print("train_indices: ", train_indices)
-print("valid_indices: ", valid_indices)
-print("train_indices_count: ", train_indices_count)
+print()
 
 
 from cffi import FFI

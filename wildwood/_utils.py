@@ -66,6 +66,17 @@ def resize(a, new_size, zeros=False):
 
 
 @njit
+def resize2d(a, new_size, zeros=False):
+    d0, d1 = a.shape
+    if zeros:
+        new = np.zeros((new_size, d1), a.dtype)
+    else:
+        new = np.empty((new_size, d1), a.dtype)
+    new[:d0, :] = a
+    return new
+
+
+@njit
 def resize3d(a, new_size, zeros=False):
     d0, d1, d2 = a.shape
     if zeros:
