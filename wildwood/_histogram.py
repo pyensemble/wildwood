@@ -21,58 +21,6 @@ from ._utils import np_float32, nb_float32, np_uint32, nb_uint32
 # ])
 
 
-@njit
-def compute_bin_statistics(X, y, n_classes, features, n_bins, train_indices,
-                           sample_weight_train):
-    """
-    TODO: la strategie est bien en fait car les histogrammes sont petits comme en
-    principe on sous-echantillone les features
-
-    Parameters
-    ----------
-    X
-    y
-    n_classes
-    features
-    n_bins
-    train_indices
-    sample_weight_train
-
-    Returns
-    -------
-
-    """
-    max_features = features.size
-    # The dtype is float32 since it's actually weighted sample counts
-    # TODO: faudra que ces tableaux soient crees en dehors et appartiennent au
-    #  context et C major pour iterer vite sur n_bins
-
-    # TODO: c'est ici qu'on peut calculer quelles sont les features constantes dans
-    #  le node (si on trouve un bin avec toutes les features. Faudra faire attention
-    #  au cas avec missing values a terme
-    n_samples_in_bins = np.zeros((max_features, n_bins), dtype=np_float32)
-    y_counts_in_bins = np.zeros((max_features, n_bins, n_classes), dtype=np_float32)
-    # A counter for the features since return arrays are contiguous
-    f = 0
-    # For-loop on features and then samples (X is F-major) for cache hits
-    for feature in features:
-        for sample in train_indices:
-            bin = X[sample, feature]
-            label = y[sample]
-            # sample_weight = sample_weight_train[sample]
-            # TODO: c'est galere faudrait plutot avec un seul vecteur de
-            #  sample_weight pour train et valid, car on utilise train_indices
-            sample_weight = nb_float32(1.0)
-            # One more sample in this bin for the current feature
-            n_samples_in_bins[f, bin] += sample_weight
-            # One more sample in this bin for the current feature with this label
-            y_counts_in_bins[f, bin, label] += sample_weight
-
-        f += 1
-
-    return n_samples_in_bins, y_counts_in_bins
-
-
 # TODO: later, unroll the loops as below for histogram computations, for faster
 #  computations
 

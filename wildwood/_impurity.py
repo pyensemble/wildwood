@@ -3,15 +3,19 @@ This module contains functions allowing to compute impurity criterions in nodes 
 their childs, and the information gain associated to it
 """
 
-from ._utils import njit, float32, uint32
+from ._utils import njit, nb_float32, nb_uint32
 
 
-@njit(float32(float32, float32, float32, float32))
+# @njit(float32(float32, float32, float32, float32))
+
+@njit
 def information_gain_proxy(
+    get_childs_impurity,
+    n_classes,
     n_samples_left,
     n_samples_right,
-    impurity_left,
-    impurity_right,
+    y_sum_left,
+    y_sum_right,
 ):
     """Computes a proxy of the information gain (improvement in impurity) using the
     equation
@@ -28,24 +32,25 @@ def information_gain_proxy(
 
     Parameters
     ----------
-    n_samples_left : float32
-        Weighted number of samples in left child node
-    n_samples_right : float32
-        Weighted number of samples in right child node
-    impurity_left : float32
-        Impurity of the left child node
-    impurity_right : float32
-        Impurity of the right child node
+    get_childs_impurity : callable
+        A function computing the impurity of the childs
+
 
     Return
     ------
     output : float32
         Information gain after splitting parent into left and child nodes
     """
+
+    impurity_left, impurity_right = get_childs_impurity(
+        n_classes, n_samples_left, n_samples_right, y_sum_left, y_sum_right
+    )
     return - n_samples_left * impurity_left - n_samples_right * impurity_right
 
 
-@njit(float32(float32, float32, float32, float32, float32, float32, float32))
+# @njit(float32(float32, float32, float32, float32, float32, float32, float32))
+
+@njit
 def information_gain(
     n_samples,
     n_samples_parent,
@@ -94,7 +99,8 @@ def information_gain(
     )
 
 
-@njit(float32(uint32, float32, float32[::1]))
+# (nb_float32(nb_uint32, nb_float32, nb_float32[::1]))
+@njit
 def gini_node(n_classes, n_samples, y_sum):
     """Computes the gini impurity criterion in a node
 

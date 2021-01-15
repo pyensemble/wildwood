@@ -52,9 +52,11 @@ from sklearn.utils.validation import check_is_fitted, _check_sample_weight
 
 from ._binning import Binner
 
+from ._utils import np_size_t
+
 __all__ = ["BinaryClassifier"]
 
-from wildwood._utils import MAX_INT
+# from wildwood._utils import MAX_INT
 
 from wildwood.tree import TreeBinaryClassifier
 
@@ -92,9 +94,9 @@ def _generate_train_valid_samples(random_state, n_samples):
         # print("sample_indices: ", sample_indices)
         # print("sample_counts: ", sample_counts)
         train_mask = np.logical_not(valid_mask)
-        train_indices = indices[train_mask]
-        valid_indices = indices[valid_mask]
-        train_indices_count = sample_counts[train_mask]
+        train_indices = indices[train_mask].astype(np_size_t)
+        valid_indices = indices[valid_mask].astype(np_size_t)
+        train_indices_count = sample_counts[train_mask].astype(np_size_t)
         return train_indices, valid_indices, train_indices_count
 
 
@@ -108,21 +110,21 @@ def _parallel_build_trees(tree, X, y, sample_weight, tree_idx, n_trees, verbose=
 
     n_samples = X.shape[0]
     if sample_weight is None:
-        sample_weight_full = np.ones((n_samples,), dtype=np.float32)
+        sample_weight = np.ones((n_samples,), dtype=np.float32)
     else:
         # Do a copy with float32 dtype
-        sample_weight_full = sample_weight.astype(np.float32)
+        sample_weight = sample_weight.astype(np.float32)
 
     train_indices, valid_indices, train_indices_count = _generate_train_valid_samples(
         tree.random_state, n_samples
     )
 
-    sample_weight_train = sample_weight_full[train_indices]
-    sample_weight_valid = sample_weight_full[valid_indices]
+    # sample_weight_train = sample_weight_full[train_indices]
+    # sample_weight_valid = sample_weight_full[valid_indices]
     # We use bootstrap: sample repetition is achieved by multiplying the sample
     # weights by the sample counts. By construction, no repetition is possible in
     # validation data
-    sample_weight_train *= train_indices_count
+    sample_weight[train_indices] *= train_indices_count
 
     # TODO: je ne comprends pas les lignes commentees suivantes. Pour l'instant,
     #  il faut que sample weight contienne deja les poids si
@@ -138,10 +140,9 @@ def _parallel_build_trees(tree, X, y, sample_weight, tree_idx, n_trees, verbose=
     tree.fit(
         X,
         y,
-        train_indices=train_indices,
-        valid_indices=valid_indices,
-        sample_weight_train=sample_weight_train,
-        sample_weight_valid=sample_weight_valid,
+        train_indices,
+        valid_indices,
+        sample_weight,
         check_input=False,
     )
 

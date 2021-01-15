@@ -8,10 +8,10 @@ from matplotlib.colors import ListedColormap
 
 from sklearn.datasets import make_circles, make_moons
 from sklearn.model_selection import train_test_split
-from sklearn.tree import DecisionTreeClassifier as SkDecisionTreeClassifier
-from sklearn.tree import ExtraTreeClassifier as SkExtraTreeClassifier
+# from sklearn.tree import DecisionTreeClassifier as SkDecisionTreeClassifier
+# from sklearn.tree import ExtraTreeClassifier as SkExtraTreeClassifier
 
-from wildwood._classes import DecisionTreeClassifier
+# from wildwood._classes import DecisionTreeClassifier
 
 from wildwood.forest import ForestBinaryClassifier
 

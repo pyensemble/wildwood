@@ -4,8 +4,10 @@ import numpy as np
 from ._utils import (
     njit,
     jitclass,
-    np_intp,
-    nb_intp,
+    np_uint8,
+    nb_uint8,
+    np_size_t,
+    nb_size_t,
     np_uint32,
     nb_uint32,
     np_float32,
@@ -15,7 +17,10 @@ from ._utils import (
     infinity,
 )
 
+from ._impurity import gini_childs, information_gain_proxy, information_gain
+
 #
+
 #
 # @jitclass(
 #     [
@@ -69,166 +74,317 @@ from ._utils import (
 #             self.n_samples_left = n_samples_left
 #         if y_count_right is not None:
 #             self.n_samples_right = n_samples_right
-#
-#
-# spec_splitting_context = [
-#     ("X_binned", uint8[::1, :]),
-#     ("n_features", uint32),
-#     # TODO: pourquoi c'est pas uint8 pour les deux en dessous ?
-#     ("max_bins", uint32),
-#     # ("n_bins_per_feature", uint32[::1]),
-#     # ("min_samples_leaf", uint32),
-#     # ("min_gain_to_split", float32),
-#     ("train_indices", uint32[::1]),
-#     ("valid_indices", uint32[::1]),
-#     # ('partition', uint32[::1]),
-#     # ('partition', uint32[::1]),
-#     # ("left_indices_buffer", uint32[::1]),
-#     # ("right_indices_buffer", uint32[::1]),
-#     # ("sample_weight_train", uint32[::1]),
-#     # ("right_indices_buffer", uint32[::1])
-# ]
-#
-#
-# @jitclass(spec_splitting_context)
-# class SplittingContext:
-#
-#     def __init__(
-#         self,
-#         X_binned,
-#         train_indices,
-#         valid_indices,
-#         # sample_weight_train,
-#         # sample_weight_valid,
-#         n_bins,
-#         # n_bins_per_feature,
-#         # gradients,
-#         # hessians,
-#         # l2_regularization,
-#         # min_hessian_to_split=1e-3,
-#         # min_samples_leaf=20,
-#         # min_gain_to_split=0.0,
-#     ):
-#
-#         self.X_binned = X_binned
-#         self.n_features = X_binned.shape[1]
-#         self.max_bins = n_bins
-#         self.train_indices = train_indices
-#         self.valid_indices = valid_indices
-#         # self.sample_weight_train = sample_weight_train
-#         # self.sample_weight_valid = sample_weight_valid
-#
-#         # Note: all histograms will have <max_bins> bins, but some of the
-#         # last bins may be unused if n_bins_per_feature[f] < max_bins
-#         # self.n_bins_per_feature = n_bins_per_feature
-#         # self.gradients = gradients
-#         # self.hessians = hessians
-#         # for root node, gradients and hessians are already ordered
-#         # self.ordered_gradients = gradients.copy()
-#         # self.ordered_hessians = hessians.copy()
-#         # self.sum_gradients = self.gradients.sum()
-#         # self.sum_hessians = self.hessians.sum()
-#         # self.constant_hessian = hessians.shape[0] == 1
-#         # self.l2_regularization = l2_regularization
-#         # self.min_hessian_to_split = min_hessian_to_split
-#         # self.min_samples_leaf = min_samples_leaf
-#         # self.min_gain_to_split = min_gain_to_split
-#         # if self.constant_hessian:
-#         #     self.constant_hessian_value = self.hessians[0]  # 1 scalar
-#         # else:
-#         #     self.constant_hessian_value = float32(1.)  # won't be used anyway
-#         # The partition array maps each sample index into the leaves of the
-#         # tree (a leaf in this context is a node that isn't splitted yet, not
-#         # necessarily a 'finalized' leaf). Initially, the root contains all
-#         # the indices, e.g.:
-#         # partition = [abcdefghijkl]
-#         # After a call to split_indices, it may look e.g. like this:
-#         # partition = [cef|abdghijkl]
-#         # we have 2 leaves, the left one is at position 0 and the second one at
-#         # position 3. The order of the samples is irrelevant.
-#         # self.partition = np.arange(0, X_binned.shape[0], 1, np.uint32)
-#
-#         # self.train_indices = train_indices
-#         # buffers used in split_indices to support parallel splitting.
-#         # self.left_indices_buffer = np.empty_like(self.train_indices)
-#         # self.right_indices_buffer = np.empty_like(self.train_indices)
+
+
+# A pure data class which contains global context information, such as the dataset,
+# training and validation indices, etc.
+spec_context = [
+    # The binned matrix of features
+    ("X", nb_uint8[::1, :]),
+    # The vector of labels
+    ("y", nb_float32[::1]),
+    # Sample weights
+    ("sample_weights", nb_float32[::1]),
+    # Training sample indices for tree growth
+    ("train_indices", nb_size_t[::1]),
+    # Validation sample indices for tree aggregation
+    ("valid_indices", nb_size_t[::1]),
+    # Total sample size
+    ("n_samples", nb_size_t),
+    # Training sample size
+    ("n_samples_train", nb_size_t),
+    # Validation sample size
+    ("n_samples_valid", nb_size_t),
+    # The total number of features
+    ("n_features", nb_size_t),
+    # The number of classes
+    ("n_classes", nb_size_t),
+    # Maximum number of bins
+    ("max_bins", nb_uint8),
+    # Actual number of bins used for each feature
+    ("n_bins_per_feature", nb_uint8[::1]),
+    # Maximum number of features to try for splitting
+    ("max_features", nb_size_t),
+
+]
+
+
+@jitclass(spec_context)
+class Context:
+    """
+    The splitting context holds all the useful data for splitting
+    """
+    def __init__(
+        self,
+        X,
+        y,
+        sample_weights,
+        train_indices,
+        valid_indices,
+        n_classes,
+        max_bins,
+        n_bins_per_feature,
+        max_features
+    ):
+        self.X = X
+        self.y = y
+        self.sample_weights = sample_weights
+        self.n_classes = n_classes
+        self.max_bins = max_bins
+        self.n_bins_per_feature = n_bins_per_feature
+        self.max_features = max_features
+        self.train_indices = train_indices
+        self.valid_indices = valid_indices
+
+        n_samples, n_features = X.shape
+        self.n_samples = n_samples
+        self.n_features = n_features
+        self.n_samples_train = train_indices.shape[0]
+        self.n_samples_valid = valid_indices.shape[0]
+
+
+# A local context which contains information for the split and local node data
+spec_local_context = [
+
+    # Set of candidate features for splitting
+    ("features", nb_size_t[::1]),
+    # ("min_samples_leaf", uint32),
+    # ("min_gain_to_split", float32),
+
+    # Number of training samples in each bin for each feature in the node
+    ("n_samples_in_bins", nb_size_t[:, ::1]),
+    # Histogram data, number of training samples in each bin for each feature and
+    # each label class in the node
+    ("y_sum_in_bins", nb_float32[:, :, ::1]),
+
+    # Total number of samples in the node
+    ("n_samples", nb_size_t),
+    # Number of training samples in the node
+    ("n_samples_train", nb_size_t),
+    # Number of validation samples in the node
+    ("n_samples_valid", nb_size_t),
+
+    # context.partition_train[start_train:end_train] contains the training sample
+    # indices in the node
+    ("start_train", nb_size_t),
+    ("end_train", nb_size_t),
+
+    # context.partition_valid[start_valid:end_valid] contains the validation sample
+    # indices in the node
+    ("start_valid", nb_size_t),
+    ("end_valid", nb_size_t),
+]
+
+
+@jitclass(spec_local_context)
+class LocalContext:
+    """
+    The splitting context holds all the useful data for splitting
+    """
+    def __init__(
+        self,
+        context,
+        # TODO: features a tirer au hasard plus tard
+        # features
+    ):
+        self.features = np.arange(0, context.n_features, dtype=np_uint32)
+        max_features = context.max_features
+        max_bins = context.max_bins
+        n_classes = context.n_classes
+        self.n_samples_in_bins = np.empty((max_features, max_bins), dtype=np_float32)
+        self.y_sum_in_bins = np.empty((max_features, max_bins, n_classes),
+                                      dtype=np_float32)
 
 
 @njit
-def find_best_split_along_feature(context, feature, n_samples, n_samples_in_bins,
-                                  y_counts_in_bins):
-    """Finds the best split along feature"""
+def compute_bin_statistics(context, local_context):
+    """
+    TODO: la strategie est bien en fait car les histogrammes sont petits comme en
+    principe on sous-echantillone les features
 
+    """
+    # TODO: c'est ici qu'on peut calculer quelles sont les features constantes dans
+    #  le node (si on trouve un bin avec toutes les features. Faudra faire attention
+    #  au cas avec missing values a terme
+    n_samples_in_bins = local_context.n_samples_in_bins
+    n_samples_in_bins[:] = 0
+    y_sum_in_bins = local_context.y_sum_in_bins
+    y_sum_in_bins[:] = 0
+
+    X = context.X
+    y = context.y
+    sample_weights = context.sample_weights
+    features = local_context.features
+
+    # Get the node training indices
+    train_indices = context.train_indices
+    start_train = local_context.start_train
+    end_train = local_context.end_train
+    samples = train_indices[start_train:end_train]
+
+    # A counter for the features since return arrays are contiguous
+    f = nb_uint32(0)
+    # For-loop on features and then samples (X is F-major) for cache hits
+    for feature in features:
+        for sample in samples:
+            bin = X[sample, feature]
+            label = nb_size_t(y[sample])
+            sample_weight = sample_weights[sample]
+            # One more sample in this bin for the current feature
+            n_samples_in_bins[f, bin] += sample_weight
+            # One more sample in this bin for the current feature with this label
+            y_sum_in_bins[f, bin, label] += sample_weight
+        f += 1
+
+
+@njit
+def find_node_split(context, local_context):
+
+    # Compute the bin statistics of the context
+    compute_bin_statistics(context, local_context)
+
+    features = local_context.features
+    # Loop over the possible features
+
+    # TODO: a quoi ca sert vraiment de recuperer plein de split_info ?
+    # # Pre-allocate the results datastructure to be able to use prange:
+    # # numba jitclass do not seem to properly support default values for kwargs.
+    # split_infos = [SplitInfo(-1., 0, 0, 0., 0., 0., 0., 0, 0)
+    #                for i in range(context.n_features)]
+
+    best_feature = 0
+    best_bin = 0
+    best_gain_proxy = -infinity
+
+    for feature in features:
+        # Compute the best bin and gain proxy obtained for the feature
+        bin, gain_proxy = find_best_split_along_feature(context, local_context)
+        if gain_proxy > best_gain_proxy:
+            # We've found a better split
+            best_feature = feature
+            best_bin = bin
+            best_gain_proxy = gain_proxy
+
+    # TODO: ici faut calculer le vrai gain
+
+    return best_feature, best_bin, best_gain_proxy
+
+
+@njit
+def find_best_split_along_feature(context, local_context, feature):
+    """
+
+    Parameters
+    ----------
+    context
+    feature
+    n_samples
+    n_samples_in_bins
+
+    y_sums_in_bins : ndarray of shape (n_bins, n_classes), dtype=float32
+
+    Returns
+    -------
+
+    """
     # TODO: n_samples_in_bins c'est n_samples_in_bins[feature] (la ligne concerant
     #  juste la feature)
 
     # best_split = SplitInfo(-1.0, 0, 0, 0.0, 0.0, None, None)
     # gradient_left, hessian_left = 0.0, 0.0
 
-    n_samples_left = 0
-
     # TODO: a terme utiliser ca :
     # n_bins = context.n_bins_per_feature[feature]
-    n_bins = 255
+    # n_bins = 255
+
+    n_classes = context.n_classes
+    n_bins = context.max_bins
+
+    # Number of training samples in the node
+    n_samples = local_context.end_train - local_context.start_train
+    # Get the number of samples in each bin for the feature
+    n_samples_in_bins = local_context.n_samples_in_bins[feature]
+    # Get the sum of labels (counts) in each bin for the feature
+    y_sum_in_bins = local_context.y_sum_in_bins[feature]
+
+    # TODO: faudra que les vecteurs left et right soient dans le local_context
+    # Counts on the left are zero, since we go from left to right
+    n_samples_left = 0
+    y_sum_left = np.zeros(n_classes, dtype=np_float32)
+    # Count on the right contain everything
+    n_samples_right = n_samples
+    y_sum_right = np.empty(n_classes, dtype=np_float32)
+    y_sum_right[:] = y_sum_in_bins.sum(axis=0)
+
+    best_bin = nb_uint8(0)
+    best_gain_proxy = -infinity
 
     # TODO: right to left also for features with missing values
     # TODO: this works only for ordered features... special sorting for categorical
     # We go from left to right and compute the information gain proxy of all possible
     # splits
     for bin in range(n_bins):
+        # On the left we accumulate the counts
         n_samples_left += n_samples_in_bins[bin]
-        n_samples_right = n_samples - n_samples_left
+        y_sum_left += y_sum_in_bins[bin]
+        # And we get the counts on the right from the left
+        n_samples_right -= n_samples_in_bins[bin]
+        y_sum_right -= y_sum_in_bins[bin]
 
-        # TODO: j'en suis ici ici ici 2021 / 01 / 12 @ 21:28. Faut aller bosser
-        #  dans _splitting.py. Il faut calculer les proxys de gain d'information en
-        #  utilisant les fonctions donnees dans _impurity.py
-
-
-        if context.constant_hessian:
-            hessian_left += histogram[bin]["count"] * context.constant_hessian_value
-        else:
-            hessian_left += histogram[bin]["sum_hessians"]
-        hessian_right = context.sum_hessians - hessian_left
-
-        gradient_left += histogram[bin]["sum_gradients"]
-        gradient_right = context.sum_gradients - gradient_left
-
-        if n_samples_left < context.min_samples_leaf:
-            continue
-        if n_samples_right < context.min_samples_leaf:
-            # won't get any better
-            break
-
-        if hessian_left < context.min_hessian_to_split:
-            continue
-        if hessian_right < context.min_hessian_to_split:
-            # won't get any better (hessians are > 0 since loss is convex)
-            break
-
-        gain = _split_gain(
-            gradient_left,
-            hessian_left,
-            gradient_right,
-            hessian_right,
-            context.sum_gradients,
-            context.sum_hessians,
-            context.l2_regularization,
+        # Compute the information gain proxy
+        gain_proxy = information_gain_proxy(
+            gini_childs,
+            n_classes,
+            n_samples_left,
+            n_samples_right,
+            y_sum_left,
+            y_sum_right,
         )
 
-        if gain > best_split.gain and gain > context.min_gain_to_split:
-            best_split.gain = gain
-            best_split.feature_idx = feature
-            best_split.bin_idx = bin
-            best_split.gradient_left = gradient_left
-            best_split.hessian_left = hessian_left
-            best_split.n_samples_left = n_samples_left
-            best_split.gradient_right = gradient_right
-            best_split.hessian_right = hessian_right
-            best_split.n_samples_right = n_samples_right
+        if gain_proxy > best_gain_proxy:
+            # We've found a better split
+            best_gain_proxy = gain_proxy
+            best_bin = bin
 
-    return best_split, histogram
-    pass
+    # Comment peut-il ne pas y avoir de meilleur bin ?
 
+    return best_bin, best_gain_proxy
+
+
+        # if n_samples_left < context.min_samples_leaf:
+        #     continue
+        # if n_samples_right < context.min_samples_leaf:
+        #     # won't get any better
+        #     break
+        #
+        # if hessian_left < context.min_hessian_to_split:
+        #     continue
+        # if hessian_right < context.min_hessian_to_split:
+        #     # won't get any better (hessians are > 0 since loss is convex)
+        #     break
+        # gain = _split_gain(
+        #     gradient_left,
+        #     hessian_left,
+        #     gradient_right,
+        #     hessian_right,
+        #     context.sum_gradients,
+        #     context.sum_hessians,
+        #     context.l2_regularization,
+        # )
+
+    #     if gain > best_split.gain and gain > context.min_gain_to_split:
+    #         best_split.gain = gain
+    #         best_split.feature_idx = feature
+    #         best_split.bin_idx = bin
+    #         best_split.gradient_left = gradient_left
+    #         best_split.hessian_left = hessian_left
+    #         best_split.n_samples_left = n_samples_left
+    #         best_split.gradient_right = gradient_right
+    #         best_split.hessian_right = hessian_right
+    #         best_split.n_samples_right = n_samples_right
+    #
+    # return best_split, histogram
+    # pass
 
 
 # @njit(
@@ -304,33 +460,33 @@ def find_best_split_along_feature(context, feature, n_samples, n_samples_in_bins
 #     return best_split, histogram
 
 
-@njit(fastmath=False)
-def _split_gain(
-    gradient_left,
-    hessian_left,
-    gradient_right,
-    hessian_right,
-    sum_gradients,
-    sum_hessians,
-    l2_regularization,
-):
-    """Loss reduction
-
-    Compute the reduction in loss after taking a split, compared to keeping
-    the node a leaf of the tree.
-
-    See Equation 7 of:
-    XGBoost: A Scalable Tree Boosting System, T. Chen, C. Guestrin, 2016
-    https://arxiv.org/abs/1603.02754
-    """
-
-    def negative_loss(gradient, hessian):
-        return (gradient ** 2) / (hessian + l2_regularization)
-
-    gain = negative_loss(gradient_left, hessian_left)
-    gain += negative_loss(gradient_right, hessian_right)
-    gain -= negative_loss(sum_gradients, sum_hessians)
-    return gain
+# @njit
+# def _split_gain(
+#     gradient_left,
+#     hessian_left,
+#     gradient_right,
+#     hessian_right,
+#     sum_gradients,
+#     sum_hessians,
+#     l2_regularization,
+# ):
+#     """Loss reduction
+#
+#     Compute the reduction in loss after taking a split, compared to keeping
+#     the node a leaf of the tree.
+#
+#     See Equation 7 of:
+#     XGBoost: A Scalable Tree Boosting System, T. Chen, C. Guestrin, 2016
+#     https://arxiv.org/abs/1603.02754
+#     """
+#
+#     def negative_loss(gradient, hessian):
+#         return (gradient ** 2) / (hessian + l2_regularization)
+#
+#     gain = negative_loss(gradient_left, hessian_left)
+#     gain += negative_loss(gradient_right, hessian_right)
+#     gain -= negative_loss(sum_gradients, sum_hessians)
+#     return gain
 
 
 # TODO: ce qui est en dessous c'est du C/C depuis scikit. On s'en servira plus tard,

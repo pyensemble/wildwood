@@ -40,23 +40,28 @@ from sklearn.utils.validation import _deprecate_positional_args
 from numba import _helperlib
 
 
-from ._grower import TreeGrower
-
+from ._grower import grow
 
 # from ._criterion import Criterion
-from ._splitter import BestSplitter
-from ._tree_old import DepthFirstTreeBuilder
+# from ._splitter import BestSplitter
+# from ._tree_old import DepthFirstTreeBuilder
 
-from . import _tree_old
+# from . import _tree_old
+
+from ._utils import np_float32, np_uint8
+
+
+from ._splitting import Context
 
 # from ._tree import BestFirstTreeBuilder
-from ._tree_old import Tree
+# from ._tree_old import Tree
 
 # from ._tree import _build_pruned_tree_ccp
 # from ._tree import ccp_pruning_path
-from . import _tree_old, _splitter, _criterion, _utils
+# from . import _tree_old, _splitter, _criterion, _utils
 
-__all__ = ["DecisionTreeClassifier"]
+
+# __all__ = ["DecisionTreeClassifier"]
 
 # TODO: dans wildwood le TreeBinaryClassifier est prive et ne devrait pas etre utilise
 #  en dehors d'une foret, mais bon pour l'instant on fait ca viiiite
@@ -66,22 +71,24 @@ __all__ = ["DecisionTreeClassifier"]
 # Types and constants
 # =============================================================================
 
-DTYPE = _utils.np_dtype_t
-DOUBLE = _utils.np_double_t
 
-CRITERIA_CLF = {
-    "gini": _criterion.Gini,
-    # "entropy": _criterion.Entropy
-}
+# DTYPE = ._utils.np_dtype_t
+# DOUBLE = _utils.np_double_t
+
+# CRITERIA_CLF = {
+#     "gini": _criterion.Gini,
+#     # "entropy": _criterion.Entropy
+# }
+
 # CRITERIA_REG = {"mse": _criterion.MSE,
 #                 "friedman_mse": _criterion.FriedmanMSE,
 #                 "mae": _criterion.MAE,
 #                 "poisson": _criterion.Poisson}
 
-DENSE_SPLITTERS = {
-    "best": _splitter.BestSplitter,
-    # "random": _splitter.RandomSplitter
-}
+# DENSE_SPLITTERS = {
+#     "best": _splitter.BestSplitter,
+#     # "random": _splitter.RandomSplitter
+# }
 
 # SPARSE_SPLITTERS = {"best": _splitter.BestSparseSplitter,
 #                     "random": _splitter.RandomSparseSplitter}
@@ -155,14 +162,7 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
         return self.tree_.n_leaves
 
     def fit(
-        self,
-        X,
-        y,
-        train_indices,
-        valid_indices,
-        sample_weight_train,
-        sample_weight_valid,
-        check_input=False,
+        self, X, y, train_indices, valid_indices, sample_weights, check_input=False,
     ):
 
         # print("Training {clf}".format(clf=self.__class__.__name__))
@@ -213,12 +213,14 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
         y = np.atleast_1d(y)
         expanded_class_weight = None
 
-        if y.ndim == 1:
-            # reshape is necessary to preserve the data contiguity against vs
-            # [:, np.newaxis] that does not.
-            y = np.reshape(y, (-1, 1))
+        # TODO: on a enleve ca pour avoir un y qui est 1D
+        # if y.ndim == 1:
+        #     # reshape is necessary to preserve the data contiguity against vs
+        #     # [:, np.newaxis] that does not.
+        #     y = np.reshape(y, (-1, 1))
 
-        self.n_outputs_ = y.shape[1]
+        # self.n_outputs_ = y.shape[1]
+        self.n_outputs_ = 1
 
         if is_classification:
             check_classification_targets(y)
@@ -230,12 +232,14 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
             # if self.class_weight is not None:
             y_original = np.copy(y)
 
-            y_encoded = np.zeros(y.shape, dtype=int)
-            for k in range(self.n_outputs_):
-                classes_k, y_encoded[:, k] = np.unique(y[:, k], return_inverse=True)
-                self.classes_.append(classes_k)
-                self.n_classes_.append(classes_k.shape[0])
-            y = y_encoded
+            # TODO: Faudra aussi remettre ca
+            # y_encoded = np.zeros(y.shape, dtype=int)
+            #
+            # for k in range(self.n_outputs_):
+            #     classes_k, y_encoded[:, k] = np.unique(y[:, k], return_inverse=True)
+            #     self.classes_.append(classes_k)
+            #     self.n_classes_.append(classes_k.shape[0])
+            # y = y_encoded
 
             # if self.class_weight is not None:
             #     expanded_class_weight = compute_sample_weight(
@@ -244,8 +248,8 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
 
             self.n_classes_ = np.array(self.n_classes_, dtype=np.intp)
 
-        if getattr(y, "dtype", None) != DOUBLE or not y.flags.contiguous:
-            y = np.ascontiguousarray(y, dtype=DOUBLE)
+        if getattr(y, "dtype", None) != np_float32 or not y.flags.contiguous:
+            y = np.ascontiguousarray(y, dtype=np_float32)
 
         # Check parameters
         max_depth = np.iinfo(np.int32).max if self.max_depth is None else self.max_depth
@@ -392,34 +396,51 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
         print(y)
         print(train_indices)
         print(valid_indices)
-        print(sample_weight_train)
-        print(sample_weight_valid)
-
+        print(sample_weights)
 
         # Faut coder un grower d'arbre...
 
         # for k in range(self.n_trees_per_iteration_):
-        grower = TreeGrower(
+
+        # print("n_classes_[0]: ", self.n_classes_[0])
+
+        # TODO: Faudra changer le self.n_classes_ a terme
+        # n_classes = self.n_classes_[0]
+        n_classes = 2
+        max_bins = 255
+        # TODO: on obtiendra cette info via le binner qui est dans la foret
+        n_samples, n_features = X.shape
+        n_bins_per_feature = max_bins * np.ones(n_features)
+        n_bins_per_feature = n_bins_per_feature.astype(np_uint8)
+
+
+
+        print(y.flags)
+        print("y.dtype: ", y.dtype)
+
+        print("train_indices.flags: ", train_indices.flags)
+
+        print("train_indices.dtypes: ", train_indices.dtype)
+
+        context = Context(
             X,
             y,
+            sample_weights,
             train_indices,
             valid_indices,
-            sample_weight_train,
-            sample_weight_valid,
-            # TODO: pass an array with the actual number of bins ? Comment ils gerent
-            #  ca dans HistGradientBoosting ?
-            # n_bins=n_bins,
-            n_bins=255
-            # TODO: remettre toutes ces options plus tard
-            # n_bins_non_missing=self._bin_mapper.n_bins_non_missing_,
-            # has_missing_values=has_missing_values,
-            # is_categorical=self.is_categorical_,
-            # max_leaf_nodes=self.max_leaf_nodes,
-            # max_depth=self.max_depth,
-            # min_samples_leaf=self.min_samples_leaf,
-            # shrinkage=self.learning_rate
+            n_classes,
+            max_bins,
+            n_bins_per_feature,
+            max_features,
         )
-        grower.grow()
+
+        # TODO: j'en suis ICI ICI ICI ICI 2021 / 01 / 15 faut creer ici le tree numba
+        #  et le passer a cette fonction, verifier le calcul des splits, gerer la
+        #  croissance de l'arbre et gerer partition_train et partition_valid et ca
+        #  devrait etre bon !
+
+        # On ne peut pas passer self a grow car self est une classe python...
+        grow(context)
 
         # X,
         # y,
@@ -428,7 +449,6 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
         # sample_weight_train,
         # sample_weight_valid,
         # check_input = False,
-
 
         # criterion = self.criterion
 
@@ -513,12 +533,11 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
         # TODO: on ne prune pas, quelle drole d'idee !!!
         return self
 
-
     def _validate_X_predict(self, X, check_input):
         """Validate the training data on predict (probabilities)."""
         if check_input:
 
-            X = check_array(X, accept_sparse="csr", dtype=DTYPE)
+            X = check_array(X, accept_sparse="csr", dtype=np_float32)
             # X = self._validate_data(X, dtype=DTYPE, accept_sparse="csr",
             #                         reset=False)
             if issparse(X) and (
@@ -1049,14 +1068,7 @@ class TreeBinaryClassifier(ClassifierMixin, TreeBase):
         )
 
     def fit(
-        self,
-        X,
-        y,
-        train_indices,
-        valid_indices,
-        sample_weight_train,
-        sample_weight_valid,
-        check_input=False,
+        self, X, y, train_indices, valid_indices, sample_weights, check_input=False,
     ):
 
         """Build a decision tree classifier from the training set (X, y).
@@ -1095,14 +1107,7 @@ class TreeBinaryClassifier(ClassifierMixin, TreeBase):
         """
 
         TreeBase.fit(
-            self,
-            X,
-            y,
-            train_indices,
-            valid_indices,
-            sample_weight_train,
-            sample_weight_valid,
-            check_input,
+            self, X, y, train_indices, valid_indices, sample_weights, check_input,
         )
         return self
 

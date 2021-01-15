@@ -40,17 +40,17 @@ from sklearn.utils.validation import _deprecate_positional_args
 from numba import _helperlib
 
 # from ._criterion import Criterion
-from ._splitter import BestSplitter
-from ._tree_old import DepthFirstTreeBuilder
+# from ._splitter import BestSplitter
+# from ._tree_old import DepthFirstTreeBuilder
 
 from . import _tree_old
 
 # from ._tree import BestFirstTreeBuilder
-from ._tree_old import Tree
+# from ._tree_old import Tree
 
 # from ._tree import _build_pruned_tree_ccp
 # from ._tree import ccp_pruning_path
-from . import _tree_old, _splitter, _criterion, _utils
+# from . import _tree_old, _splitter, _criterion, _utils
 
 __all__ = [
     "DecisionTreeClassifier",
