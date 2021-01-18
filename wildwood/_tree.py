@@ -57,7 +57,11 @@ np_node_record = np.dtype(spec_node_record)
 nb_node_record = from_dtype(np_node_record)
 
 
-spec_records = [("capacity", nb_size_t), ("top", nb_size_t), ("stack_", nb_node_record[::1])]
+spec_records = [
+    ("capacity", nb_size_t),
+    ("top", nb_size_t),
+    ("stack_", nb_node_record[::1]),
+]
 
 
 @jitclass(spec_records)
@@ -81,21 +85,28 @@ class Records(object):
 
     def __init__(self, capacity):
         self.capacity = capacity
-        self.top = 0
+        self.top = nb_size_t(0)
         self.stack_ = np.empty(capacity, dtype=np_node_record)
 
 
 @njit
 def push_node_record(
-    records, start_train, end_train, start_valid, end_valid, depth, parent, is_left,
-        impurity,
-        n_constant_features
+    records,
+    start_train,
+    end_train,
+    start_valid,
+    end_valid,
+    depth,
+    parent,
+    is_left,
+    impurity,
+    n_constant_features,
 ):
     top = records.top
     stack_ = records.stack_
     # Resize the stack if capacity is not enough
     if top >= records.capacity:
-        records.capacity = 2 * records.capacity
+        records.capacity = nb_size_t(2 * records.capacity)
         records.stack_ = resize(stack_, records.capacity)
 
     stack_top = records.stack_[top]
@@ -110,20 +121,25 @@ def push_node_record(
     stack_top["n_constant_features"] = n_constant_features
 
     # We have one more record in the stack
-    records.top = top + 1
+    records.top = top + nb_size_t(1)
 
 
 @njit
 def has_records(records):
-    return records.top <= 0
+    # print("records.top: ", records.top)
+    return records.top <= nb_size_t(0)
 
 
 @njit
 def pop_node_record(stack):
     top = stack.top
     stack_ = stack.stack_
-    stack_record = stack_[top - 1]
-    stack.top = top - 1
+    # print("top: ", top)
+    # print("stack_: ", stack_)
+    # print("top - 1", top-1)
+    stack_record = stack_[np_size_t(top - 1)]
+    stack.top = nb_size_t(top - 1)
+    # print("stack.top: ", stack.top)
     return stack_record
 
 
@@ -166,18 +182,20 @@ spec_node_tree = [
 ]
 
 
-np_node_tree = np.dtype([
-    ("left_child", np_ssize_t),
-    ("right_child", np_ssize_t),
-    ("feature", np_ssize_t),
-    ("threshold", np_float32),
-    ("bin_threshold", np_uint8),
-    ("impurity", np_float32),
-    ("n_samples_train", np_size_t),
-    ("n_samples_valid", np_size_t),
-    ("weighted_n_samples_train", np_float32),
-    ("weighted_n_samples_valid", np_float32),
-])
+np_node_tree = np.dtype(
+    [
+        ("left_child", np_ssize_t),
+        ("right_child", np_ssize_t),
+        ("feature", np_ssize_t),
+        ("threshold", np_float32),
+        ("bin_threshold", np_uint8),
+        ("impurity", np_float32),
+        ("n_samples_train", np_size_t),
+        ("n_samples_valid", np_size_t),
+        ("weighted_n_samples_train", np_float32),
+        ("weighted_n_samples_valid", np_float32),
+    ]
+)
 
 nb_node_tree = numba.from_dtype(np_node_tree)
 
@@ -249,7 +267,6 @@ def get_node_tree(nodes, idx):
 
 @jitclass(spec_node_tree)
 class NodeTree(object):
-
     def __init__(
         self,
         left_child,
@@ -261,7 +278,7 @@ class NodeTree(object):
         n_samples_train,
         n_samples_valid,
         weighted_n_samples_train,
-        weighted_n_samples_valid
+        weighted_n_samples_valid,
     ):
         self.left_child = left_child
         self.right_child = right_child
@@ -443,6 +460,36 @@ class NodeTree(object):
 #
 # # Some handy constants (BestFirstTreeBuilder)
 
+
+@njit
+def print_node_tree(node):
+    left_child = node["left_child"]
+    right_child = node["right_child"]
+    feature = node["feature"]
+    threshold = node["threshold"]
+    bin_threshold = node["bin_threshold"]
+    impurity = node["impurity"]
+
+    n_samples_train = node["n_samples_train"]
+    n_samples_valid = node["n_samples_valid"]
+    weighted_n_samples_train = node["weighted_n_samples_train"]
+    weighted_n_samples_valid = node["weighted_n_samples_valid"]
+
+    s = "Node(left_child: {left_child}".format(left_child=left_child)
+    s += ", right_child: {right_child}".format(right_child=right_child)
+    s += ", feature: {feature}:".format(feature=feature)
+    s += ", bin_threshold: {bin_threshold}".format(bin_threshold=bin_threshold)
+    s += ", n_samples_train: {n_samples_train}".format(n_samples_train=n_samples_train)
+    s += ", n_samples_valid: {n_samples_valid}".format(n_samples_valid=n_samples_valid)
+    s += ", weighted_n_samples_train: {weighted_n_samples_train}".format(
+        weighted_n_samples_train=weighted_n_samples_train
+    )
+    # s += ", weighted_n_samples_valid: {weighted_n_samples_valid}:".format(
+    #     weighted_n_samples_valid=weighted_n_samples_valid
+    # )
+    print(s)
+
+
 IS_FIRST = 1
 IS_NOT_FIRST = 0
 IS_LEFT = 1
@@ -489,14 +536,24 @@ class Tree(object):
         self.y_pred = np.empty((0, self.n_classes), dtype=np_float32)
 
 
+@njit
+def print_nodes(tree):
+    for node in tree.nodes:
+        print_node_tree(node)
+
+
+@njit
 def print_tree(tree):
-    s = "Tree("
+    s = "-" * 64 + "\n"
+    s += "Tree("
     s += "n_features={n_features}".format(n_features=tree.n_features)
     s += ", n_classes={n_classes}".format(n_classes=tree.n_classes)
     s += ", capacity={capacity}".format(capacity=tree.capacity)
     s += ", node_count={node_count}".format(node_count=tree.node_count)
     s += ")"
     print(s)
+    if tree.node_count > 0:
+        print_nodes(tree)
 
 
 def get_nodes(tree):
@@ -516,7 +573,6 @@ def get_nodes(tree):
     )
 
 
-
 @njit
 def add_node_tree(
     tree,
@@ -530,7 +586,7 @@ def add_node_tree(
     n_samples_train,
     n_samples_valid,
     weighted_n_samples_train,
-    weighted_n_samples_valid
+    weighted_n_samples_valid,
 ):
     # New node index is given by the current number of nodes in the tree
     node_idx = tree.node_count
@@ -572,7 +628,6 @@ def add_node_tree(
     tree.node_count += 1
 
     return node_idx
-
 
 
 @njit

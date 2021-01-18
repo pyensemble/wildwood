@@ -30,404 +30,13 @@ from ._tree import (
     push_node_record,
     pop_node_record,
     has_records,
+    print_tree,
     TREE_UNDEFINED,
 )
 from ._utils import njit, infinity, nb_size_t
 
 
-# from .predictor import TreePredictor, PREDICTOR_RECORD_DTYPE
 
-#
-# class TreeNode:
-#     """Tree Node class used in TreeGrower.
-#
-#     This isn't used for prediction purposes, only for training (see
-#     TreePredictor).
-#
-#     Parameters
-#     ----------
-#     depth : int
-#         The depth of the node, i.e. its distance from the root
-#     samples_indices : array of int
-#         The indices of the samples at the node
-#     sum_gradients : float
-#         The sum of the gradients of the samples at the node
-#     sum_hessians : float
-#         The sum of the hessians of the samples at the node
-#     parent : TreeNode or None, optional(default=None)
-#         The parent of the node. None for root.
-#
-#     Attributes
-#     ----------
-#     depth : int
-#         The depth of the node, i.e. its distance from the root
-#     samples_indices : array of int
-#         The indices of the samples at the node
-#     sum_gradients : float
-#         The sum of the gradients of the samples at the node
-#     sum_hessians : float
-#         The sum of the hessians of the samples at the node
-#     parent : TreeNode or None, optional(default=None)
-#         The parent of the node. None for root.
-#     split_info : SplitInfo or None
-#         The result of the split evaluation
-#     left_child : TreeNode or None
-#         The left child of the node. None for leaves.
-#     right_child : TreeNode or None
-#         The right child of the node. None for leaves.
-#     value : float or None
-#         The value of the leaf, as computed in finalize_leaf(). None for
-#         non-leaf nodes
-#     find_split_time : float
-#         The total time spent computing the histogram and finding the best
-#         split at the node.
-#     construction_speed : float
-#         The Number of samples at the node divided find_split_time.
-#     apply_split_time : float
-#         The total time spent actually splitting the node, e.g. splitting
-#         samples_indices into left and right child.
-#     hist_subtraction : bool
-#         Wheter the subtraction method was used for computing the histograms.
-#     """
-#
-#     split_info = None
-#     left_child = None
-#     right_child = None
-#     value = None
-#     histograms = None
-#     sibling = None
-#     parent = None
-#     find_split_time = 0.0
-#     construction_speed = 0.0
-#     apply_split_time = 0.0
-#     hist_subtraction = False
-#
-#     def __init__(self, depth, sample_indices, sum_gradients, sum_hessians, parent=None):
-#         self.depth = depth
-#         self.sample_indices = sample_indices
-#         self.n_samples = sample_indices.shape[0]
-#         self.sum_gradients = sum_gradients
-#         self.sum_hessians = sum_hessians
-#         self.parent = parent
-#
-#     def __repr__(self):
-#         # To help with debugging
-#         out = f"TreeNode: depth={self.depth}, "
-#         out += f"samples={len(self.sample_indices)}"
-#         if self.split_info is not None:
-#             out += f", feature_idx={self.split_info.feature_idx}"
-#             out += f", bin_idx={self.split_info.bin_idx}"
-#         return out
-#
-#     def __lt__(self, other_node):
-#         """Comparison for priority queue.
-#
-#         Nodes with high gain are higher priority than nodes with low gain.
-#
-#         heapq.heappush only need the '<' operator.
-#         heapq.heappop take the smallest item first (smaller is higher
-#         priority).
-#
-#         Parameters
-#         -----------
-#         other_node : TreeNode
-#             The node to compare with.
-#         """
-#         if self.split_info is None or other_node.split_info is None:
-#             raise ValueError("Cannot compare nodes with split_info")
-#         return self.split_info.gain > other_node.split_info.gain
-
-
-# # =============================================================================
-# # TreeBuilder
-# # =============================================================================
-#
-# cdef class TreeBuilder:
-#     """Interface for different tree building strategies."""
-#
-#     cpdef build(self, Tree tree, object X, np.ndarray y,
-#                 np.ndarray sample_weight=None):
-#         """Build a decision tree from the training set (X, y)."""
-#         pass
-#
-
-#
-# # Depth first builder ---------------------------------------------------------
-
-# @jitclass(spec_tree_builder)
-# class DepthFirstTreeBuilder(object):
-#     # cdef class DepthFirstTreeBuilder(TreeBuilder):
-#     #     """Build a decision tree in depth-first fashion."""
-#
-#     def __init__(
-#         self,
-#         splitter,
-#         min_samples_split,
-#         min_samples_leaf,
-#         min_weight_leaf,
-#         max_depth,
-#         min_impurity_decrease,
-#         min_impurity_split,
-#     ):
-#         #     def __cinit__(self, Splitter splitter, SIZE_t min_samples_split,
-#         #                   SIZE_t min_samples_leaf, double min_weight_leaf,
-#         #                   SIZE_t max_depth, double min_impurity_decrease,
-#         #                   double min_impurity_split):
-#         #         self.splitter = splitter
-#         #         self.min_samples_split = min_samples_split
-#         #         self.min_samples_leaf = min_samples_leaf
-#         #         self.min_weight_leaf = min_weight_leaf
-#         #         self.max_depth = max_depth
-#         #         self.min_impurity_decrease = min_impurity_decrease
-#         #         self.min_impurity_split = min_impurity_split
-#
-#         self.splitter = splitter
-#         self.min_samples_split = min_samples_split
-#         self.min_samples_leaf = min_samples_leaf
-#         self.min_weight_leaf = min_weight_leaf
-#         self.max_depth = max_depth
-#         self.min_impurity_decrease = min_impurity_decrease
-#         self.min_impurity_split = min_impurity_split
-#
-#
-# @njit
-# def depth_first_tree_builder_build(builder, tree, X, y, sample_weight, X_idx_sort):
-#     """Build a decision tree from the training set (X, y)."""
-#
-#     # check input
-#     # TODO: faudra remettre ca
-#     # X, y, sample_weight = builder._check_input(X, y, sample_weight)
-#
-#     # This is the output split
-#     split = SplitRecord()
-#
-#     if tree.max_depth <= 10:
-#         init_capacity = (2 ** (tree.max_depth + 1)) - 1
-#     else:
-#         init_capacity = 2047
-#
-#     # print("tree.max_depth: ", tree.max_depth)
-#
-#     # tree._resize(init_capacity)
-#     # print("In depth_first_tree_builder_build calling tree_resize with init_capacity: "
-#     #       "", init_capacity)
-#     tree_resize(tree, init_capacity)
-#
-#     # Parameters
-#     splitter = builder.splitter
-#     max_depth = builder.max_depth
-#     min_samples_leaf = builder.min_samples_leaf
-#     min_weight_leaf = builder.min_weight_leaf
-#     min_samples_split = builder.min_samples_split
-#     min_impurity_decrease = builder.min_impurity_decrease
-#     min_impurity_split = builder.min_impurity_split
-#
-#     # Recursive partition (without actual recursion)
-#     # splitter.init(X, y, sample_weight_ptr)
-#
-#     best_splitter_init(splitter, X, y, sample_weight)
-#     # splitter_init(splitter, X, y, sample_weight)
-#
-#     # cdef SIZE_t start
-#     # cdef SIZE_t end
-#     # cdef SIZE_t depth
-#     # cdef SIZE_t parent
-#     # cdef bint is_left
-#     # cdef SIZE_t n_node_samples = splitter.n_samples
-#     n_node_samples = splitter.n_samples
-#     # cdef double weighted_n_samples = splitter.weighted_n_samples
-#     weighted_n_samples = splitter.weighted_n_samples
-#     # cdef double weighted_n_node_samples
-#     # cdef SplitRecord split
-#     # cdef SIZE_t node_id
-#
-#     # cdef double impurity = INFINITY
-#     impurity = INFINITY
-#
-#     # cdef SIZE_t n_constant_features
-#     # cdef bint is_leaf
-#     # cdef bint first = 1
-#     first = True
-#     # cdef SIZE_t max_depth_seen = -1
-#     max_depth_seen = -1
-#     # cdef int rc = 0
-#     rc = 0
-#
-#     stack = Stack(INITIAL_STACK_SIZE)
-#     # cdef StackRecord stack_record
-#
-#     # with nogil:
-#     # push root node onto stack
-#     # rc = stack.push(0, n_node_samples, 0, _TREE_UNDEFINED, 0, INFINITY, 0)
-#
-#     rc = stack_push(stack, 0, n_node_samples, 0, TREE_UNDEFINED, 0, INFINITY, 0)
-#
-#     # if rc == -1:
-#     #     # got return code -1 - out-of-memory
-#     #     with gil:
-#     #         raise MemoryError()
-#
-#     while not stack_is_empty(stack):
-#         stack_record = stack_pop(stack)
-#         # start = stack_record.start
-#         # end = stack_record.end
-#         # depth = stack_record.depth
-#         # parent = stack_record.parent
-#         # is_left = stack_record.is_left
-#         # impurity = stack_record.impurity
-#         # n_constant_features = stack_record.n_constant_features
-#         start = stack_record["start"]
-#         end = stack_record["end"]
-#         depth = stack_record["depth"]
-#         parent = stack_record["parent"]
-#         is_left = stack_record["is_left"]
-#         impurity = stack_record["impurity"]
-#         n_constant_features = stack_record["n_constant_features"]
-#
-#         n_node_samples = end - start
-#         # splitter.node_reset(start, end, &weighted_n_node_samples)
-#         weighted_n_node_samples = splitter_node_reset(splitter, start, end)
-#
-#         is_leaf = (
-#             depth >= max_depth
-#             or n_node_samples < min_samples_split
-#             or n_node_samples < 2 * min_samples_leaf
-#             or weighted_n_node_samples < 2 * min_weight_leaf
-#         )
-#
-#         if first:
-#
-#             # TODO: some other way, only for gini here
-#             # impurity = splitter.node_impurity()
-#             # dans le code d'origine y'a splitter.node_impurity qui appelle
-#             # self.criterion
-#
-#             # impurity = gini_node_impurity(splitter.criterion)
-#
-#             impurity = gini_node_impurity(
-#                 tree.n_outputs,
-#                 tree.n_classes,
-#                 splitter.criterion.sum_total,
-#                 splitter.criterion.weighted_n_node_samples,
-#             )
-#
-#             first = False
-#
-#         # print("impurity: ", impurity)
-#         # print("min_impurity_split: ", min_impurity_split)
-#         is_leaf = is_leaf or (impurity <= min_impurity_split)
-#
-#         # print("is_leaf: ", is_leaf)
-#         if not is_leaf:
-#             # splitter.node_split(impurity, &split, &n_constant_features)
-#
-#             # TODO: Hmmm y'a un truc qui ne va pas là ! je suis censé renvoyer best,
-#             #  n_constant_features et les deux derniers arguments ne sont pas utlisés
-#             # best_splitter_node_split(splitter, impurity, split, n_constant_features)
-#             split, n_total_constants = best_splitter_node_split(
-#                 splitter, impurity, n_constant_features, X_idx_sort
-#             )
-#
-#             # If EPSILON=0 in the below comparison, float precision
-#             # issues stop splitting, producing trees that are
-#             # dissimilar to v0.18
-#             is_leaf = (
-#                 is_leaf
-#                 or split.pos >= end
-#                 or (split.improvement + EPSILON < min_impurity_decrease)
-#             )
-#
-#         node_id = tree_add_node(
-#             tree,
-#             parent,
-#             is_left,
-#             is_leaf,
-#             split.feature,
-#             split.threshold,
-#             impurity,
-#             n_node_samples,
-#             weighted_n_node_samples,
-#         )
-#
-#         # node_id = tree._add_node(parent, is_left, is_leaf, split.feature,
-#         #                          split.threshold, impurity, n_node_samples,
-#         #                          weighted_n_node_samples)
-#
-#         if node_id == SIZE_MAX:
-#             rc = -1
-#             break
-#
-#         # Store value for all nodes, to facilitate tree/model
-#         # inspection and interpretation
-#         # TODO oui c'est important ca permet de calculer les predictions...
-#
-#         # splitter_node_value(splitter, tree.values, node_id)
-#
-#         tree.values[node_id, :, :] = splitter.criterion.sum_total
-#         # splitter.criterion.sum_total
-#         # # #
-#         # #     sum_total = criterion.sum_total
-#         #     dest[node_id, :, :] = sum_total
-#
-#         # splitter_node_value(splitter, tree.value + node_id * tree.value_stride)
-#
-#         # splitter.node_value(tree.value + node_id * tree.value_stride)
-#
-#         if not is_leaf:
-#             # Push right child on stack
-#             # rc = stack.push(split.pos, end, depth + 1, node_id, 0,
-#             #                 split.impurity_right, n_constant_features)
-#
-#             #     stack, start, end, depth, parent, is_left, impurity, n_constant_features
-#             rc = stack_push(
-#                 stack,
-#                 split.pos,
-#                 end,
-#                 depth + 1,
-#                 node_id,
-#                 0,
-#                 split.impurity_right,
-#                 n_constant_features,
-#             )
-#
-#             if rc == -1:
-#                 break
-#
-#             # Push left child on stack
-#             rc = stack_push(
-#                 stack,
-#                 start,
-#                 split.pos,
-#                 depth + 1,
-#                 node_id,
-#                 1,
-#                 split.impurity_left,
-#                 n_constant_features,
-#             )
-#             if rc == -1:
-#                 break
-#
-#         if depth > max_depth_seen:
-#             max_depth_seen = depth
-#
-#     if rc >= 0:
-#         # print("In depth_first_tree_builder_build calling tree_resize "
-#         #       "with tree.node_count: ", tree.node_count)
-#         rc = tree_resize(tree, tree.node_count)
-#         # rc = tree._resize_c(tree.node_count)
-#
-#     if rc >= 0:
-#         tree.max_depth = max_depth_seen
-#
-#     # TODO: ca ne sert a rien et c'est merdique
-#     if rc == -1:
-#         raise MemoryError()
-
-
-# TODO: coder the TreeGrower en reprenant le code commente au dessus
-
-
-# TODO: euh pourquoi c'est 10 et pas autre chose ?!?
 INITIAL_STACK_SIZE = nb_size_t(10)
 
 
@@ -435,7 +44,7 @@ INITIAL_STACK_SIZE = nb_size_t(10)
 def grow(tree, tree_context, node_context):
 
 
-    print("inside grow")
+    # print("inside grow")
 
     # This is the output split
     if tree.max_depth <= 10:
@@ -447,33 +56,13 @@ def grow(tree, tree_context, node_context):
 
     # TODO: get back parameters from the tree
     # TODO: decide a posteriori what goes into SplittingContext and Tree ?
-    # Parameter
-    # splitter = builder.splitter
-    # max_depth = builder.max_depth
-    # min_samples_leaf = builder.min_samples_leaf
-    # min_weight_leaf = builder.min_weight_leaf
-    # min_samples_split = builder.min_samples_split
-    # min_impurity_decrease = builder.min_impurity_decrease
-    # min_impurity_split = builder.min_impurity_split
-    # n_samples_train, n_features = X.shape
-    # Number of training samples in the current node, for now it's root
-    # n_samples_valid = sample_weight_valid.shape[0]
-    # weighted_n_samples_train = sample_weight_train.sum()
-    # sample_weight_valid = sample_weight_valid.sum()
-    # cdef double weighted_n_node_samples
-    # cdef SplitRecord split
-    # cdef SIZE_t node_id
-    # cdef SIZE_t n_constant_features
-    # cdef bint is_leaf
-    # cdef bint first = 1
+
+
 
     # TODO: creer un local_context ici
 
     n_samples_train = tree_context.n_samples_train
     n_samples_valid = tree_context.n_samples_valid
-
-    # train_indices = tree_context.train_indices
-    # valid_indices = tree_context.valid_indices
 
     max_depth_seen = -1
 
@@ -521,9 +110,16 @@ def grow(tree, tree_context, node_context):
     min_samples_split = 2
 
     while not has_records(records):
+
+        # print("records.top: ", records.top)
         node_record = pop_node_record(records)
+        # print("records.top: ", records.top)
+
         # Initialize the node context, this computes the node statistics
         init_node_context(tree_context, node_context, node_record)
+
+        # print("node_context.n_samples_train: ", node_context.n_samples_train)
+        # print("node_context.n_samples_valid: ", node_context.n_samples_valid)
 
         # start_train = node_record["start_train"]
         # end_train = node_record["end_train"]
@@ -554,6 +150,8 @@ def grow(tree, tree_context, node_context):
         is_leaf = (node_context.n_samples_train < min_samples_split) or (
             node_context.n_samples_valid < min_samples_split
         )
+
+        # print("is_leaf: ", is_leaf)
 
         # TODO: mais apres si le n_samples_train_node ou le n_samples_valid_node de
         #  l'un des deux enfants est nul, on fera en fait pas le split
@@ -615,7 +213,7 @@ def grow(tree, tree_context, node_context):
 
         # TODO: on met un threshold a la con ici
         threshold = 0.42
-        n_samples_node = 42
+        # n_samples_node = 42
         # weighted_n_node_samples = 42.0
 
         weighted_n_samples_valid = 42.0
@@ -639,6 +237,8 @@ def grow(tree, tree_context, node_context):
             weighted_n_samples_valid
         )
 
+        print_tree(tree)
+
         # TODO: remettre le y_sum correct
 
         tree.y_pred[node_id, :] = node_context.y_pred
@@ -652,6 +252,7 @@ def grow(tree, tree_context, node_context):
 
         # splitter.node_value(tree.value + node_id * tree.value_stride)
 
+        print("is_leaf: ", is_leaf)
         if not is_leaf:
             # If it's not a lead then we need to add both childs in the node record,
             # so that they can be added in the tree and eventually splitted later.
@@ -692,6 +293,7 @@ def grow(tree, tree_context, node_context):
         # TODO: on nse servira de ca plus tard
         if depth > max_depth_seen:
             max_depth_seen = depth
+
 
     # TODO: put back this crap
     # if rc >= 0:

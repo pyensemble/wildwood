@@ -276,12 +276,12 @@ def init_node_context(tree_context, node_context, node_record):
             sample_weight = sample_weights[sample]
             if f == 0:
                 weighted_n_samples_train += sample_weight
-                print("label: ", label)
-                print("y_pred: ", y_pred)
+                # print("label: ", label)
+                # print("y_pred: ", y_pred)
                 y_pred[label] += sample_weight
             # One more sample in this bin for the current feature
-            print("f: ", f, ", bin: ", bin)
-            print("n_samples_in_bins: ", n_samples_in_bins)
+            # print("f: ", f, ", bin: ", bin)
+            # print("n_samples_in_bins: ", n_samples_in_bins)
             n_samples_in_bins[f, bin] += sample_weight
             # One more sample in this bin for the current feature with this label
             y_sum[f, bin, label] += sample_weight
@@ -404,6 +404,9 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
     # n_bins = context.n_bins_per_feature[feature]
     # n_bins = 255
 
+    # TODO: c'est le gros bordel car le n_samples_train et n_samples_in_bins ici
+    #  c'est en fait des weighted_n_samples donc ca fait n'importe quoi !
+
     n_classes = tree_context.n_classes
     n_bins = tree_context.max_bins
 
@@ -414,9 +417,12 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
     # Get the sum of labels (counts) in each bin for the feature
     y_sum_in_bins = node_context.y_sum[feature]
 
+    # print("n_samples_in_bins: ", n_samples_in_bins)
+    # print("y_sum_in_bins: ", y_sum_in_bins)
+
     # TODO: faudra que les vecteurs left et right soient dans le local_context
     # Counts on the left are zero, since we go from left to right
-    n_samples_left = 0
+    n_samples_left = nb_size_t(0)
     y_sum_left = np.zeros(n_classes, dtype=np_float32)
     # Count on the right contain everything
     n_samples_right = n_samples_train
@@ -430,6 +436,10 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
     # TODO: this works only for ordered features... special sorting for categorical
     # We go from left to right and compute the information gain proxy of all possible
     # splits
+
+    print("=" * 64)
+    print("n_samples_train: ", n_samples_train)
+    print("n_samples_in_bins: ", n_samples_in_bins)
     for bin in range(n_bins):
         # On the left we accumulate the counts
         n_samples_left += n_samples_in_bins[bin]
@@ -437,6 +447,10 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
         # And we get the counts on the right from the left
         n_samples_right -= n_samples_in_bins[bin]
         y_sum_right -= y_sum_in_bins[bin]
+
+        print("bin: ", bin)
+        print("n_samples_in_bins[bin]: ", n_samples_in_bins[bin])
+        print("n_samples_left: ", n_samples_left, "n_samples_right: ", n_samples_right)
 
         # Compute the information gain proxy
         gain_proxy = information_gain_proxy(
@@ -503,7 +517,7 @@ def split_indices(tree_context, split, node_record):
     # TODO: c'est bourrin et peut etre pas optimal mais ca suffira pour l'instant
     n_samples_train_left = nb_size_t(0)
     n_samples_train_right = nb_size_t(0)
-    for i in partition_train:
+    for i in partition_train[start_train:end_train]:
         if Xf[i] <= bin:
             left_buffer[n_samples_train_left] = i
             n_samples_train_left += nb_size_t(1)
@@ -511,14 +525,14 @@ def split_indices(tree_context, split, node_record):
             right_buffer[n_samples_train_right] = i
             n_samples_train_right += nb_size_t(1)
 
-    print("start_train: ", start_train, ", n_samples_train_left: ",
-          n_samples_train_left, ", n_samples_train_right: ", n_samples_train_right,
-          ", end_train: ", end_train)
+    # print("start_train: ", start_train, ", n_samples_train_left: ",
+    #       n_samples_train_left, ", n_samples_train_right: ", n_samples_train_right,
+    #       ", end_train: ", end_train)
 
 
-    print("partition_train[start_train:end_train]: ", partition_train[start_train:end_train])
-    print("left_buffer[:n_samples_train_left]: ", left_buffer[:n_samples_train_left])
-    print("right_buffer[:n_samples_train_right]: ", right_buffer[:n_samples_train_right])
+    # print("partition_train[start_train:end_train]: ", partition_train[start_train:end_train])
+    # print("left_buffer[:n_samples_train_left]: ", left_buffer[:n_samples_train_left])
+    # print("right_buffer[:n_samples_train_right]: ", right_buffer[:n_samples_train_right])
 
     # start_train + n_samples_train_left + n_samples_train_right
 
@@ -531,7 +545,7 @@ def split_indices(tree_context, split, node_record):
 
     n_samples_valid_left = nb_size_t(0)
     n_samples_valid_right = nb_size_t(0)
-    for i in partition_valid:
+    for i in partition_valid[start_valid:end_valid]:
         if Xf[i] <= bin:
             left_buffer[n_samples_valid_left] = i
             n_samples_valid_left += nb_size_t(1)

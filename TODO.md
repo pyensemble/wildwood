@@ -2,6 +2,12 @@
 
 # TODO
 
+Bon la matiere est la, mais ca foire complement
+
+- Y'a un gros mic-mac entre les weighted_n_samples et n_samples partout ! Faut
+ comprendre ou on a besoin des n_samples, et ne garder que w_n_samples partout
+
+
 1. Coder le histogram binning
     X Nombre variable de modalités pour chaque feature 
     - Que de passe-t-il si on a une feature categorielle avec plus que 255 modalités ?
@@ -25,8 +31,6 @@
     - Faut balayer dans de la gauche vers la droite si pas de donnee manquante, et
      aussi de la droite vers la gauche si il y a des NA dans cette feature   
 
-
-4. Calcul des criteres d'impurety
 
 
 5. ERM et MOM
