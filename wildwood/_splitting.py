@@ -19,66 +19,72 @@ from ._utils import (
 
 from ._impurity import gini_childs, information_gain_proxy, information_gain
 
-#
 
-#
-# @jitclass(
-#     [
-#         ("gain", float32),
-#         ("feature_idx", uint32),
-#         ("bin_idx", uint8),
-#         ("n_samples_left", float32),  # float32 whenever samples_weights is used
-#         ("n_samples_right", float32),  # float32 whenever samples_weights is used
-#         # TODO: attention c'est que pour la classification
-#         ("y_count_left", float32[::1]),
-#         ("y_count_right", float32[::1]),
-#     ]
-# )
-# class SplitInfo:
-#     """Pure data class to store information about a potential split.
-#
-#     Parameters
-#     ----------
-#     gain : float32
-#         The gain of the split
-#     feature_idx : int
-#         The index of the feature to be split
-#     bin_idx : int
-#         The index of the bin on which the split is made
-#     n_samples_left : int
-#         The number of samples in the left child
-#     n_samples_right : int
-#         The number of samples in the right child
-#     y_count_left : array of int
-#         The number of samples for each label class in the left child
-#     y_count_right : array of int
-#         The number of samples for each label class in the right child
-#     """
-#
-#     def __init__(
-#         self,
-#         gain=-1.0,
-#         feature_idx=0,
-#         bin_idx=0,
-#         n_samples_left=0.0,
-#         n_samples_right=0.0,
-#         y_count_left=None,
-#         y_count_right=None,
-#     ):
-#         self.gain = gain
-#         self.feature_idx = feature_idx
-#         self.bin_idx = bin_idx
-#         self.n_samples_left = n_samples_left
-#         self.n_samples_right = n_samples_right
-#         if y_count_left is not None:
-#             self.n_samples_left = n_samples_left
-#         if y_count_right is not None:
-#             self.n_samples_right = n_samples_right
+# TODO: mettre aussi weighted_samples_left
+
+spec_split_info = [
+    ("gain_proxy", nb_float32),
+    ("feature", nb_size_t),
+    ("bin", nb_uint8),
+    ("n_samples_left", nb_size_t),
+    ("n_samples_right", nb_size_t),
+    ("weighted_samples_left", nb_float32),
+    ("weighted_samples_right", nb_float32),
+    ("y_sum_left", nb_float32[::1]),
+    ("y_sum_right", nb_float32[::1]),
+]
+
+
+@jitclass(spec_split_info)
+class SplitInfo(object):
+    """Pure data class to store information about a potential split.
+    """
+
+    def __init__(
+        self, n_classes,
+    ):
+        self.gain_proxy = -infinity
+        self.feature = 0
+        self.bin = 0
+        self.n_samples_left = 0
+        self.n_samples_right = 0
+        self.weighted_samples_left = 0.0
+        self.weighted_samples_right = 0
+        self.y_sum_left = np.empty(n_classes, dtype=np_float32)
+        self.y_sum_right = np.empty(n_classes, dtype=np_float32)
+
+
+@njit
+def copy_split(from_split, to_split):
+    to_split.gain_proxy = from_split.gain_proxy
+    to_split.feature = from_split.feature
+    to_split.bin = from_split.bin
+    to_split.n_samples_left = from_split.n_samples_left
+    to_split.n_samples_right = from_split.n_samples_right
+    to_split.weighted_samples_left = from_split.weighted_samples_left
+    to_split.weighted_samples_right = from_split.weighted_samples_right
+    to_split.y_sum_left[:] = from_split.y_sum_left
+    to_split.y_sum_right[:] = from_split.y_sum_right
+
+
+# @njit
+# def print_split(split):
+#     print("Split(gain_proxy=", split.gain_proxy)
+#     print("Split(gain_proxy=)", split.gain_proxy)
+#     split.gain_proxy = -infinity
+#     split.feature = 0
+#     split.bin = 0
+#     split.n_samples_left = 0
+#     split.n_samples_right = 0
+#     split.weighted_samples_left = 0.0
+#     split.weighted_samples_right = 0
+#     split.y_sum_left = np.empty(n_classes, dtype=np_float32)
+#     split.y_sum_right = np.empty(n_classes, dtype=np_float32)
 
 
 # A pure data class which contains global context information, such as the dataset,
 # training and validation indices, etc.
-spec_context = [
+spec_tree_context = [
     # The binned matrix of features
     ("X", nb_uint8[::1, :]),
     # The vector of labels
@@ -105,15 +111,19 @@ spec_context = [
     ("n_bins_per_feature", nb_uint8[::1]),
     # Maximum number of features to try for splitting
     ("max_features", nb_size_t),
-
+    ("partition_train", nb_size_t[::1]),
+    ("partition_valid", nb_size_t[::1]),
+    ("left_buffer", nb_size_t[::1]),
+    ("right_buffer", nb_size_t[::1]),
 ]
 
 
-@jitclass(spec_context)
-class Context:
+@jitclass(spec_tree_context)
+class TreeContext:
     """
     The splitting context holds all the useful data for splitting
     """
+
     def __init__(
         self,
         X,
@@ -124,7 +134,7 @@ class Context:
         n_classes,
         max_bins,
         n_bins_per_feature,
-        max_features
+        max_features,
     ):
         self.X = X
         self.y = y
@@ -136,39 +146,45 @@ class Context:
         self.train_indices = train_indices
         self.valid_indices = valid_indices
 
+        self.partition_train = train_indices.copy()
+        self.partition_valid = valid_indices.copy()
+
         n_samples, n_features = X.shape
         self.n_samples = n_samples
         self.n_features = n_features
         self.n_samples_train = train_indices.shape[0]
         self.n_samples_valid = valid_indices.shape[0]
 
+        # Two buffers used in the split_indices function
+        self.left_buffer = np.empty(n_samples, dtype=np_size_t)
+        self.right_buffer = np.empty(n_samples, dtype=np_size_t)
+
 
 # A local context which contains information for the split and local node data
-spec_local_context = [
-
+spec_node_context = [
     # Set of candidate features for splitting
     ("features", nb_size_t[::1]),
     # ("min_samples_leaf", uint32),
     # ("min_gain_to_split", float32),
-
     # Number of training samples in each bin for each feature in the node
     ("n_samples_in_bins", nb_size_t[:, ::1]),
     # Histogram data, number of training samples in each bin for each feature and
     # each label class in the node
-    ("y_sum_in_bins", nb_float32[:, :, ::1]),
-
+    ("y_sum", nb_float32[:, :, ::1]),
+    # Sum of the label for each class
+    ("y_pred", nb_float32[::1]),
     # Total number of samples in the node
     ("n_samples", nb_size_t),
     # Number of training samples in the node
     ("n_samples_train", nb_size_t),
+    # Weighted number of samples in the node
+    ("weighted_n_samples_train", nb_float32),
     # Number of validation samples in the node
     ("n_samples_valid", nb_size_t),
-
     # context.partition_train[start_train:end_train] contains the training sample
     # indices in the node
     ("start_train", nb_size_t),
     ("end_train", nb_size_t),
-
     # context.partition_valid[start_valid:end_valid] contains the validation sample
     # indices in the node
     ("start_valid", nb_size_t),
@@ -176,72 +192,159 @@ spec_local_context = [
 ]
 
 
-@jitclass(spec_local_context)
-class LocalContext:
-    """
-    The splitting context holds all the useful data for splitting
-    """
+@jitclass(spec_node_context)
+class NodeContext:
     def __init__(
         self,
         context,
         # TODO: features a tirer au hasard plus tard
         # features
     ):
-        self.features = np.arange(0, context.n_features, dtype=np_uint32)
+        self.features = np.arange(0, context.n_features, dtype=np_size_t)
         max_features = context.max_features
         max_bins = context.max_bins
         n_classes = context.n_classes
         self.n_samples_in_bins = np.empty((max_features, max_bins), dtype=np_float32)
-        self.y_sum_in_bins = np.empty((max_features, max_bins, n_classes),
-                                      dtype=np_float32)
+        self.y_sum = np.empty((max_features, max_bins, n_classes), dtype=np_float32)
+        self.y_pred = np.empty((n_classes,), dtype=np_float32)
+
+
+# init_node_context ou update_node_context ?
 
 
 @njit
-def compute_bin_statistics(context, local_context):
+def init_node_context(tree_context, node_context, node_record):
     """
-    TODO: la strategie est bien en fait car les histogrammes sont petits comme en
-    principe on sous-echantillone les features
+    Initialize the node_context with the given node_record
+
+    Parameters
+    ----------
+    node_context
+    node_record
+
+    Returns
+    -------
 
     """
-    # TODO: c'est ici qu'on peut calculer quelles sont les features constantes dans
-    #  le node (si on trouve un bin avec toutes les features. Faudra faire attention
-    #  au cas avec missing values a terme
-    n_samples_in_bins = local_context.n_samples_in_bins
+    # TODO: initialize node_context.features with Fisher-Yates ?
+
+    start_train = node_record["start_train"]
+    end_train = node_record["end_train"]
+    start_valid = node_record["start_valid"]
+    end_valid = node_record["end_valid"]
+
+    # node_context.start_train = start_train
+    # node_context.end_train = end_train
+    # node_context.start_valid = start_valid
+    # node_context.end_valid = end_valid
+
+    # TODO: c'est utile node_context.n_samples ?
+
+    n_samples_in_bins = node_context.n_samples_in_bins
     n_samples_in_bins[:] = 0
-    y_sum_in_bins = local_context.y_sum_in_bins
-    y_sum_in_bins[:] = 0
+    y_sum = node_context.y_sum
+    y_sum[:] = 0
+    y_pred = node_context.y_pred
+    y_pred[:] = 0
 
-    X = context.X
-    y = context.y
-    sample_weights = context.sample_weights
-    features = local_context.features
+    # Get tree context information
+    X = tree_context.X
+    y = tree_context.y
+    sample_weights = tree_context.sample_weights
+    partition_train = tree_context.partition_train
+    features = node_context.features
 
     # Get the node training indices
-    train_indices = context.train_indices
-    start_train = local_context.start_train
-    end_train = local_context.end_train
-    samples = train_indices[start_train:end_train]
+    # start_train = node_context.start_train
+    # end_train = node_context.end_train
+
+    # The indices of the training samples contained in the node
+    samples = partition_train[start_train:end_train]
+
+    # For-loop on features and then samples (X is F-major) for cache hits
+    # TODO: unrolling this for loop could be faster
+
+    weighted_n_samples_train = nb_float32(0.0)
 
     # A counter for the features since return arrays are contiguous
-    f = nb_uint32(0)
-    # For-loop on features and then samples (X is F-major) for cache hits
+    f = nb_size_t(0)
+
     for feature in features:
         for sample in samples:
             bin = X[sample, feature]
             label = nb_size_t(y[sample])
             sample_weight = sample_weights[sample]
+            if f == 0:
+                weighted_n_samples_train += sample_weight
+                print("label: ", label)
+                print("y_pred: ", y_pred)
+                y_pred[label] += sample_weight
             # One more sample in this bin for the current feature
+            print("f: ", f, ", bin: ", bin)
+            print("n_samples_in_bins: ", n_samples_in_bins)
             n_samples_in_bins[f, bin] += sample_weight
             # One more sample in this bin for the current feature with this label
-            y_sum_in_bins[f, bin, label] += sample_weight
-        f += 1
+            y_sum[f, bin, label] += sample_weight
+
+        f += nb_size_t(1)
+
+    # Save everything in the node context
+
+    node_context.n_samples_train = end_train - start_train
+    node_context.n_samples_valid = end_valid - start_valid
+    node_context.weighted_n_samples_train = weighted_n_samples_train
+
+
+# @njit
+# def compute_node_context_statistics(tree_context, node_context):
+#     """
+#     TODO: la strategie est bien en fait car les histogrammes sont petits comme en
+#     principe on sous-echantillone les features
+#
+#     """
+#     # TODO: c'est ici qu'on peut calculer quelles sont les features constantes dans
+#     #  le node (si on trouve un bin avec toutes les features. Faudra faire attention
+#     #  au cas avec missing values a terme
+#     n_samples_in_bins = local_context.n_samples_in_bins
+#     n_samples_in_bins[:] = 0
+#     y_sum_in_bins = local_context.y_sum_in_bins
+#     y_sum_in_bins[:] = 0
+#
+#     node_context.n_samples_train = end_train - start_train
+#     node_context.n_samples_valid = end_valid - start_valid
+#
+#
+#     # Get tree context information
+#     X = context.X
+#     y = context.y
+#     sample_weights = context.sample_weights
+#     partition_train = context.partition_train
+#     features = local_context.features
+#
+#     # Get the node training indices
+#     train_indices = context.train_indices
+#     start_train = local_context.start_train
+#     end_train = local_context.end_train
+#
+#     samples = train_indices[start_train:end_train]
+#
+#     # A counter for the features since return arrays are contiguous
+#     f = nb_uint32(0)
+#     # For-loop on features and then samples (X is F-major) for cache hits
+#     for feature in features:
+#         for sample in samples:
+#             bin = X[sample, feature]
+#             label = nb_size_t(y[sample])
+#             sample_weight = sample_weights[sample]
+#             # One more sample in this bin for the current feature
+#             n_samples_in_bins[f, bin] += sample_weight
+#             # One more sample in this bin for the current feature with this label
+#             y_sum_in_bins[f, bin, label] += sample_weight
+#         f += 1
 
 
 @njit
-def find_node_split(context, local_context):
-
-    # Compute the bin statistics of the context
-    compute_bin_statistics(context, local_context)
+def find_node_split(tree_context, local_context):
 
     features = local_context.features
     # Loop over the possible features
@@ -252,31 +355,37 @@ def find_node_split(context, local_context):
     # split_infos = [SplitInfo(-1., 0, 0, 0., 0., 0., 0., 0, 0)
     #                for i in range(context.n_features)]
 
-    best_feature = 0
-    best_bin = 0
+    # best_feature = 0
+    # best_bin = 0
     best_gain_proxy = -infinity
+
+    # Ne les initialiser qu'une seule fois... donc en dehors d'ici ? Dans le
+    # local_context ?
+    best_split = SplitInfo(tree_context.n_classes)
+    candidate_split = SplitInfo(tree_context.n_classes)
 
     for feature in features:
         # Compute the best bin and gain proxy obtained for the feature
-        bin, gain_proxy = find_best_split_along_feature(context, local_context)
-        if gain_proxy > best_gain_proxy:
+        find_best_split_along_feature(
+            tree_context, local_context, feature, candidate_split
+        )
+        if candidate_split.gain_proxy > best_gain_proxy:
             # We've found a better split
-            best_feature = feature
-            best_bin = bin
-            best_gain_proxy = gain_proxy
+            copy_split(candidate_split, best_split)
+            best_gain_proxy = candidate_split.gain_proxy
 
-    # TODO: ici faut calculer le vrai gain
+    # TODO: ici faut calculer le vrai gain et le mettre dans le best split ?
 
-    return best_feature, best_bin, best_gain_proxy
+    return best_split
 
 
 @njit
-def find_best_split_along_feature(context, local_context, feature):
+def find_best_split_along_feature(tree_context, node_context, feature, best_split):
     """
 
     Parameters
     ----------
-    context
+    tree_context
     feature
     n_samples
     n_samples_in_bins
@@ -285,34 +394,32 @@ def find_best_split_along_feature(context, local_context, feature):
 
     Returns
     -------
+    retourne rien, le resultat est dans candidate split
 
     """
     # TODO: n_samples_in_bins c'est n_samples_in_bins[feature] (la ligne concerant
     #  juste la feature)
 
-    # best_split = SplitInfo(-1.0, 0, 0, 0.0, 0.0, None, None)
-    # gradient_left, hessian_left = 0.0, 0.0
-
     # TODO: a terme utiliser ca :
     # n_bins = context.n_bins_per_feature[feature]
     # n_bins = 255
 
-    n_classes = context.n_classes
-    n_bins = context.max_bins
+    n_classes = tree_context.n_classes
+    n_bins = tree_context.max_bins
 
     # Number of training samples in the node
-    n_samples = local_context.end_train - local_context.start_train
+    n_samples_train = node_context.n_samples_train
     # Get the number of samples in each bin for the feature
-    n_samples_in_bins = local_context.n_samples_in_bins[feature]
+    n_samples_in_bins = node_context.n_samples_in_bins[feature]
     # Get the sum of labels (counts) in each bin for the feature
-    y_sum_in_bins = local_context.y_sum_in_bins[feature]
+    y_sum_in_bins = node_context.y_sum[feature]
 
     # TODO: faudra que les vecteurs left et right soient dans le local_context
     # Counts on the left are zero, since we go from left to right
     n_samples_left = 0
     y_sum_left = np.zeros(n_classes, dtype=np_float32)
     # Count on the right contain everything
-    n_samples_right = n_samples
+    n_samples_right = n_samples_train
     y_sum_right = np.empty(n_classes, dtype=np_float32)
     y_sum_right[:] = y_sum_in_bins.sum(axis=0)
 
@@ -344,1268 +451,96 @@ def find_best_split_along_feature(context, local_context, feature):
         if gain_proxy > best_gain_proxy:
             # We've found a better split
             best_gain_proxy = gain_proxy
-            best_bin = bin
 
-    # Comment peut-il ne pas y avoir de meilleur bin ?
-
-    return best_bin, best_gain_proxy
-
-
-        # if n_samples_left < context.min_samples_leaf:
-        #     continue
-        # if n_samples_right < context.min_samples_leaf:
-        #     # won't get any better
-        #     break
-        #
-        # if hessian_left < context.min_hessian_to_split:
-        #     continue
-        # if hessian_right < context.min_hessian_to_split:
-        #     # won't get any better (hessians are > 0 since loss is convex)
-        #     break
-        # gain = _split_gain(
-        #     gradient_left,
-        #     hessian_left,
-        #     gradient_right,
-        #     hessian_right,
-        #     context.sum_gradients,
-        #     context.sum_hessians,
-        #     context.l2_regularization,
-        # )
-
-    #     if gain > best_split.gain and gain > context.min_gain_to_split:
-    #         best_split.gain = gain
-    #         best_split.feature_idx = feature
-    #         best_split.bin_idx = bin
-    #         best_split.gradient_left = gradient_left
-    #         best_split.hessian_left = hessian_left
-    #         best_split.n_samples_left = n_samples_left
-    #         best_split.gradient_right = gradient_right
-    #         best_split.hessian_right = hessian_right
-    #         best_split.n_samples_right = n_samples_right
-    #
-    # return best_split, histogram
-    # pass
+            best_split.gain_proxy = gain_proxy
+            best_split.feature = feature
+            best_split.bin = bin
+            best_split.n_samples_left = n_samples_left
+            best_split.n_samples_right = n_samples_right
+            # TODO: faudra calculer les weighted version
+            best_split.weighted_samples_left = n_samples_left
+            best_split.weighted_samples_right = n_samples_right
+            best_split.y_sum_left[:] = y_sum_left
+            best_split.y_sum_right[:] = y_sum_right
 
 
-# @njit(
-#     locals={
-#         "gradient_left": float32,
-#         "hessian_left": float32,
-#         "n_samples_left": uint32,
-#     },
-#     fastmath=True,
-# )
-# def _find_best_bin_to_split_helper(context, feature_idx, histogram, n_samples):
-#     """Find best bin to split on, and return the corresponding SplitInfo.
-#
-#     Splits that do not satisfy the splitting constraints (min_gain_to_split,
-#     etc.) are discarded here. If no split can satisfy the constraints, a
-#     SplitInfo with a gain of -1 is returned. If for a given node the best
-#     SplitInfo has a gain of -1, it is finalized into a leaf.
-#     """
-#     # Allocate the structure for the best split information. It can be
-#     # returned as such (with a negative gain) if the min_hessian_to_split
-#     # condition is not satisfied. Such invalid splits are later discarded by
-#     # the TreeGrower.
-#     best_split = SplitInfo(-1.0, 0, 0, 0.0, 0.0, None, None)
-#     gradient_left, hessian_left = 0.0, 0.0
-#     n_samples_left = 0
-#
-#     for bin_idx in range(context.n_bins_per_feature[feature_idx]):
-#         n_samples_left += histogram[bin_idx]["count"]
-#         n_samples_right = n_samples - n_samples_left
-#
-#         if context.constant_hessian:
-#             hessian_left += histogram[bin_idx]["count"] * context.constant_hessian_value
-#         else:
-#             hessian_left += histogram[bin_idx]["sum_hessians"]
-#         hessian_right = context.sum_hessians - hessian_left
-#
-#         gradient_left += histogram[bin_idx]["sum_gradients"]
-#         gradient_right = context.sum_gradients - gradient_left
-#
-#         if n_samples_left < context.min_samples_leaf:
-#             continue
-#         if n_samples_right < context.min_samples_leaf:
-#             # won't get any better
-#             break
-#
-#         if hessian_left < context.min_hessian_to_split:
-#             continue
-#         if hessian_right < context.min_hessian_to_split:
-#             # won't get any better (hessians are > 0 since loss is convex)
-#             break
-#
-#         gain = _split_gain(
-#             gradient_left,
-#             hessian_left,
-#             gradient_right,
-#             hessian_right,
-#             context.sum_gradients,
-#             context.sum_hessians,
-#             context.l2_regularization,
-#         )
-#
-#         if gain > best_split.gain and gain > context.min_gain_to_split:
-#             best_split.gain = gain
-#             best_split.feature_idx = feature_idx
-#             best_split.bin_idx = bin_idx
-#             best_split.gradient_left = gradient_left
-#             best_split.hessian_left = hessian_left
-#             best_split.n_samples_left = n_samples_left
-#             best_split.gradient_right = gradient_right
-#             best_split.hessian_right = hessian_right
-#             best_split.n_samples_right = n_samples_right
-#
-#     return best_split, histogram
+@njit
+def split_indices(tree_context, split, node_record):
+
+    # The feature and bin used for this split
+    feature = split.feature
+    bin = split.bin
+
+    # TODO: pourquoi transposition ici ?
+    Xf = tree_context.X.T[feature]
+
+    left_buffer = tree_context.left_buffer
+    right_buffer = tree_context.right_buffer
+
+    # TODO: faudrait avoir le calcul du nombre de train et valid dans le split
+
+    start_train = node_record["start_train"]
+    end_train = node_record["end_train"]
+    start_valid = node_record["start_valid"]
+    end_valid = node_record["end_valid"]
+
+    # The current training sample indices in the node
+    partition_train = tree_context.partition_train
+    # The current validation sample indices in the node
+    partition_valid = tree_context.partition_valid
+
+    # We want to update both partition_train, partition_valid, pos_train, pos_valid so
+    # that:
+    # - partition_train[start_train:pos_train] contains the training sample indices of
+    #   the left child
+    # - partition_train[pos_train:end_train] contains the training sample indices of
+    #   the right child
+    # - partition_valid[start_valid:pos_valid] contains the validation sample indices
+    #   of the left child
+    # - partition_valid[pos_valid:end_valid] contains the validation sample indices of
+    #   the right child
+
+    # TODO: c'est bourrin et peut etre pas optimal mais ca suffira pour l'instant
+    n_samples_train_left = nb_size_t(0)
+    n_samples_train_right = nb_size_t(0)
+    for i in partition_train:
+        if Xf[i] <= bin:
+            left_buffer[n_samples_train_left] = i
+            n_samples_train_left += nb_size_t(1)
+        else:
+            right_buffer[n_samples_train_right] = i
+            n_samples_train_right += nb_size_t(1)
+
+    print("start_train: ", start_train, ", n_samples_train_left: ",
+          n_samples_train_left, ", n_samples_train_right: ", n_samples_train_right,
+          ", end_train: ", end_train)
 
 
-# @njit
-# def _split_gain(
-#     gradient_left,
-#     hessian_left,
-#     gradient_right,
-#     hessian_right,
-#     sum_gradients,
-#     sum_hessians,
-#     l2_regularization,
-# ):
-#     """Loss reduction
-#
-#     Compute the reduction in loss after taking a split, compared to keeping
-#     the node a leaf of the tree.
-#
-#     See Equation 7 of:
-#     XGBoost: A Scalable Tree Boosting System, T. Chen, C. Guestrin, 2016
-#     https://arxiv.org/abs/1603.02754
-#     """
-#
-#     def negative_loss(gradient, hessian):
-#         return (gradient ** 2) / (hessian + l2_regularization)
-#
-#     gain = negative_loss(gradient_left, hessian_left)
-#     gain += negative_loss(gradient_right, hessian_right)
-#     gain -= negative_loss(sum_gradients, sum_hessians)
-#     return gain
+    print("partition_train[start_train:end_train]: ", partition_train[start_train:end_train])
+    print("left_buffer[:n_samples_train_left]: ", left_buffer[:n_samples_train_left])
+    print("right_buffer[:n_samples_train_right]: ", right_buffer[:n_samples_train_right])
 
+    # start_train + n_samples_train_left + n_samples_train_right
 
-# TODO: ce qui est en dessous c'est du C/C depuis scikit. On s'en servira plus tard,
-#  pour l'instant on reprend ce qu'il y avait dans pygbm (deja numba et plus simple)
-# # cython: cdivision=True
-# # cython: boundscheck=False
-# # cython: wraparound=False
-# # cython: language_level=3
-#
-# """This module contains routines and data structures to:
-#
-# - Find the best possible split of a node. For a given node, a split is
-#   characterized by a feature and a bin.
-# - Apply a split to a node, i.e. split the indices of the samples at the node
-#   into the newly created left and right childs.
-# """
-# # Author: Nicolas Hug
-#
-# cimport cython
-# from cython.parallel import prange
-# import numpy as np
-# cimport numpy as np
-# IF SKLEARN_OPENMP_PARALLELISM_ENABLED:
-#     from openmp cimport omp_get_max_threads
-# from libc.stdlib cimport malloc, free, qsort
-# from libc.string cimport memcpy
-# from numpy.math cimport INFINITY
-#
-# from .common cimport X_BINNED_DTYPE_C
-# from .common cimport Y_DTYPE_C
-# from .common cimport hist_struct
-# from .common import HISTOGRAM_DTYPE
-# from .common cimport BITSET_INNER_DTYPE_C
-# from .common cimport BITSET_DTYPE_C
-# from .common cimport MonotonicConstraint
-# from ._bitset cimport init_bitset
-# from ._bitset cimport set_bitset
-# from ._bitset cimport in_bitset
-#
-# np.import_array()
-#
-#
-# cdef struct split_info_struct:
-#     # Same as the SplitInfo class, but we need a C struct to use it in the
-#     # nogil sections and to use in arrays.
-#     Y_DTYPE_C gain
-#     int feature_idx
-#     unsigned int bin_idx
-#     unsigned char missing_go_to_left
-#     Y_DTYPE_C sum_gradient_left
-#     Y_DTYPE_C sum_gradient_right
-#     Y_DTYPE_C sum_hessian_left
-#     Y_DTYPE_C sum_hessian_right
-#     unsigned int n_samples_left
-#     unsigned int n_samples_right
-#     Y_DTYPE_C value_left
-#     Y_DTYPE_C value_right
-#     unsigned char is_categorical
-#     BITSET_DTYPE_C left_cat_bitset
-#
-#
-# # used in categorical splits for sorting categories by increasing values of
-# # sum_gradients / sum_hessians
-# cdef struct categorical_info:
-#     X_BINNED_DTYPE_C bin_idx
-#     Y_DTYPE_C value
-#
-#
-# class SplitInfo:
-#     """Pure data class to store information about a potential split.
-#
-#     Parameters
-#     ----------
-#     gain : float
-#         The gain of the split.
-#     feature_idx : int
-#         The index of the feature to be split.
-#     bin_idx : int
-#         The index of the bin on which the split is made. Should be ignored if
-#         `is_categorical` is True: `left_cat_bitset` will be used to determine
-#         the split.
-#     missing_go_to_left : bool
-#         Whether missing values should go to the left child. This is used
-#         whether the split is categorical or not.
-#     sum_gradient_left : float
-#         The sum of the gradients of all the samples in the left child.
-#     sum_hessian_left : float
-#         The sum of the hessians of all the samples in the left child.
-#     sum_gradient_right : float
-#         The sum of the gradients of all the samples in the right child.
-#     sum_hessian_right : float
-#         The sum of the hessians of all the samples in the right child.
-#     n_samples_left : int, default=0
-#         The number of samples in the left child.
-#     n_samples_right : int
-#         The number of samples in the right child.
-#     is_categorical : bool
-#         Whether the split is done on a categorical feature.
-#     left_cat_bitset : ndarray of shape=(8,), dtype=uint32 or None
-#         Bitset representing the categories that go to the left. This is used
-#         only when `is_categorical` is True.
-#         Note that missing values are part of that bitset if there are missing
-#         values in the training data. For missing values, we rely on that
-#         bitset for splitting, but at prediction time, we rely on
-#         missing_go_to_left.
-#     """
-#     def __init__(self, gain, feature_idx, bin_idx,
-#                  missing_go_to_left, sum_gradient_left, sum_hessian_left,
-#                  sum_gradient_right, sum_hessian_right, n_samples_left,
-#                  n_samples_right, value_left, value_right,
-#                  is_categorical, left_cat_bitset):
-#         self.gain = gain
-#         self.feature_idx = feature_idx
-#         self.bin_idx = bin_idx
-#         self.missing_go_to_left = missing_go_to_left
-#         self.sum_gradient_left = sum_gradient_left
-#         self.sum_hessian_left = sum_hessian_left
-#         self.sum_gradient_right = sum_gradient_right
-#         self.sum_hessian_right = sum_hessian_right
-#         self.n_samples_left = n_samples_left
-#         self.n_samples_right = n_samples_right
-#         self.value_left = value_left
-#         self.value_right = value_right
-#         self.is_categorical = is_categorical
-#         self.left_cat_bitset = left_cat_bitset
-#
-#
-# @cython.final
-# cdef class Splitter:
-#     """Splitter used to find the best possible split at each node.
-#
-#     A split (see SplitInfo) is characterized by a feature and a bin.
-#
-#     The Splitter is also responsible for partitioning the samples among the
-#     leaves of the tree (see split_indices() and the partition attribute).
-#
-#     Parameters
-#     ----------
-#     X_binned : ndarray of int, shape (n_samples, n_features)
-#         The binned input samples. Must be Fortran-aligned.
-#     n_bins_non_missing : ndarray, shape (n_features,)
-#         For each feature, gives the number of bins actually used for
-#         non-missing values.
-#     missing_values_bin_idx : uint8
-#         Index of the bin that is used for missing values. This is the index of
-#         the last bin and is always equal to max_bins (as passed to the GBDT
-#         classes), or equivalently to n_bins - 1.
-#     has_missing_values : ndarray, shape (n_features,)
-#         Whether missing values were observed in the training data, for each
-#         feature.
-#     is_categorical : ndarray of bool of shape (n_features,)
-#         Indicates categorical features.
-#     l2_regularization : float
-#         The L2 regularization parameter.
-#     min_hessian_to_split : float, default=1e-3
-#         The minimum sum of hessians needed in each node. Splits that result in
-#         at least one child having a sum of hessians less than
-#         min_hessian_to_split are discarded.
-#     min_samples_leaf : int, default=20
-#         The minimum number of samples per leaf.
-#     min_gain_to_split : float, default=0.0
-#         The minimum gain needed to split a node. Splits with lower gain will
-#         be ignored.
-#     hessians_are_constant: bool, default is False
-#         Whether hessians are constant.
-#     """
-#     cdef public:
-#         const X_BINNED_DTYPE_C [::1, :] X_binned
-#         unsigned int n_features
-#         const unsigned int [::1] n_bins_non_missing
-#         unsigned char missing_values_bin_idx
-#         const unsigned char [::1] has_missing_values
-#         const unsigned char [::1] is_categorical
-#         const signed char [::1] monotonic_cst
-#         unsigned char hessians_are_constant
-#         Y_DTYPE_C l2_regularization
-#         Y_DTYPE_C min_hessian_to_split
-#         unsigned int min_samples_leaf
-#         Y_DTYPE_C min_gain_to_split
-#
-#         unsigned int [::1] partition
-#         unsigned int [::1] left_indices_buffer
-#         unsigned int [::1] right_indices_buffer
-#
-#     def __init__(self,
-#                  const X_BINNED_DTYPE_C [::1, :] X_binned,
-#                  const unsigned int [::1] n_bins_non_missing,
-#                  const unsigned char missing_values_bin_idx,
-#                  const unsigned char [::1] has_missing_values,
-#                  const unsigned char [::1] is_categorical,
-#                  const signed char [::1] monotonic_cst,
-#                  Y_DTYPE_C l2_regularization,
-#                  Y_DTYPE_C min_hessian_to_split=1e-3,
-#                  unsigned int min_samples_leaf=20,
-#                  Y_DTYPE_C min_gain_to_split=0.,
-#                  unsigned char hessians_are_constant=False):
-#
-#         self.X_binned = X_binned
-#         self.n_features = X_binned.shape[1]
-#         self.n_bins_non_missing = n_bins_non_missing
-#         self.missing_values_bin_idx = missing_values_bin_idx
-#         self.has_missing_values = has_missing_values
-#         self.monotonic_cst = monotonic_cst
-#         self.is_categorical = is_categorical
-#         self.l2_regularization = l2_regularization
-#         self.min_hessian_to_split = min_hessian_to_split
-#         self.min_samples_leaf = min_samples_leaf
-#         self.min_gain_to_split = min_gain_to_split
-#         self.hessians_are_constant = hessians_are_constant
-#
-#         # The partition array maps each sample index into the leaves of the
-#         # tree (a leaf in this context is a node that isn't splitted yet, not
-#         # necessarily a 'finalized' leaf). Initially, the root contains all
-#         # the indices, e.g.:
-#         # partition = [abcdefghijkl]
-#         # After a call to split_indices, it may look e.g. like this:
-#         # partition = [cef|abdghijkl]
-#         # we have 2 leaves, the left one is at position 0 and the second one at
-#         # position 3. The order of the samples is irrelevant.
-#         self.partition = np.arange(X_binned.shape[0], dtype=np.uint32)
-#         # buffers used in split_indices to support parallel splitting.
-#         self.left_indices_buffer = np.empty_like(self.partition)
-#         self.right_indices_buffer = np.empty_like(self.partition)
-#
-#     def split_indices(Splitter self, split_info, unsigned int [::1]
-#                       sample_indices):
-#         """Split samples into left and right arrays.
-#
-#         The split is performed according to the best possible split
-#         (split_info).
-#
-#         Ultimately, this is nothing but a partition of the sample_indices
-#         array with a given pivot, exactly like a quicksort subroutine.
-#
-#         Parameters
-#         ----------
-#         split_info : SplitInfo
-#             The SplitInfo of the node to split.
-#         sample_indices : ndarray of unsigned int, shape (n_samples_at_node,)
-#             The indices of the samples at the node to split. This is a view
-#             on self.partition, and it is modified inplace by placing the
-#             indices of the left child at the beginning, and the indices of
-#             the right child at the end.
-#
-#         Returns
-#         -------
-#         left_indices : ndarray of int, shape (n_left_samples,)
-#             The indices of the samples in the left child. This is a view on
-#             self.partition.
-#         right_indices : ndarray of int, shape (n_right_samples,)
-#             The indices of the samples in the right child. This is a view on
-#             self.partition.
-#         right_child_position : int
-#             The position of the right child in ``sample_indices``.
-#         """
-#         # This is a multi-threaded implementation inspired by lightgbm. Here
-#         # is a quick break down. Let's suppose we want to split a node with 24
-#         # samples named from a to x. self.partition looks like this (the * are
-#         # indices in other leaves that we don't care about):
-#         # partition = [*************abcdefghijklmnopqrstuvwx****************]
-#         #                           ^                       ^
-#         #                     node_position     node_position + node.n_samples
-#
-#         # Ultimately, we want to reorder the samples inside the boundaries of
-#         # the leaf (which becomes a node) to now represent the samples in its
-#         # left and right child. For example:
-#         # partition = [*************abefilmnopqrtuxcdghjksvw*****************]
-#         #                           ^              ^
-#         #                   left_child_pos     right_child_pos
-#         # Note that left_child_pos always takes the value of node_position,
-#         # and right_child_pos = left_child_pos + left_child.n_samples. The
-#         # order of the samples inside a leaf is irrelevant.
-#
-#         # 1. sample_indices is a view on this region a..x. We conceptually
-#         #    divide it into n_threads regions. Each thread will be responsible
-#         #    for its own region. Here is an example with 4 threads:
-#         #    sample_indices = [abcdef|ghijkl|mnopqr|stuvwx]
-#         # 2. Each thread processes 6 = 24 // 4 entries and maps them into
-#         #    left_indices_buffer or right_indices_buffer. For example, we could
-#         #    have the following mapping ('.' denotes an undefined entry):
-#         #    - left_indices_buffer =  [abef..|il....|mnopqr|tux...]
-#         #    - right_indices_buffer = [cd....|ghjk..|......|svw...]
-#         # 3. We keep track of the start positions of the regions (the '|') in
-#         #    ``offset_in_buffers`` as well as the size of each region. We also
-#         #    keep track of the number of samples put into the left/right child
-#         #    by each thread. Concretely:
-#         #    - left_counts =  [4, 2, 6, 3]
-#         #    - right_counts = [2, 4, 0, 3]
-#         # 4. Finally, we put left/right_indices_buffer back into the
-#         #    sample_indices, without any undefined entries and the partition
-#         #    looks as expected
-#         #    partition = [*************abefilmnopqrtuxcdghjksvw***************]
-#
-#         # Note: We here show left/right_indices_buffer as being the same size
-#         # as sample_indices for simplicity, but in reality they are of the
-#         # same size as partition.
-#
-#         cdef:
-#             int n_samples = sample_indices.shape[0]
-#             X_BINNED_DTYPE_C bin_idx = split_info.bin_idx
-#             unsigned char missing_go_to_left = split_info.missing_go_to_left
-#             unsigned char missing_values_bin_idx = self.missing_values_bin_idx
-#             int feature_idx = split_info.feature_idx
-#             const X_BINNED_DTYPE_C [::1] X_binned = \
-#                 self.X_binned[:, feature_idx]
-#             unsigned int [::1] left_indices_buffer = self.left_indices_buffer
-#             unsigned int [::1] right_indices_buffer = self.right_indices_buffer
-#             unsigned char is_categorical = split_info.is_categorical
-#             # Cython is unhappy if we set left_cat_bitset to
-#             # split_info.left_cat_bitset directly, so we need a tmp var
-#             BITSET_INNER_DTYPE_C [:] cat_bitset_tmp = split_info.left_cat_bitset
-#             BITSET_DTYPE_C left_cat_bitset
-#             IF SKLEARN_OPENMP_PARALLELISM_ENABLED:
-#                 int n_threads = omp_get_max_threads()
-#             ELSE:
-#                 int n_threads = 1
-#
-#             int [:] sizes = np.full(n_threads, n_samples // n_threads,
-#                                     dtype=np.int32)
-#             int [:] offset_in_buffers = np.zeros(n_threads, dtype=np.int32)
-#             int [:] left_counts = np.empty(n_threads, dtype=np.int32)
-#             int [:] right_counts = np.empty(n_threads, dtype=np.int32)
-#             int left_count
-#             int right_count
-#             int start
-#             int stop
-#             int i
-#             int thread_idx
-#             int sample_idx
-#             int right_child_position
-#             unsigned char turn_left
-#             int [:] left_offset = np.zeros(n_threads, dtype=np.int32)
-#             int [:] right_offset = np.zeros(n_threads, dtype=np.int32)
-#
-#         # only set left_cat_bitset when is_categorical is True
-#         if is_categorical:
-#             left_cat_bitset = &cat_bitset_tmp[0]
-#
-#         with nogil:
-#             for thread_idx in range(n_samples % n_threads):
-#                 sizes[thread_idx] += 1
-#
-#             for thread_idx in range(1, n_threads):
-#                 offset_in_buffers[thread_idx] = \
-#                     offset_in_buffers[thread_idx - 1] + sizes[thread_idx - 1]
-#
-#             # map indices from sample_indices to left/right_indices_buffer
-#             for thread_idx in prange(n_threads, schedule='static',
-#                                      chunksize=1):
-#                 left_count = 0
-#                 right_count = 0
-#
-#                 start = offset_in_buffers[thread_idx]
-#                 stop = start + sizes[thread_idx]
-#                 for i in range(start, stop):
-#                     sample_idx = sample_indices[i]
-#                     turn_left = sample_goes_left(
-#                         missing_go_to_left,
-#                         missing_values_bin_idx, bin_idx,
-#                         X_binned[sample_idx], is_categorical,
-#                         left_cat_bitset)
-#
-#                     if turn_left:
-#                         left_indices_buffer[start + left_count] = sample_idx
-#                         left_count = left_count + 1
-#                     else:
-#                         right_indices_buffer[start + right_count] = sample_idx
-#                         right_count = right_count + 1
-#
-#                 left_counts[thread_idx] = left_count
-#                 right_counts[thread_idx] = right_count
-#
-#             # position of right child = just after the left child
-#             right_child_position = 0
-#             for thread_idx in range(n_threads):
-#                 right_child_position += left_counts[thread_idx]
-#
-#             # offset of each thread in sample_indices for left and right
-#             # child, i.e. where each thread will start to write.
-#             right_offset[0] = right_child_position
-#             for thread_idx in range(1, n_threads):
-#                 left_offset[thread_idx] = \
-#                     left_offset[thread_idx - 1] + left_counts[thread_idx - 1]
-#                 right_offset[thread_idx] = \
-#                     right_offset[thread_idx - 1] + right_counts[thread_idx - 1]
-#
-#             # map indices in left/right_indices_buffer back into
-#             # sample_indices. This also updates self.partition since
-#             # sample_indices is a view.
-#             for thread_idx in prange(n_threads, schedule='static',
-#                                      chunksize=1):
-#                 memcpy(
-#                     &sample_indices[left_offset[thread_idx]],
-#                     &left_indices_buffer[offset_in_buffers[thread_idx]],
-#                     sizeof(unsigned int) * left_counts[thread_idx]
-#                 )
-#                 memcpy(
-#                     &sample_indices[right_offset[thread_idx]],
-#                     &right_indices_buffer[offset_in_buffers[thread_idx]],
-#                     sizeof(unsigned int) * right_counts[thread_idx]
-#                 )
-#
-#         return (sample_indices[:right_child_position],
-#                 sample_indices[right_child_position:],
-#                 right_child_position)
-#
-#     def find_node_split(
-#             Splitter self,
-#             unsigned int n_samples,
-#             hist_struct [:, ::1] histograms,  # IN
-#             const Y_DTYPE_C sum_gradients,
-#             const Y_DTYPE_C sum_hessians,
-#             const Y_DTYPE_C value,
-#             const Y_DTYPE_C lower_bound=-INFINITY,
-#             const Y_DTYPE_C upper_bound=INFINITY,
-#             ):
-#         """For each feature, find the best bin to split on at a given node.
-#
-#         Return the best split info among all features.
-#
-#         Parameters
-#         ----------
-#         n_samples : int
-#             The number of samples at the node.
-#         histograms : ndarray of HISTOGRAM_DTYPE of \
-#                 shape (n_features, max_bins)
-#             The histograms of the current node.
-#         sum_gradients : float
-#             The sum of the gradients for each sample at the node.
-#         sum_hessians : float
-#             The sum of the hessians for each sample at the node.
-#         value : float
-#             The bounded value of the current node. We directly pass the value
-#             instead of re-computing it from sum_gradients and sum_hessians,
-#             because we need to compute the loss and the gain based on the
-#             *bounded* value: computing the value from
-#             sum_gradients / sum_hessians would give the unbounded value, and
-#             the interaction with min_gain_to_split would not be correct
-#             anymore. Side note: we can't use the lower_bound / upper_bound
-#             parameters either because these refer to the bounds of the
-#             children, not the bounds of the current node.
-#         lower_bound : float
-#             Lower bound for the children values for respecting the monotonic
-#             constraints.
-#         upper_bound : float
-#             Upper bound for the children values for respecting the monotonic
-#             constraints.
-#
-#         Returns
-#         -------
-#         best_split_info : SplitInfo
-#             The info about the best possible split among all features.
-#         """
-#         cdef:
-#             int feature_idx
-#             int best_feature_idx
-#             int n_features = self.n_features
-#             split_info_struct split_info
-#             split_info_struct * split_infos
-#             const unsigned char [::1] has_missing_values = self.has_missing_values
-#             const unsigned char [::1] is_categorical = self.is_categorical
-#             const signed char [::1] monotonic_cst = self.monotonic_cst
-#
-#         with nogil:
-#
-#             split_infos = <split_info_struct *> malloc(
-#                 self.n_features * sizeof(split_info_struct))
-#
-#             for feature_idx in prange(n_features, schedule='static'):
-#                 split_infos[feature_idx].feature_idx = feature_idx
-#
-#                 # For each feature, find best bin to split on
-#                 # Start with a gain of -1 (if no better split is found, that
-#                 # means one of the constraints isn't respected
-#                 # (min_samples_leaf, etc) and the grower will later turn the
-#                 # node into a leaf.
-#                 split_infos[feature_idx].gain = -1
-#                 split_infos[feature_idx].is_categorical = is_categorical[feature_idx]
-#
-#                 if is_categorical[feature_idx]:
-#                     self._find_best_bin_to_split_category(
-#                         feature_idx, has_missing_values[feature_idx],
-#                         histograms, n_samples, sum_gradients, sum_hessians,
-#                         value, monotonic_cst[feature_idx], lower_bound,
-#                         upper_bound, &split_infos[feature_idx])
-#                 else:
-#                     # We will scan bins from left to right (in all cases), and
-#                     # if there are any missing values, we will also scan bins
-#                     # from right to left. This way, we can consider whichever
-#                     # case yields the best gain: either missing values go to
-#                     # the right (left to right scan) or to the left (right to
-#                     # left case). See algo 3 from the XGBoost paper
-#                     # https://arxiv.org/abs/1603.02754
-#                     # Note: for the categorical features above, this isn't
-#                     # needed since missing values are considered a native
-#                     # category.
-#                     self._find_best_bin_to_split_left_to_right(
-#                         feature_idx, has_missing_values[feature_idx],
-#                         histograms, n_samples, sum_gradients, sum_hessians,
-#                         value, monotonic_cst[feature_idx],
-#                         lower_bound, upper_bound, &split_infos[feature_idx])
-#
-#                     if has_missing_values[feature_idx]:
-#                         # We need to explore both directions to check whether
-#                         # sending the nans to the left child would lead to a higher
-#                         # gain
-#                         self._find_best_bin_to_split_right_to_left(
-#                             feature_idx, histograms, n_samples,
-#                             sum_gradients, sum_hessians,
-#                             value, monotonic_cst[feature_idx],
-#                             lower_bound, upper_bound, &split_infos[feature_idx])
-#
-#             # then compute best possible split among all features
-#             best_feature_idx = self._find_best_feature_to_split_helper(
-#                 split_infos)
-#             split_info = split_infos[best_feature_idx]
-#
-#         out = SplitInfo(
-#             split_info.gain,
-#             split_info.feature_idx,
-#             split_info.bin_idx,
-#             split_info.missing_go_to_left,
-#             split_info.sum_gradient_left,
-#             split_info.sum_hessian_left,
-#             split_info.sum_gradient_right,
-#             split_info.sum_hessian_right,
-#             split_info.n_samples_left,
-#             split_info.n_samples_right,
-#             split_info.value_left,
-#             split_info.value_right,
-#             split_info.is_categorical,
-#             None,  # left_cat_bitset will only be set if the split is categorical
-#         )
-#         # Only set bitset if the split is categorical
-#         if split_info.is_categorical:
-#             out.left_cat_bitset = np.asarray(split_info.left_cat_bitset, dtype=np.uint32)
-#
-#         free(split_infos)
-#         return out
-#
-#     cdef unsigned int _find_best_feature_to_split_helper(
-#             self,
-#             split_info_struct * split_infos) nogil:  # IN
-#         """Returns the best feature among those in splits_infos."""
-#         cdef:
-#             unsigned int feature_idx
-#             unsigned int best_feature_idx = 0
-#
-#         for feature_idx in range(1, self.n_features):
-#             if (split_infos[feature_idx].gain >
-#                     split_infos[best_feature_idx].gain):
-#                 best_feature_idx = feature_idx
-#         return best_feature_idx
-#
-#     cdef void _find_best_bin_to_split_left_to_right(
-#             Splitter self,
-#             unsigned int feature_idx,
-#             unsigned char has_missing_values,
-#             const hist_struct [:, ::1] histograms,  # IN
-#             unsigned int n_samples,
-#             Y_DTYPE_C sum_gradients,
-#             Y_DTYPE_C sum_hessians,
-#             Y_DTYPE_C value,
-#             signed char monotonic_cst,
-#             Y_DTYPE_C lower_bound,
-#             Y_DTYPE_C upper_bound,
-#             split_info_struct * split_info) nogil:  # OUT
-#         """Find best bin to split on for a given feature.
-#
-#         Splits that do not satisfy the splitting constraints
-#         (min_gain_to_split, etc.) are discarded here.
-#
-#         We scan node from left to right. This version is called whether there
-#         are missing values or not. If any, missing values are assigned to the
-#         right node.
-#         """
-#         cdef:
-#             unsigned int bin_idx
-#             unsigned int n_samples_left
-#             unsigned int n_samples_right
-#             unsigned int n_samples_ = n_samples
-#             # We set the 'end' variable such that the last non-missing-values
-#             # bin never goes to the left child (which would result in and
-#             # empty right child), unless there are missing values, since these
-#             # would go to the right child.
-#             unsigned int end = \
-#                 self.n_bins_non_missing[feature_idx] - 1 + has_missing_values
-#             Y_DTYPE_C sum_hessian_left
-#             Y_DTYPE_C sum_hessian_right
-#             Y_DTYPE_C sum_gradient_left
-#             Y_DTYPE_C sum_gradient_right
-#             Y_DTYPE_C loss_current_node
-#             Y_DTYPE_C gain
-#             unsigned char found_better_split = False
-#
-#             Y_DTYPE_C best_sum_hessian_left
-#             Y_DTYPE_C best_sum_gradient_left
-#             unsigned int best_bin_idx
-#             unsigned int best_n_samples_left
-#             Y_DTYPE_C best_gain = -1
-#
-#         sum_gradient_left, sum_hessian_left = 0., 0.
-#         n_samples_left = 0
-#
-#         loss_current_node = _loss_from_value(value, sum_gradients)
-#
-#         for bin_idx in range(end):
-#             n_samples_left += histograms[feature_idx, bin_idx].count
-#             n_samples_right = n_samples_ - n_samples_left
-#
-#             if self.hessians_are_constant:
-#                 sum_hessian_left += histograms[feature_idx, bin_idx].count
-#             else:
-#                 sum_hessian_left += \
-#                     histograms[feature_idx, bin_idx].sum_hessians
-#             sum_hessian_right = sum_hessians - sum_hessian_left
-#
-#             sum_gradient_left += histograms[feature_idx, bin_idx].sum_gradients
-#             sum_gradient_right = sum_gradients - sum_gradient_left
-#
-#             if n_samples_left < self.min_samples_leaf:
-#                 continue
-#             if n_samples_right < self.min_samples_leaf:
-#                 # won't get any better
-#                 break
-#
-#             if sum_hessian_left < self.min_hessian_to_split:
-#                 continue
-#             if sum_hessian_right < self.min_hessian_to_split:
-#                 # won't get any better (hessians are > 0 since loss is convex)
-#                 break
-#
-#             gain = _split_gain(sum_gradient_left, sum_hessian_left,
-#                                sum_gradient_right, sum_hessian_right,
-#                                loss_current_node,
-#                                monotonic_cst,
-#                                lower_bound,
-#                                upper_bound,
-#                                self.l2_regularization)
-#
-#             if gain > best_gain and gain > self.min_gain_to_split:
-#                 found_better_split = True
-#                 best_gain = gain
-#                 best_bin_idx = bin_idx
-#                 best_sum_gradient_left = sum_gradient_left
-#                 best_sum_hessian_left = sum_hessian_left
-#                 best_n_samples_left = n_samples_left
-#
-#         if found_better_split:
-#             split_info.gain = best_gain
-#             split_info.bin_idx = best_bin_idx
-#             # we scan from left to right so missing values go to the right
-#             split_info.missing_go_to_left = False
-#             split_info.sum_gradient_left = best_sum_gradient_left
-#             split_info.sum_gradient_right = sum_gradients - best_sum_gradient_left
-#             split_info.sum_hessian_left = best_sum_hessian_left
-#             split_info.sum_hessian_right = sum_hessians - best_sum_hessian_left
-#             split_info.n_samples_left = best_n_samples_left
-#             split_info.n_samples_right = n_samples - best_n_samples_left
-#
-#             # We recompute best values here but it's cheap
-#             split_info.value_left = compute_node_value(
-#                 split_info.sum_gradient_left, split_info.sum_hessian_left,
-#                 lower_bound, upper_bound, self.l2_regularization)
-#
-#             split_info.value_right = compute_node_value(
-#                 split_info.sum_gradient_right, split_info.sum_hessian_right,
-#                 lower_bound, upper_bound, self.l2_regularization)
-#
-#     cdef void _find_best_bin_to_split_right_to_left(
-#             self,
-#             unsigned int feature_idx,
-#             const hist_struct [:, ::1] histograms,  # IN
-#             unsigned int n_samples,
-#             Y_DTYPE_C sum_gradients,
-#             Y_DTYPE_C sum_hessians,
-#             Y_DTYPE_C value,
-#             signed char monotonic_cst,
-#             Y_DTYPE_C lower_bound,
-#             Y_DTYPE_C upper_bound,
-#             split_info_struct * split_info) nogil:  # OUT
-#         """Find best bin to split on for a given feature.
-#
-#         Splits that do not satisfy the splitting constraints
-#         (min_gain_to_split, etc.) are discarded here.
-#
-#         We scan node from right to left. This version is only called when
-#         there are missing values. Missing values are assigned to the left
-#         child.
-#
-#         If no missing value are present in the data this method isn't called
-#         since only calling _find_best_bin_to_split_left_to_right is enough.
-#         """
-#
-#         cdef:
-#             unsigned int bin_idx
-#             unsigned int n_samples_left
-#             unsigned int n_samples_right
-#             unsigned int n_samples_ = n_samples
-#             Y_DTYPE_C sum_hessian_left
-#             Y_DTYPE_C sum_hessian_right
-#             Y_DTYPE_C sum_gradient_left
-#             Y_DTYPE_C sum_gradient_right
-#             Y_DTYPE_C loss_current_node
-#             Y_DTYPE_C gain
-#             unsigned int start = self.n_bins_non_missing[feature_idx] - 2
-#             unsigned char found_better_split = False
-#
-#             Y_DTYPE_C best_sum_hessian_left
-#             Y_DTYPE_C best_sum_gradient_left
-#             unsigned int best_bin_idx
-#             unsigned int best_n_samples_left
-#             Y_DTYPE_C best_gain = split_info.gain  # computed during previous scan
-#
-#         sum_gradient_right, sum_hessian_right = 0., 0.
-#         n_samples_right = 0
-#
-#         loss_current_node = _loss_from_value(value, sum_gradients)
-#
-#         for bin_idx in range(start, -1, -1):
-#             n_samples_right += histograms[feature_idx, bin_idx + 1].count
-#             n_samples_left = n_samples_ - n_samples_right
-#
-#             if self.hessians_are_constant:
-#                 sum_hessian_right += histograms[feature_idx, bin_idx + 1].count
-#             else:
-#                 sum_hessian_right += \
-#                     histograms[feature_idx, bin_idx + 1].sum_hessians
-#             sum_hessian_left = sum_hessians - sum_hessian_right
-#
-#             sum_gradient_right += \
-#                 histograms[feature_idx, bin_idx + 1].sum_gradients
-#             sum_gradient_left = sum_gradients - sum_gradient_right
-#
-#             if n_samples_right < self.min_samples_leaf:
-#                 continue
-#             if n_samples_left < self.min_samples_leaf:
-#                 # won't get any better
-#                 break
-#
-#             if sum_hessian_right < self.min_hessian_to_split:
-#                 continue
-#             if sum_hessian_left < self.min_hessian_to_split:
-#                 # won't get any better (hessians are > 0 since loss is convex)
-#                 break
-#
-#             gain = _split_gain(sum_gradient_left, sum_hessian_left,
-#                                sum_gradient_right, sum_hessian_right,
-#                                loss_current_node,
-#                                monotonic_cst,
-#                                lower_bound,
-#                                upper_bound,
-#                                self.l2_regularization)
-#
-#             if gain > best_gain and gain > self.min_gain_to_split:
-#                 found_better_split = True
-#                 best_gain = gain
-#                 best_bin_idx = bin_idx
-#                 best_sum_gradient_left = sum_gradient_left
-#                 best_sum_hessian_left = sum_hessian_left
-#                 best_n_samples_left = n_samples_left
-#
-#         if found_better_split:
-#             split_info.gain = best_gain
-#             split_info.bin_idx = best_bin_idx
-#             # we scan from right to left so missing values go to the left
-#             split_info.missing_go_to_left = True
-#             split_info.sum_gradient_left = best_sum_gradient_left
-#             split_info.sum_gradient_right = sum_gradients - best_sum_gradient_left
-#             split_info.sum_hessian_left = best_sum_hessian_left
-#             split_info.sum_hessian_right = sum_hessians - best_sum_hessian_left
-#             split_info.n_samples_left = best_n_samples_left
-#             split_info.n_samples_right = n_samples - best_n_samples_left
-#
-#             # We recompute best values here but it's cheap
-#             split_info.value_left = compute_node_value(
-#                 split_info.sum_gradient_left, split_info.sum_hessian_left,
-#                 lower_bound, upper_bound, self.l2_regularization)
-#
-#             split_info.value_right = compute_node_value(
-#                 split_info.sum_gradient_right, split_info.sum_hessian_right,
-#                 lower_bound, upper_bound, self.l2_regularization)
-#
-#     @cython.initializedcheck(False)
-#     cdef void _find_best_bin_to_split_category(
-#             self,
-#             unsigned int feature_idx,
-#             unsigned char has_missing_values,
-#             const hist_struct [:, ::1] histograms,  # IN
-#             unsigned int n_samples,
-#             Y_DTYPE_C sum_gradients,
-#             Y_DTYPE_C sum_hessians,
-#             Y_DTYPE_C value,
-#             char monotonic_cst,
-#             Y_DTYPE_C lower_bound,
-#             Y_DTYPE_C upper_bound,
-#             split_info_struct * split_info) nogil:  # OUT
-#         """Find best split for categorical features.
-#
-#         Categories are first sorted according to their variance, and then
-#         a scan is performed as if categories were ordered quantities.
-#
-#         Ref: "On Grouping for Maximum Homogeneity", Walter D. Fisher
-#         """
-#
-#         cdef:
-#             unsigned int bin_idx
-#             unsigned int n_bins_non_missing = self.n_bins_non_missing[feature_idx]
-#             unsigned int missing_values_bin_idx = self.missing_values_bin_idx
-#             categorical_info * cat_infos
-#             unsigned int sorted_cat_idx
-#             unsigned int n_used_bins = 0
-#             int [2] scan_direction
-#             int direction = 0
-#             int best_direction = 0
-#             unsigned int middle
-#             unsigned int i
-#             const hist_struct[::1] feature_hist = histograms[feature_idx, :]
-#             Y_DTYPE_C sum_gradients_bin
-#             Y_DTYPE_C sum_hessians_bin
-#             Y_DTYPE_C loss_current_node
-#             Y_DTYPE_C sum_gradient_left, sum_hessian_left
-#             Y_DTYPE_C sum_gradient_right, sum_hessian_right
-#             unsigned int n_samples_left, n_samples_right
-#             Y_DTYPE_C gain
-#             Y_DTYPE_C best_gain = -1.0
-#             unsigned char found_better_split = False
-#             Y_DTYPE_C best_sum_hessian_left
-#             Y_DTYPE_C best_sum_gradient_left
-#             unsigned int best_n_samples_left
-#             unsigned int best_cat_infos_thresh
-#             # Reduces the effect of noises in categorical features,
-#             # especially for categories with few data. Called cat_smooth in
-#             # LightGBM. TODO: Make this user adjustable?
-#             Y_DTYPE_C MIN_CAT_SUPPORT = 10.
-#             # this is equal to 1 for losses where hessians are constant
-#             Y_DTYPE_C support_factor = n_samples / sum_hessians
-#
-#         # Details on the split finding:
-#         # We first order categories by their sum_gradients / sum_hessians
-#         # values, and we exclude categories that don't respect MIN_CAT_SUPPORT
-#         # from this sorted array. Missing values are treated just like any
-#         # other category. The low-support categories will always be mapped to
-#         # the right child. We scan the sorted categories array from left to
-#         # right and from right to left, and we stop at the middle.
-#
-#         # Considering ordered categories A B C D, with E being a low-support
-#         # category: A B C D
-#         #              ^
-#         #           midpoint
-#         # The scans will consider the following split-points:
-#         # * left to right:
-#         #   A - B C D E
-#         #   A B - C D E
-#         # * right to left:
-#         #   D - A B C E
-#         #   C D - A B E
-#
-#         # Note that since we stop at the middle and since low-support
-#         # categories (E) are always mapped to the right, the following splits
-#         # aren't considered:
-#         # A E - B C D
-#         # D E - A B C
-#         # Basically, we're forcing E to always be mapped to the child that has
-#         # *at least half of the categories* (and this child is always the right
-#         # child, by convention).
-#
-#         # Also note that if we scanned in only one direction (e.g. left to
-#         # right), we would only consider the following splits:
-#         # A - B C D E
-#         # A B - C D E
-#         # A B C - D E
-#         # and thus we would be missing on D - A B C E and on C D - A B E
-#
-#         cat_infos = <categorical_info *> malloc(
-#             (n_bins_non_missing + has_missing_values) * sizeof(categorical_info))
-#
-#         # fill cat_infos while filtering out categories based on MIN_CAT_SUPPORT
-#         for bin_idx in range(n_bins_non_missing):
-#             if self.hessians_are_constant:
-#                 sum_hessians_bin = feature_hist[bin_idx].count
-#             else:
-#                 sum_hessians_bin = feature_hist[bin_idx].sum_hessians
-#             if sum_hessians_bin * support_factor >= MIN_CAT_SUPPORT:
-#                 cat_infos[n_used_bins].bin_idx = bin_idx
-#                 sum_gradients_bin = feature_hist[bin_idx].sum_gradients
-#
-#                 cat_infos[n_used_bins].value = (
-#                     sum_gradients_bin / (sum_hessians_bin + MIN_CAT_SUPPORT)
-#                 )
-#                 n_used_bins += 1
-#
-#         # Also add missing values bin so that nans are considered as a category
-#         if has_missing_values:
-#             if self.hessians_are_constant:
-#                 sum_hessians_bin = feature_hist[missing_values_bin_idx].count
-#             else:
-#                 sum_hessians_bin = feature_hist[missing_values_bin_idx].sum_hessians
-#             if sum_hessians_bin * support_factor >= MIN_CAT_SUPPORT:
-#                 cat_infos[n_used_bins].bin_idx = missing_values_bin_idx
-#                 sum_gradients_bin = (
-#                     feature_hist[missing_values_bin_idx].sum_gradients
-#                 )
-#
-#                 cat_infos[n_used_bins].value = (
-#                     sum_gradients_bin / (sum_hessians_bin + MIN_CAT_SUPPORT)
-#                 )
-#                 n_used_bins += 1
-#
-#         # not enough categories to form a split
-#         if n_used_bins <= 1:
-#             free(cat_infos)
-#             return
-#
-#         qsort(cat_infos, n_used_bins, sizeof(categorical_info),
-#               compare_cat_infos)
-#
-#         loss_current_node = _loss_from_value(value, sum_gradients)
-#
-#         scan_direction[0], scan_direction[1] = 1, -1
-#         for direction in scan_direction:
-#             if direction == 1:
-#                 middle = (n_used_bins + 1) // 2
-#             else:
-#                 middle = (n_used_bins + 1) // 2 - 1
-#
-#             # The categories we'll consider will go to the left child
-#             sum_gradient_left, sum_hessian_left = 0., 0.
-#             n_samples_left = 0
-#
-#             for i in range(middle):
-#                 sorted_cat_idx = i if direction == 1 else n_used_bins - 1 - i
-#                 bin_idx = cat_infos[sorted_cat_idx].bin_idx;
-#
-#                 n_samples_left += feature_hist[bin_idx].count
-#                 n_samples_right = n_samples - n_samples_left
-#
-#                 if self.hessians_are_constant:
-#                     sum_hessian_left += feature_hist[bin_idx].count
-#                 else:
-#                     sum_hessian_left += feature_hist[bin_idx].sum_hessians
-#                 sum_hessian_right = sum_hessians - sum_hessian_left
-#
-#                 sum_gradient_left += feature_hist[bin_idx].sum_gradients
-#                 sum_gradient_right = sum_gradients - sum_gradient_left
-#
-#                 if (n_samples_left < self.min_samples_leaf or
-#                     sum_hessian_left < self.min_hessian_to_split):
-#                     continue
-#                 if (n_samples_right < self.min_samples_leaf or
-#                     sum_hessian_right < self.min_hessian_to_split):
-#                     break
-#
-#                 gain = _split_gain(sum_gradient_left, sum_hessian_left,
-#                                     sum_gradient_right, sum_hessian_right,
-#                                     loss_current_node, monotonic_cst,
-#                                     lower_bound, upper_bound,
-#                                     self.l2_regularization)
-#                 if gain > best_gain and gain > self.min_gain_to_split:
-#                     found_better_split = True
-#                     best_gain = gain
-#                     best_cat_infos_thresh = sorted_cat_idx
-#                     best_sum_gradient_left = sum_gradient_left
-#                     best_sum_hessian_left = sum_hessian_left
-#                     best_n_samples_left = n_samples_left
-#                     best_direction = direction
-#
-#
-#         if found_better_split:
-#             split_info.gain = best_gain
-#
-#             # split_info.bin_idx is unused for categorical splits: left_cat_bitset
-#             # is used instead and set below
-#             split_info.bin_idx = 0
-#
-#             split_info.sum_gradient_left = best_sum_gradient_left
-#             split_info.sum_gradient_right = sum_gradients - best_sum_gradient_left
-#             split_info.sum_hessian_left = best_sum_hessian_left
-#             split_info.sum_hessian_right = sum_hessians - best_sum_hessian_left
-#             split_info.n_samples_left = best_n_samples_left
-#             split_info.n_samples_right = n_samples - best_n_samples_left
-#
-#             # We recompute best values here but it's cheap
-#             split_info.value_left = compute_node_value(
-#                 split_info.sum_gradient_left, split_info.sum_hessian_left,
-#                 lower_bound, upper_bound, self.l2_regularization)
-#
-#             split_info.value_right = compute_node_value(
-#                 split_info.sum_gradient_right, split_info.sum_hessian_right,
-#                 lower_bound, upper_bound, self.l2_regularization)
-#
-#             # create bitset with values from best_cat_infos_thresh
-#             init_bitset(split_info.left_cat_bitset)
-#             if best_direction == 1:
-#                 for sorted_cat_idx in range(best_cat_infos_thresh + 1):
-#                     bin_idx = cat_infos[sorted_cat_idx].bin_idx
-#                     set_bitset(split_info.left_cat_bitset, bin_idx)
-#             else:
-#                 for sorted_cat_idx in range(n_used_bins - 1, best_cat_infos_thresh - 1, -1):
-#                     bin_idx = cat_infos[sorted_cat_idx].bin_idx
-#                     set_bitset(split_info.left_cat_bitset, bin_idx)
-#
-#             if has_missing_values:
-#                 split_info.missing_go_to_left = in_bitset(
-#                     split_info.left_cat_bitset, missing_values_bin_idx)
-#
-#         free(cat_infos)
-#
-#
-# cdef int compare_cat_infos(const void * a, const void * b) nogil:
-#     return -1 if (<categorical_info *>a).value < (<categorical_info *>b).value else 1
-#
-# cdef inline Y_DTYPE_C _split_gain(
-#         Y_DTYPE_C sum_gradient_left,
-#         Y_DTYPE_C sum_hessian_left,
-#         Y_DTYPE_C sum_gradient_right,
-#         Y_DTYPE_C sum_hessian_right,
-#         Y_DTYPE_C loss_current_node,
-#         signed char monotonic_cst,
-#         Y_DTYPE_C lower_bound,
-#         Y_DTYPE_C upper_bound,
-#         Y_DTYPE_C l2_regularization) nogil:
-#     """Loss reduction
-#
-#     Compute the reduction in loss after taking a split, compared to keeping
-#     the node a leaf of the tree.
-#
-#     See Equation 7 of:
-#     XGBoost: A Scalable Tree Boosting System, T. Chen, C. Guestrin, 2016
-#     https://arxiv.org/abs/1603.02754
-#     """
-#     cdef:
-#         Y_DTYPE_C gain
-#         Y_DTYPE_C value_left
-#         Y_DTYPE_C value_right
-#
-#     # Compute values of potential left and right children
-#     value_left = compute_node_value(sum_gradient_left, sum_hessian_left,
-#                                     lower_bound, upper_bound,
-#                                     l2_regularization)
-#     value_right = compute_node_value(sum_gradient_right, sum_hessian_right,
-#                                     lower_bound, upper_bound,
-#                                     l2_regularization)
-#
-#     if ((monotonic_cst == MonotonicConstraint.POS and value_left > value_right) or
-#             (monotonic_cst == MonotonicConstraint.NEG and value_left < value_right)):
-#         # don't consider this split since it does not respect the monotonic
-#         # constraints. Note that these comparisons need to be done on values
-#         # that have already been clipped to take the monotonic constraints into
-#         # account (if any).
-#         return -1
-#
-#     gain = loss_current_node
-#     gain -= _loss_from_value(value_left, sum_gradient_left)
-#     gain -= _loss_from_value(value_right, sum_gradient_right)
-#     # Note that for the gain to be correct (and for min_gain_to_split to work
-#     # as expected), we need all values to be bounded (current node, left child
-#     # and right child).
-#
-#     return gain
-#
-# cdef inline Y_DTYPE_C _loss_from_value(
-#         Y_DTYPE_C value,
-#         Y_DTYPE_C sum_gradient) nogil:
-#     """Return loss of a node from its (bounded) value
-#
-#     See Equation 6 of:
-#     XGBoost: A Scalable Tree Boosting System, T. Chen, C. Guestrin, 2016
-#     https://arxiv.org/abs/1603.02754
-#     """
-#     return sum_gradient * value
-#
-# cdef inline unsigned char sample_goes_left(
-#         unsigned char missing_go_to_left,
-#         unsigned char missing_values_bin_idx,
-#         X_BINNED_DTYPE_C split_bin_idx,
-#         X_BINNED_DTYPE_C bin_value,
-#         unsigned char is_categorical,
-#         BITSET_DTYPE_C left_cat_bitset) nogil:
-#     """Helper to decide whether sample should go to left or right child."""
-#
-#     if is_categorical:
-#         # note: if any, missing values are encoded in left_cat_bitset
-#         return in_bitset(left_cat_bitset, bin_value)
-#     else:
-#         return (
-#             (
-#                 missing_go_to_left and
-#                 bin_value == missing_values_bin_idx
-#             )
-#             or (
-#                 bin_value <= split_bin_idx
-#             ))
-#
-#
-# cpdef inline Y_DTYPE_C compute_node_value(
-#         Y_DTYPE_C sum_gradient,
-#         Y_DTYPE_C sum_hessian,
-#         Y_DTYPE_C lower_bound,
-#         Y_DTYPE_C upper_bound,
-#         Y_DTYPE_C l2_regularization) nogil:
-#     """Compute a node's value.
-#
-#     The value is capped in the [lower_bound, upper_bound] interval to respect
-#     monotonic constraints. Shrinkage is ignored.
-#
-#     See Equation 5 of:
-#     XGBoost: A Scalable Tree Boosting System, T. Chen, C. Guestrin, 2016
-#     https://arxiv.org/abs/1603.02754
-#     """
-#
-#     cdef:
-#         Y_DTYPE_C value
-#
-#     value = -sum_gradient / (sum_hessian + l2_regularization + 1e-15)
-#
-#     if value < lower_bound:
-#         value = lower_bound
-#     elif value > upper_bound:
-#         value = upper_bound
-#
-#     return value
+    pos_train = start_train + n_samples_train_left
+    partition_train[start_train:pos_train] = left_buffer[:n_samples_train_left]
+    partition_train[pos_train:end_train] = right_buffer[:n_samples_train_right]
+
+    # We must have start_train + n_samples_train_left + n_samples_train_right ==
+    # end_train
+
+    n_samples_valid_left = nb_size_t(0)
+    n_samples_valid_right = nb_size_t(0)
+    for i in partition_valid:
+        if Xf[i] <= bin:
+            left_buffer[n_samples_valid_left] = i
+            n_samples_valid_left += nb_size_t(1)
+        else:
+            right_buffer[n_samples_valid_right] = i
+            n_samples_valid_right += nb_size_t(1)
+
+    pos_valid = start_valid + n_samples_valid_left
+    partition_valid[start_valid:pos_valid] = left_buffer[:n_samples_valid_left]
+    partition_valid[pos_valid:end_valid] = right_buffer[:n_samples_valid_right]
+
+    return pos_train, pos_valid

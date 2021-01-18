@@ -49,9 +49,10 @@ from ._grower import grow
 # from . import _tree_old
 
 from ._utils import np_float32, np_uint8
+from ._splitting import TreeContext, NodeContext
 
+from ._tree import Tree
 
-from ._splitting import Context
 
 # from ._tree import BestFirstTreeBuilder
 # from ._tree_old import Tree
@@ -413,16 +414,22 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
         n_bins_per_feature = max_bins * np.ones(n_features)
         n_bins_per_feature = n_bins_per_feature.astype(np_uint8)
 
-
-
         print(y.flags)
         print("y.dtype: ", y.dtype)
-
         print("train_indices.flags: ", train_indices.flags)
-
         print("train_indices.dtypes: ", train_indices.dtype)
 
-        context = Context(
+        # Then, we create the tree object, which is mostly a data container for the
+        # nodes.
+        tree = Tree(n_features, n_classes)
+
+        # TODO: faudra verifier ca aussi
+        max_features = 2
+
+        # We build a tree context, that contains global information about
+        # the data, in particular the way we'll organize data into contiguous
+        # node indexes both for training and validation samples
+        tree_context = TreeContext(
             X,
             y,
             sample_weights,
@@ -434,13 +441,16 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
             max_features,
         )
 
+        node_context = NodeContext(tree_context)
+
+
         # TODO: j'en suis ICI ICI ICI ICI 2021 / 01 / 15 faut creer ici le tree numba
         #  et le passer a cette fonction, verifier le calcul des splits, gerer la
         #  croissance de l'arbre et gerer partition_train et partition_valid et ca
         #  devrait etre bon !
 
         # On ne peut pas passer self a grow car self est une classe python...
-        grow(context)
+        grow(tree, tree_context, node_context)
 
         # X,
         # y,

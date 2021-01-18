@@ -32,6 +32,8 @@ nb_float64 = float64
 np_float64 = np.float64
 np_size_t = np.uintp
 nb_size_t = uintp
+np_ssize_t = np.intp
+nb_ssize_t = intp
 nb_int32 = int32
 np_int32 = np.int32
 nb_uint32 = uint32
@@ -42,6 +44,7 @@ infinity = np.inf
 epsilon = np.finfo("double").eps
 max_int32 = np.iinfo(np.int32).max
 max_size_t = np.iinfo(np_size_t).max
+max_ssize_t = np.iinfo(np_ssize_t).max
 
 
 def get_numba_type(class_):

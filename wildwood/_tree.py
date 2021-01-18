@@ -7,6 +7,8 @@ from ._utils import (
     np_uint8,
     np_size_t,
     nb_size_t,
+    np_ssize_t,
+    nb_ssize_t,
     nb_uint8,
     np_bool,
     np_float32,
@@ -39,27 +41,27 @@ import numba
 # TODO: on a vraiment besoin de tout ca dans un stack_record ?
 
 
-spec_stack_record = [
+spec_node_record = [
     ("start_train", np_size_t),
     ("end_train", np_size_t),
     ("start_valid", np_size_t),
     ("end_valid", np_size_t),
     ("depth", np_size_t),
-    ("parent", np_size_t),
+    ("parent", np_ssize_t),
     ("is_left", np_bool),
     ("impurity", np_float32),
     ("n_constant_features", np_size_t),
 ]
 
-np_stack_record = np.dtype(spec_stack_record)
-nb_stack_record = from_dtype(np_stack_record)
+np_node_record = np.dtype(spec_node_record)
+nb_node_record = from_dtype(np_node_record)
 
 
-spec_stack = [("capacity", nb_size_t), ("top", nb_size_t), ("stack_", nb_stack_record[::1])]
+spec_records = [("capacity", nb_size_t), ("top", nb_size_t), ("stack_", nb_node_record[::1])]
 
 
-@jitclass(spec_stack)
-class Stack(object):
+@jitclass(spec_records)
+class Records(object):
     """
     A simple LIFO (last in, first out) data structure to stack the nodes to split
     during tree growing
@@ -80,23 +82,23 @@ class Stack(object):
     def __init__(self, capacity):
         self.capacity = capacity
         self.top = 0
-        self.stack_ = np.empty(capacity, dtype=np_stack_record)
+        self.stack_ = np.empty(capacity, dtype=np_node_record)
 
 
 @njit
-def stack_push(
-    stack, start_train, end_train, start_valid, end_valid, depth, parent, is_left,
+def push_node_record(
+    records, start_train, end_train, start_valid, end_valid, depth, parent, is_left,
         impurity,
         n_constant_features
 ):
-    top = stack.top
-    stack_ = stack.stack_
+    top = records.top
+    stack_ = records.stack_
     # Resize the stack if capacity is not enough
-    if top >= stack.capacity:
-        stack.capacity = 2 * stack.capacity
-        stack.stack_ = resize(stack_, stack.capacity)
+    if top >= records.capacity:
+        records.capacity = 2 * records.capacity
+        records.stack_ = resize(stack_, records.capacity)
 
-    stack_top = stack.stack_[top]
+    stack_top = records.stack_[top]
     stack_top["start_train"] = start_train
     stack_top["end_train"] = end_train
     stack_top["start_valid"] = start_valid
@@ -108,16 +110,16 @@ def stack_push(
     stack_top["n_constant_features"] = n_constant_features
 
     # We have one more record in the stack
-    stack.top = top + 1
+    records.top = top + 1
 
 
 @njit
-def is_stack_empty(stack):
-    return stack.top <= 0
+def has_records(records):
+    return records.top <= 0
 
 
 @njit
-def stack_pop(stack):
+def pop_node_record(stack):
     top = stack.top
     stack_ = stack.stack_
     stack_record = stack_[top - 1]
@@ -137,7 +139,7 @@ def get_records(stack):
     import pandas as pd
 
     nodes = stack.nodes
-    columns = [col_name for col_name, _ in spec_stack_record]
+    columns = [col_name for col_name, _ in spec_node_record]
     # columns = ["left_child"]
     return pd.DataFrame.from_records(
         (
@@ -150,39 +152,38 @@ def get_records(stack):
 
 
 # A numpy dtype containing the node information saved in the tree
-spec_node = [
-    ("left_child", nb_size_t),
-    ("right_child", nb_size_t),
-    ("feature", nb_size_t),
-    # We keep both the numerical threshold and the bin_threshold so that predictions
-    # can be performed on non-binned features
+spec_node_tree = [
+    ("left_child", nb_ssize_t),
+    ("right_child", nb_ssize_t),
+    ("feature", nb_ssize_t),
     ("threshold", nb_float32),
     ("bin_threshold", nb_uint8),
     ("impurity", nb_float32),
-    ("n_samples", nb_size_t),
-    ("weighted_n_samples", nb_float32),
+    ("n_samples_train", nb_size_t),
+    ("n_samples_valid", nb_size_t),
+    ("weighted_n_samples_train", nb_float32),
+    ("weighted_n_samples_valid", nb_float32),
 ]
 
 
-
-np_node = np.dtype([
-    ("left_child", np_size_t),
-    ("right_child", np_size_t),
-    ("feature", np_size_t),
-    # We keep both the numerical threshold and the bin_threshold so that predictions
-    # can be performed on non-binned features
+np_node_tree = np.dtype([
+    ("left_child", np_ssize_t),
+    ("right_child", np_ssize_t),
+    ("feature", np_ssize_t),
     ("threshold", np_float32),
-    ("bin_threshold", np.uint8),
+    ("bin_threshold", np_uint8),
     ("impurity", np_float32),
-    ("n_samples", np_size_t),
-    ("weighted_n_samples", np_float32),
+    ("n_samples_train", np_size_t),
+    ("n_samples_valid", np_size_t),
+    ("weighted_n_samples_train", np_float32),
+    ("weighted_n_samples_valid", np_float32),
 ])
 
-nb_node = numba.from_dtype(np_node)
+nb_node_tree = numba.from_dtype(np_node_tree)
 
 
 @njit
-def set_node(nodes, idx, node):
+def set_node_tree(nodes, idx, node):
     """
     Set a node in an array of nodes at index idx
 
@@ -194,7 +195,7 @@ def set_node(nodes, idx, node):
     idx : intp
         Destination index of the node.
 
-    node : Node
+    node : NodeTree
         The node to be inserted.
     """
     node_dtype = nodes[idx]
@@ -204,12 +205,14 @@ def set_node(nodes, idx, node):
     node_dtype["threshold"] = node.threshold
     node_dtype["bin_threshold"] = node.bin_threshold
     node_dtype["impurity"] = node.impurity
-    node_dtype["n_samples"] = node.n_node_samples
-    node_dtype["weighted_n_samples"] = node.weighted_n_node_samples
+    node_dtype["n_samples_train"] = node.n_samples_train
+    node_dtype["n_samples_valid"] = node.n_samples_valid
+    node_dtype["weighted_n_samples_train"] = node.weighted_n_samples_train
+    node_dtype["weighted_n_samples_valid"] = node.weighted_n_samples_valid
 
 
 @njit
-def get_node(nodes, idx):
+def get_node_tree(nodes, idx):
     """
     Get node at index idx
 
@@ -223,16 +226,17 @@ def get_node(nodes, idx):
 
     Returns
     -------
-    output : Node
+    output : NodeTree
         Retrieved node
     """
     # It's a jitclass object
     node = nodes[idx]
-    return Node(
+    return NodeTree(
         node["left_child"],
         node["right_child"],
         node["feature"],
         node["threshold"],
+        node["bin_threshold"],
         node["impurity"],
         node["n_samples"],
         node["weighted_n_samples"],
@@ -243,18 +247,8 @@ def get_node(nodes, idx):
 #  dtype ?
 
 
-@jitclass(spec_node)
-class Node(object):
-    # cdef struct Node:
-    #     # Base storage structure for the nodes in a Tree object
-    #
-    #     SIZE_t left_child                    # id of the left child of the node
-    #     SIZE_t right_child                   # id of the right child of the node
-    #     SIZE_t feature                       # Feature used for splitting the node
-    #     DOUBLE_t threshold                   # Threshold value at the node
-    #     DOUBLE_t impurity                    # Impurity of the node (i.e., the value of the criterion)
-    #     SIZE_t n_node_samples                # Number of samples at the node
-    #     DOUBLE_t weighted_n_node_samples     # Weighted number of samples at the node
+@jitclass(spec_node_tree)
+class NodeTree(object):
 
     def __init__(
         self,
@@ -264,8 +258,10 @@ class Node(object):
         threshold,
         bin_threshold,
         impurity,
-        n_node_samples,
-        weighted_n_node_samples,
+        n_samples_train,
+        n_samples_valid,
+        weighted_n_samples_train,
+        weighted_n_samples_valid
     ):
         self.left_child = left_child
         self.right_child = right_child
@@ -273,8 +269,10 @@ class Node(object):
         self.threshold = threshold
         self.bin_threshold = bin_threshold
         self.impurity = impurity
-        self.n_node_samples = n_node_samples
-        self.weighted_n_node_samples = weighted_n_node_samples
+        self.n_samples_train = n_samples_train
+        self.n_samples_valid = n_samples_valid
+        self.weighted_n_samples_train = weighted_n_samples_train
+        self.weighted_n_samples_valid = weighted_n_samples_valid
 
 
 # cdef class Tree:
@@ -450,12 +448,10 @@ IS_NOT_FIRST = 0
 IS_LEFT = 1
 IS_NOT_LEFT = 0
 
-# TREE_LEAF = -1
-# TREE_LEAF = nb_intp(-1)
-# TREE_UNDEFINED = nb_intp(-2)
+TREE_LEAF = nb_ssize_t(-1)
+TREE_UNDEFINED = nb_ssize_t(-2)
 
-# _TREE_UNDEFINED = SIZE_t(TREE_UNDEFINED)
-
+# TODO: replace n_classes by pred_size ?
 
 spec_tree = [
     ("n_features", nb_size_t),
@@ -464,12 +460,12 @@ spec_tree = [
     ("node_count", nb_size_t),
     ("capacity", nb_size_t),
     # This array contains information about the nodes
-    ("nodes", nb_node[::1]),
+    ("nodes", nb_node_tree[::1]),
     # This array contains values allowing to compute the prediction of each node
     # Its shape is (n_nodes, n_outputs, max_n_classes)
     # TODO: IMPORTANT a priori ca serait mieux ::1 sur le premier axe mais l'init
     #  avec shape (0, ., .) foire dans ce cas avec numba
-    ("values", nb_float32[:, ::1]),
+    ("y_pred", nb_float32[:, ::1]),
     # TODO: renommer en ("y_sum_bins", nb_float32[:, ::1])) ?
 ]
 
@@ -487,8 +483,10 @@ class Tree(object):
         self.capacity = 0
         # Both values and nodes arrays have zero on the first axis and are resized
         # later when we know the capacity of the tree
-        self.values = np.empty((0, self.max_n_classes), dtype=np_float32)
-        self.nodes = np.empty(0, dtype=np_node)
+        # The array of nodes contained in the tree
+        self.nodes = np.empty(0, dtype=np_node_tree)
+        # The array of y sums or counts for each node
+        self.y_pred = np.empty((0, self.n_classes), dtype=np_float32)
 
 
 def print_tree(tree):
@@ -505,7 +503,7 @@ def get_nodes(tree):
     import pandas as pd
 
     nodes = tree.nodes
-    columns = [col_name for col_name, _ in np_node]
+    columns = [col_name for col_name, _ in np_node_tree]
     # columns = ["left_child"]
 
     return pd.DataFrame.from_records(
@@ -520,7 +518,7 @@ def get_nodes(tree):
 
 
 @njit
-def add_node_in_tree(
+def add_node_tree(
     tree,
     parent,
     is_left,
@@ -529,29 +527,11 @@ def add_node_in_tree(
     threshold,
     bin_threshold,
     impurity,
-    n_samples,
-    weighted_n_samples,
+    n_samples_train,
+    n_samples_valid,
+    weighted_n_samples_train,
+    weighted_n_samples_valid
 ):
-    """
-    This function adds a node in the tree
-
-    Parameters
-    ----------
-    tree
-    parent
-    is_left
-    is_leaf
-    feature
-    threshold
-    bin_threshold
-    impurity
-    n_samples
-    weighted_n_samples
-
-    Returns
-    -------
-
-    """
     # New node index is given by the current number of nodes in the tree
     node_idx = tree.node_count
 
@@ -563,23 +543,26 @@ def add_node_in_tree(
     nodes = tree.nodes
     node = nodes[node_idx]
     node["impurity"] = impurity
-    node["n_samples"] = n_samples
-    node["weighted_n_samples"] = weighted_n_samples
+    node["n_samples_train"] = n_samples_train
+    node["n_samples_valid"] = n_samples_valid
+    node["weighted_n_samples_train"] = weighted_n_samples_train
+    node["weighted_n_samples_valid"] = weighted_n_samples_valid
 
     # TODO: faudrait remettre ca : if parent != TREE_UNDEFINED:
-    if is_left:
-        nodes[parent]["left_child"] = node_idx
-    else:
-        nodes[parent]["right_child"] = node_idx
+    if parent != TREE_UNDEFINED:
+        if is_left:
+            nodes[parent]["left_child"] = node_idx
+        else:
+            nodes[parent]["right_child"] = node_idx
 
     if is_leaf:
         pass
         # TODO: ca ne sert a rien ca si ?
-        # node["left_child"] = TREE_LEAF
-        # node["right_child"] = TREE_LEAF
-        # node["feature"] = TREE_UNDEFINED
-        # node["threshold"] = TREE_UNDEFINED
-        # node["bin_threshold"] = TREE_UNDEFINED
+        node["left_child"] = TREE_LEAF
+        node["right_child"] = TREE_LEAF
+        node["feature"] = TREE_UNDEFINED
+        node["threshold"] = TREE_UNDEFINED
+        node["bin_threshold"] = TREE_UNDEFINED
     else:
         # left_child and right_child will be set later
         node["feature"] = feature
@@ -615,14 +598,7 @@ def tree_resize(tree, capacity=max_size_t):
 
     # print("new capacity: ", capacity)
     tree.nodes = resize(tree.nodes, capacity)
-
-    # TODO: je ne comprends toujours pas tres bien a quoi sert ce value mais bon
-
-    # tree.value = resize3d(tree.values, capacity * tree.value_stride, zeros=True)
-
-    # TODO: j'en suis ICI ICI ICI faut faire resize2d
-
-    tree.values = resize2d(tree.values, capacity, zeros=True)
+    tree.y_pred = resize2d(tree.y_pred, capacity, zeros=True)
 
     # value memory is initialised to 0 to enable classifier argmax
     # if capacity > tree.capacity:
@@ -656,7 +632,7 @@ def tree_predict(tree, X):
 
     # TODO: numba n'accepte pas l'option axis
     idx_leaves = tree_apply(tree, X)
-    out = tree.values.take(idx_leaves, axis=0)
+    out = tree.y_sum.take(idx_leaves, axis=0)
 
     if tree.n_outputs == 1:
         out = out.reshape(X.shape[0], tree.max_n_classes)

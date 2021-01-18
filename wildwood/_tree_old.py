@@ -559,7 +559,7 @@ def depth_first_tree_builder_build(builder, tree, X, y, sample_weight, X_idx_sor
 
         # splitter_node_value(splitter, tree.values, node_id)
 
-        tree.values[node_id, :, :] = splitter.criterion.sum_total
+        tree.y_sum[node_id, :, :] = splitter.criterion.sum_total
         # splitter.criterion.sum_total
         # # #
         # #     sum_total = criterion.sum_total
@@ -776,7 +776,7 @@ def tree_resize(tree, capacity=SIZE_MAX):
     # TODO: je ne comprends toujours pas tres bien a quoi sert ce value mais bon
 
     # tree.value = resize3d(tree.values, capacity * tree.value_stride, zeros=True)
-    tree.values = resize3d(tree.values, capacity, zeros=True)
+    tree.y_sum = resize3d(tree.y_sum, capacity, zeros=True)
 
     # value memory is initialised to 0 to enable classifier argmax
     # if capacity > tree.capacity:
@@ -807,7 +807,7 @@ def tree_predict(tree, X):
 
     # TODO: numba n'accepte pas l'option axis
     idx_leaves = tree_apply(tree, X)
-    out = tree.values.take(idx_leaves, axis=0)
+    out = tree.y_sum.take(idx_leaves, axis=0)
 
     if tree.n_outputs == 1:
         out = out.reshape(X.shape[0], tree.max_n_classes)

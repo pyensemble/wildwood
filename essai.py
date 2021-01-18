@@ -1,31 +1,41 @@
-from numba import njit
-from heapq import heappush
-from collections import namedtuple
-from numpy.random import randint
-from numba.experimental import jitclass
-from numba import from_dtype
-from numba.typed import List
-from time import time
-from numba import uint32
+# from numba import njit
+# from heapq import heappush
+# from collections import namedtuple
+# from numpy.random import randint
+# from numba.experimental import jitclass
+# from numba import from_dtype
+# from numba.typed import List
+# from time import time
+# from numba import uint32
 
-from wildwood._splitter import sort
+# from wildwood._splitter import sort
 #
 # from wildwood._utils import SIZE_t, DOUBLE_t, NP_SIZE_t, NP_DOUBLE_t
 #
-import numpy as np
-from sklearn.utils import check_random_state
+# import numpy as np
+# from sklearn.utils import check_random_state
 
-from wildwood._utils import MAX_INT
+# from wildwood._utils import MAX_INT
+
+from wildwood._utils import njit
+
+#
+# from wildwood._tree import Stack, print_stack
+#
+# stack = Stack(3)
+#
+# print_stack(stack)
+#
+# print()
 
 
-from wildwood._tree import Stack, print_stack
+@njit
+def myprint():
 
-stack = Stack(3)
+    print("Split({gain_proxy}".format(gain_proxy=2e-3))
 
-print_stack(stack)
 
-print()
-
+myprint()
 
 from cffi import FFI
 
