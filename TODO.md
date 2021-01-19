@@ -2,11 +2,8 @@
 
 # TODO
 
-Bon la matiere est la, mais ca foire complement
-
-- Y'a un gros mic-mac entre les weighted_n_samples et n_samples partout ! Faut
- comprendre ou on a besoin des n_samples, et ne garder que w_n_samples partout
-
+- Refaire marcher le display de l'arbre avec les data pour debugger ... sinon ca va
+ etre l'enfer
 
 1. Coder le histogram binning
     X Nombre variable de modalités pour chaque feature 

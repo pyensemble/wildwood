@@ -52,7 +52,7 @@ from sklearn.utils.validation import check_is_fitted, _check_sample_weight
 
 from ._binning import Binner
 
-from ._utils import np_size_t
+from ._utils import np_size_t, max_size_t
 
 __all__ = ["BinaryClassifier"]
 
@@ -89,7 +89,7 @@ def _generate_train_valid_samples(random_state, n_samples):
     valid_mask = sample_counts == 0
     # For very small samples, we might end up with empty validation...
     if valid_mask.sum() == 0:
-        return _generate_train_valid_samples((random_state + 1) % MAX_INT, n_samples)
+        return _generate_train_valid_samples((random_state + 1) % max_size_t, n_samples)
     else:
         # print("sample_indices: ", sample_indices)
         # print("sample_counts: ", sample_counts)
@@ -704,6 +704,8 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
             for i, tree in enumerate(trees)
         )
 
+        self.trees = trees
+
         # tree, X, y, sample_weight, tree_idx, n_trees, verbose=0
 
         # Collect newly grown trees
@@ -982,6 +984,11 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         # self.validation_score_ = np.asarray(self.validation_score_)
         # del self._in_fit  # hard delete so we're sure it can't be used anymore
         # return self
+
+
+    def get_nodes(self, tree_idx):
+        return self.trees[tree_idx].get_nodes()
+
 
     def _validate_y_class_weight(self, y):
         # TODO: c'est un copier / coller de scikit. Simplifier au cas classif binaire

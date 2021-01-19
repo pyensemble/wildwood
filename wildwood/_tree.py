@@ -173,6 +173,7 @@ spec_node_tree = [
     ("parent", nb_ssize_t),
     ("left_child", nb_ssize_t),
     ("right_child", nb_ssize_t),
+    ("depth", np_size_t),
     ("feature", nb_ssize_t),
     ("threshold", nb_float32),
     ("bin_threshold", nb_uint8),
@@ -190,6 +191,7 @@ np_node_tree = np.dtype(
         ("parent", np_ssize_t),
         ("left_child", np_ssize_t),
         ("right_child", np_ssize_t),
+        ("depth", np_size_t),
         ("feature", np_ssize_t),
         ("threshold", np_float32),
         ("bin_threshold", np_uint8),
@@ -228,6 +230,7 @@ def set_node_tree(nodes, idx, node):
     node_dtype["parent"] = node.parent
     node_dtype["left_child"] = node.left_child
     node_dtype["right_child"] = node.right_child
+    node_dtype["depth"] = node.depth
     node_dtype["feature"] = node.feature
     node_dtype["threshold"] = node.threshold
     node_dtype["bin_threshold"] = node.bin_threshold
@@ -263,6 +266,7 @@ def get_node_tree(nodes, idx):
         node["parent"],
         node["left_child"],
         node["right_child"],
+        node["depth"],
         node["feature"],
         node["threshold"],
         node["bin_threshold"],
@@ -284,6 +288,7 @@ class NodeTree(object):
         parent,
         left_child,
         right_child,
+        depth,
         feature,
         threshold,
         bin_threshold,
@@ -297,6 +302,7 @@ class NodeTree(object):
         self.parent = parent
         self.left_child = left_child
         self.right_child = right_child
+        self.depth = depth
         self.feature = feature
         self.threshold = threshold
         self.bin_threshold = bin_threshold
@@ -482,6 +488,7 @@ def print_node_tree(node):
     parent = node["parent"]
     left_child = node["left_child"]
     right_child = node["right_child"]
+    depth = node["depth"]
     feature = node["feature"]
     threshold = node["threshold"]
     bin_threshold = node["bin_threshold"]
@@ -497,6 +504,7 @@ def print_node_tree(node):
     s += ", parent: {parent}".format(parent=parent)
     s += ", left_child: {left_child}".format(left_child=left_child)
     s += ", right_child: {right_child}".format(right_child=right_child)
+    s += ", depth: {depth}".format(depth=depth)
     s += ", feature: {feature}:".format(feature=feature)
     s += ", bin_threshold: {bin_threshold}".format(bin_threshold=bin_threshold)
     s += ", n_samples_train: {n_samples_train}".format(n_samples_train=n_samples_train)
@@ -586,6 +594,7 @@ def get_nodes(tree):
         "parent",
         "left_child",
         "right_child",
+        "depth",
         "feature",
         "threshold",
         "bin_threshold",
@@ -613,6 +622,7 @@ def get_nodes(tree):
 def add_node_tree(
     tree,
     parent,
+    depth,
     is_left,
     is_leaf,
     feature,
@@ -637,6 +647,7 @@ def add_node_tree(
 
     node["node_id"] = node_idx
     node["parent"] = parent
+    node["depth"] = depth
     node["impurity"] = impurity
     node["n_samples_train"] = n_samples_train
     node["n_samples_valid"] = n_samples_valid

@@ -51,7 +51,7 @@ from ._grower import grow
 from ._utils import np_float32, np_uint8
 from ._splitting import TreeContext, NodeContext
 
-from ._tree import Tree
+from ._tree import Tree, get_nodes
 
 
 # from ._tree import BestFirstTreeBuilder
@@ -452,6 +452,10 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
         # On ne peut pas passer self a grow car self est une classe python...
         grow(tree, tree_context, node_context)
 
+        self._tree = tree
+        self._tree_context = tree_context
+
+
         # X,
         # y,
         # train_indices,
@@ -542,6 +546,9 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
         # self._prune_tree()
         # TODO: on ne prune pas, quelle drole d'idee !!!
         return self
+
+    def get_nodes(self):
+        return get_nodes(self._tree)
 
     def _validate_X_predict(self, X, check_input):
         """Validate the training data on predict (probabilities)."""

@@ -130,6 +130,7 @@ def grow(tree, tree_context, node_context):
         end_train = node_record["end_train"]
         start_valid = node_record["start_valid"]
         end_valid = node_record["end_valid"]
+        is_left = node_record["is_left"]
 
         # print("records.top: ", records.top)
 
@@ -139,7 +140,7 @@ def grow(tree, tree_context, node_context):
         # print("node_context.n_samples_train: ", node_context.n_samples_train)
         # print("node_context.n_samples_valid: ", node_context.n_samples_valid)
 
-        # is_left = node_record["is_left"]
+        #
         # impurity = node_record["impurity"]
         # n_constant_features = node_record["n_constant_features"]
         # Mettre a jour le local_context ici ?
@@ -233,6 +234,7 @@ def grow(tree, tree_context, node_context):
         node_id = add_node_tree(
             tree,
             parent,
+            depth,
             # TODO: faudrait calculer correctement is_left
             is_left,
             is_leaf,
