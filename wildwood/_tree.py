@@ -493,7 +493,7 @@ def print_node_tree(node):
     weighted_n_samples_valid = node["weighted_n_samples_valid"]
 
     s = "Node("
-    s += ", node_id: {node_id}".format(node_id=node_id)
+    s += "node_id: {node_id}".format(node_id=node_id)
     s += ", parent: {parent}".format(parent=parent)
     s += ", left_child: {left_child}".format(left_child=left_child)
     s += ", right_child: {right_child}".format(right_child=right_child)
@@ -580,7 +580,23 @@ def get_nodes(tree):
     import pandas as pd
 
     nodes = tree.nodes
-    columns = [col_name for col_name, _ in np_node_tree]
+
+    columns = [
+        "node_id",
+        "parent",
+        "left_child",
+        "right_child",
+        "feature",
+        "threshold",
+        "bin_threshold",
+        "impurity",
+        "n_samples_train",
+        "n_samples_valid",
+        "weighted_n_samples_train",
+        "weighted_n_samples_valid",
+    ]
+
+    # columns = [col_name for col_name, _ in np_node_tree]
     # columns = ["left_child"]
 
     return pd.DataFrame.from_records(

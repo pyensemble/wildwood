@@ -33,6 +33,7 @@ from ._tree import (
     print_tree,
     print_records,
     get_records,
+    get_nodes,
     TREE_UNDEFINED,
 )
 from ._utils import njit, infinity, nb_size_t
@@ -111,8 +112,8 @@ def grow(tree, tree_context, node_context):
     # TODO: this option will come for the forest later
     min_samples_split = 2
 
-    print_records(records)
-    print(get_records(records))
+    # print_records(records)
+    # print(get_records(records))
 
     while not has_records(records):
 
@@ -120,11 +121,15 @@ def grow(tree, tree_context, node_context):
         node_record = pop_node_record(records)
 
         # TODO: plutot creer un node ici
+
+        # Get information about the current node
+        parent = node_record["parent"]
+        depth = node_record["depth"]
+
         start_train = node_record["start_train"]
         end_train = node_record["end_train"]
         start_valid = node_record["start_valid"]
         end_valid = node_record["end_valid"]
-
 
         # print("records.top: ", records.top)
 
@@ -134,8 +139,6 @@ def grow(tree, tree_context, node_context):
         # print("node_context.n_samples_train: ", node_context.n_samples_train)
         # print("node_context.n_samples_valid: ", node_context.n_samples_valid)
 
-        # depth = node_record["depth"]
-        # parent = node_record["parent"]
         # is_left = node_record["is_left"]
         # impurity = node_record["impurity"]
         # n_constant_features = node_record["n_constant_features"]
@@ -303,8 +306,12 @@ def grow(tree, tree_context, node_context):
         if depth > max_depth_seen:
             max_depth_seen = depth
 
-        print_records(records)
-        print(get_records(records))
+    # print_tree(tree)
+    print(get_nodes(tree))
+
+
+        # print_records(records)
+        # print(get_records(records))
 
     # TODO: put back this crap
     # if rc >= 0:
