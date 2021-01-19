@@ -128,7 +128,7 @@ def gini_childs(n_classes, n_samples_left, n_samples_right, y_sum_left, y_sum_ri
     # TODO: docstring
     y_sum_left_sq = 0.0
     y_sum_right_sq = 0.0
-    print("n_samples_left: ", n_samples_left, ", n_samples_right: ", n_samples_right)
+    # print("n_samples_left: ", n_samples_left, ", n_samples_right: ", n_samples_right)
     n_samples_left_sq = n_samples_left * n_samples_left
     n_samples_right_sq = n_samples_right * n_samples_right
     for k in range(n_classes):

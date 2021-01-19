@@ -60,7 +60,7 @@ nb_node_record = from_dtype(np_node_record)
 spec_records = [
     ("capacity", nb_size_t),
     ("top", nb_size_t),
-    ("stack_", nb_node_record[::1]),
+    ("stack", nb_node_record[::1]),
 ]
 
 
@@ -86,7 +86,7 @@ class Records(object):
     def __init__(self, capacity):
         self.capacity = capacity
         self.top = nb_size_t(0)
-        self.stack_ = np.empty(capacity, dtype=np_node_record)
+        self.stack = np.empty(capacity, dtype=np_node_record)
 
 
 @njit
@@ -103,13 +103,13 @@ def push_node_record(
     n_constant_features,
 ):
     top = records.top
-    stack_ = records.stack_
+    stack = records.stack
     # Resize the stack if capacity is not enough
     if top >= records.capacity:
         records.capacity = nb_size_t(2 * records.capacity)
-        records.stack_ = resize(stack_, records.capacity)
+        records.stack = resize(stack, records.capacity)
 
-    stack_top = records.stack_[top]
+    stack_top = records.stack[top]
     stack_top["start_train"] = start_train
     stack_top["end_train"] = end_train
     stack_top["start_valid"] = start_valid
@@ -131,37 +131,37 @@ def has_records(records):
 
 
 @njit
-def pop_node_record(stack):
-    top = stack.top
-    stack_ = stack.stack_
+def pop_node_record(records):
+    top = records.top
+    stack = records.stack
     # print("top: ", top)
     # print("stack_: ", stack_)
     # print("top - 1", top-1)
-    stack_record = stack_[np_size_t(top - 1)]
-    stack.top = nb_size_t(top - 1)
+    stack_record = stack[np_size_t(top - 1)]
+    records.top = nb_size_t(top - 1)
     # print("stack.top: ", stack.top)
     return stack_record
 
 
-def print_stack(stack):
-    s = "Stack("
-    s += "capacity={capacity}".format(capacity=stack.capacity)
-    s += ", top={top}".format(top=stack.top)
+def print_records(records):
+    s = "Records("
+    s += "capacity={capacity}".format(capacity=records.capacity)
+    s += ", top={top}".format(top=records.top)
     s += ")"
     print(s)
 
 
-def get_records(stack):
+def get_records(records):
     import pandas as pd
 
-    nodes = stack.nodes
+    stack = records.stack
     columns = [col_name for col_name, _ in spec_node_record]
     # columns = ["left_child"]
     return pd.DataFrame.from_records(
         (
             tuple(node[col] for col in columns)
-            for i, node in enumerate(nodes)
-            if i < stack.node_count
+            for i, node in enumerate(stack)
+            if i < records.top
         ),
         columns=columns,
     )
@@ -169,6 +169,8 @@ def get_records(stack):
 
 # A numpy dtype containing the node information saved in the tree
 spec_node_tree = [
+    ("node_id", nb_size_t),
+    ("parent", nb_ssize_t),
     ("left_child", nb_ssize_t),
     ("right_child", nb_ssize_t),
     ("feature", nb_ssize_t),
@@ -184,6 +186,8 @@ spec_node_tree = [
 
 np_node_tree = np.dtype(
     [
+        ("node_id", np_size_t),
+        ("parent", np_ssize_t),
         ("left_child", np_ssize_t),
         ("right_child", np_ssize_t),
         ("feature", np_ssize_t),
@@ -217,6 +221,11 @@ def set_node_tree(nodes, idx, node):
         The node to be inserted.
     """
     node_dtype = nodes[idx]
+    if idx != node.node_id:
+        raise ValueError("idx != node.node_id")
+
+    node_dtype["node_id"] = node.node_id
+    node_dtype["parent"] = node.parent
     node_dtype["left_child"] = node.left_child
     node_dtype["right_child"] = node.right_child
     node_dtype["feature"] = node.feature
@@ -250,6 +259,8 @@ def get_node_tree(nodes, idx):
     # It's a jitclass object
     node = nodes[idx]
     return NodeTree(
+        node["node_id"],
+        node["parent"],
         node["left_child"],
         node["right_child"],
         node["feature"],
@@ -269,6 +280,8 @@ def get_node_tree(nodes, idx):
 class NodeTree(object):
     def __init__(
         self,
+        node_id,
+        parent,
         left_child,
         right_child,
         feature,
@@ -280,6 +293,8 @@ class NodeTree(object):
         weighted_n_samples_train,
         weighted_n_samples_valid,
     ):
+        self.node_id = node_id
+        self.parent = parent
         self.left_child = left_child
         self.right_child = right_child
         self.feature = feature
@@ -463,6 +478,8 @@ class NodeTree(object):
 
 @njit
 def print_node_tree(node):
+    node_id = node["node_id"]
+    parent = node["parent"]
     left_child = node["left_child"]
     right_child = node["right_child"]
     feature = node["feature"]
@@ -475,7 +492,10 @@ def print_node_tree(node):
     weighted_n_samples_train = node["weighted_n_samples_train"]
     weighted_n_samples_valid = node["weighted_n_samples_valid"]
 
-    s = "Node(left_child: {left_child}".format(left_child=left_child)
+    s = "Node("
+    s += ", node_id: {node_id}".format(node_id=node_id)
+    s += ", parent: {parent}".format(parent=parent)
+    s += ", left_child: {left_child}".format(left_child=left_child)
     s += ", right_child: {right_child}".format(right_child=right_child)
     s += ", feature: {feature}:".format(feature=feature)
     s += ", bin_threshold: {bin_threshold}".format(bin_threshold=bin_threshold)
@@ -598,13 +618,15 @@ def add_node_tree(
 
     nodes = tree.nodes
     node = nodes[node_idx]
+
+    node["node_id"] = node_idx
+    node["parent"] = parent
     node["impurity"] = impurity
     node["n_samples_train"] = n_samples_train
     node["n_samples_valid"] = n_samples_valid
     node["weighted_n_samples_train"] = weighted_n_samples_train
     node["weighted_n_samples_valid"] = weighted_n_samples_valid
 
-    # TODO: faudrait remettre ca : if parent != TREE_UNDEFINED:
     if parent != TREE_UNDEFINED:
         if is_left:
             nodes[parent]["left_child"] = node_idx

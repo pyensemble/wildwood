@@ -31,6 +31,8 @@ from ._tree import (
     pop_node_record,
     has_records,
     print_tree,
+    print_records,
+    get_records,
     TREE_UNDEFINED,
 )
 from ._utils import njit, infinity, nb_size_t
@@ -109,10 +111,21 @@ def grow(tree, tree_context, node_context):
     # TODO: this option will come for the forest later
     min_samples_split = 2
 
+    print_records(records)
+    print(get_records(records))
+
     while not has_records(records):
 
         # print("records.top: ", records.top)
         node_record = pop_node_record(records)
+
+        # TODO: plutot creer un node ici
+        start_train = node_record["start_train"]
+        end_train = node_record["end_train"]
+        start_valid = node_record["start_valid"]
+        end_valid = node_record["end_valid"]
+
+
         # print("records.top: ", records.top)
 
         # Initialize the node context, this computes the node statistics
@@ -121,10 +134,6 @@ def grow(tree, tree_context, node_context):
         # print("node_context.n_samples_train: ", node_context.n_samples_train)
         # print("node_context.n_samples_valid: ", node_context.n_samples_valid)
 
-        # start_train = node_record["start_train"]
-        # end_train = node_record["end_train"]
-        # start_valid = node_record["start_valid"]
-        # end_valid = node_record["end_valid"]
         # depth = node_record["depth"]
         # parent = node_record["parent"]
         # is_left = node_record["is_left"]
@@ -237,7 +246,7 @@ def grow(tree, tree_context, node_context):
             weighted_n_samples_valid
         )
 
-        print_tree(tree)
+        # print_tree(tree)
 
         # TODO: remettre le y_sum correct
 
@@ -252,10 +261,10 @@ def grow(tree, tree_context, node_context):
 
         # splitter.node_value(tree.value + node_id * tree.value_stride)
 
-        print("is_leaf: ", is_leaf)
+        # print("is_leaf: ", is_leaf)
         if not is_leaf:
-            # If it's not a lead then we need to add both childs in the node record,
-            # so that they can be added in the tree and eventually splitted later.
+            # If it's not a leaf then we need to add both childs in the node record,
+            # so that they can be added in the tree and eventually be splitted later.
 
             # First, we need to update partition_train and partition_valid
             pos_train, pos_valid = split_indices(tree_context, split, node_record)
@@ -285,7 +294,7 @@ def grow(tree, tree_context, node_context):
                 end_valid,            # TODO
                 depth + 1,            # depth is increased by one
                 node_id,              # The parent is the previous node_id
-                True,                 # is_left=True
+                False,                # is_left=False
                 impurity,             # TODO: for now we don't care about that
                 n_constant_features,  # TODO: for now we don't care about that
             )
@@ -294,6 +303,8 @@ def grow(tree, tree_context, node_context):
         if depth > max_depth_seen:
             max_depth_seen = depth
 
+        print_records(records)
+        print(get_records(records))
 
     # TODO: put back this crap
     # if rc >= 0:

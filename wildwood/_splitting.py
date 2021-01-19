@@ -28,8 +28,8 @@ spec_split_info = [
     ("bin", nb_uint8),
     ("n_samples_left", nb_size_t),
     ("n_samples_right", nb_size_t),
-    ("weighted_samples_left", nb_float32),
-    ("weighted_samples_right", nb_float32),
+    ("weighted_n_samples_left", nb_float32),
+    ("weighted_n_samples_right", nb_float32),
     ("y_sum_left", nb_float32[::1]),
     ("y_sum_right", nb_float32[::1]),
 ]
@@ -44,12 +44,12 @@ class SplitInfo(object):
         self, n_classes,
     ):
         self.gain_proxy = -infinity
-        self.feature = 0
-        self.bin = 0
-        self.n_samples_left = 0
-        self.n_samples_right = 0
-        self.weighted_samples_left = 0.0
-        self.weighted_samples_right = 0
+        self.feature = nb_size_t(0)
+        self.bin = nb_uint8(0)
+        self.n_samples_left = nb_size_t(0)
+        self.n_samples_right = nb_size_t(0)
+        self.weighted_n_samples_left = nb_float32(0.0)
+        self.weighted_n_samples_right = nb_float32(0.0)
         self.y_sum_left = np.empty(n_classes, dtype=np_float32)
         self.y_sum_right = np.empty(n_classes, dtype=np_float32)
 
@@ -61,8 +61,8 @@ def copy_split(from_split, to_split):
     to_split.bin = from_split.bin
     to_split.n_samples_left = from_split.n_samples_left
     to_split.n_samples_right = from_split.n_samples_right
-    to_split.weighted_samples_left = from_split.weighted_samples_left
-    to_split.weighted_samples_right = from_split.weighted_samples_right
+    to_split.weighted_n_samples_left = from_split.weighted_n_samples_left
+    to_split.weighted_n_samples_right = from_split.weighted_n_samples_right
     to_split.y_sum_left[:] = from_split.y_sum_left
     to_split.y_sum_right[:] = from_split.y_sum_right
 
@@ -167,7 +167,7 @@ spec_node_context = [
     # ("min_samples_leaf", uint32),
     # ("min_gain_to_split", float32),
     # Number of training samples in each bin for each feature in the node
-    ("n_samples_in_bins", nb_size_t[:, ::1]),
+    ("weighted_n_samples_train_in_bins", nb_size_t[:, ::1]),
     # Histogram data, number of training samples in each bin for each feature and
     # each label class in the node
     ("y_sum", nb_float32[:, :, ::1]),
@@ -177,10 +177,12 @@ spec_node_context = [
     ("n_samples", nb_size_t),
     # Number of training samples in the node
     ("n_samples_train", nb_size_t),
-    # Weighted number of samples in the node
-    ("weighted_n_samples_train", nb_float32),
     # Number of validation samples in the node
     ("n_samples_valid", nb_size_t),
+    # Weighted number of training samples in the node
+    ("weighted_n_samples_train", nb_float32),
+    # Weighted number of validation samples in the node
+    ("weighted_n_samples_valid", nb_float32),
     # context.partition_train[start_train:end_train] contains the training sample
     # indices in the node
     ("start_train", nb_size_t),
@@ -204,7 +206,9 @@ class NodeContext:
         max_features = context.max_features
         max_bins = context.max_bins
         n_classes = context.n_classes
-        self.n_samples_in_bins = np.empty((max_features, max_bins), dtype=np_float32)
+        self.weighted_n_samples_train_in_bins = np.empty(
+            (max_features, max_bins), dtype=np_float32
+        )
         self.y_sum = np.empty((max_features, max_bins, n_classes), dtype=np_float32)
         self.y_pred = np.empty((n_classes,), dtype=np_float32)
 
@@ -240,8 +244,8 @@ def init_node_context(tree_context, node_context, node_record):
 
     # TODO: c'est utile node_context.n_samples ?
 
-    n_samples_in_bins = node_context.n_samples_in_bins
-    n_samples_in_bins[:] = 0
+    weighted_n_samples_train_in_bins = node_context.weighted_n_samples_train_in_bins
+    weighted_n_samples_train_in_bins[:] = nb_float32(0.0)
     y_sum = node_context.y_sum
     y_sum[:] = 0
     y_pred = node_context.y_pred
@@ -282,14 +286,13 @@ def init_node_context(tree_context, node_context, node_record):
             # One more sample in this bin for the current feature
             # print("f: ", f, ", bin: ", bin)
             # print("n_samples_in_bins: ", n_samples_in_bins)
-            n_samples_in_bins[f, bin] += sample_weight
+            weighted_n_samples_train_in_bins[f, bin] += sample_weight
             # One more sample in this bin for the current feature with this label
             y_sum[f, bin, label] += sample_weight
 
         f += nb_size_t(1)
 
     # Save everything in the node context
-
     node_context.n_samples_train = end_train - start_train
     node_context.n_samples_valid = end_valid - start_valid
     node_context.weighted_n_samples_train = weighted_n_samples_train
@@ -412,8 +415,10 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
 
     # Number of training samples in the node
     n_samples_train = node_context.n_samples_train
+    # Number of weighted training samples in the node
+    weighted_n_samples_train = node_context.weighted_n_samples_train
     # Get the number of samples in each bin for the feature
-    n_samples_in_bins = node_context.n_samples_in_bins[feature]
+    weighted_n_samples_train_in_bins = node_context.weighted_n_samples_train_in_bins[feature]
     # Get the sum of labels (counts) in each bin for the feature
     y_sum_in_bins = node_context.y_sum[feature]
 
@@ -421,11 +426,13 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
     # print("y_sum_in_bins: ", y_sum_in_bins)
 
     # TODO: faudra que les vecteurs left et right soient dans le local_context
-    # Counts on the left are zero, since we go from left to right
+    # Counts and sums on left are zero, since we go from left to right, while counts
+    # and sums on the right contain everything
     n_samples_left = nb_size_t(0)
-    y_sum_left = np.zeros(n_classes, dtype=np_float32)
-    # Count on the right contain everything
     n_samples_right = n_samples_train
+    weighted_n_samples_left = nb_float32(0)
+    weighted_n_samples_right = weighted_n_samples_train
+    y_sum_left = np.zeros(n_classes, dtype=np_float32)
     y_sum_right = np.empty(n_classes, dtype=np_float32)
     y_sum_right[:] = y_sum_in_bins.sum(axis=0)
 
@@ -437,27 +444,40 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
     # We go from left to right and compute the information gain proxy of all possible
     # splits
 
-    print("=" * 64)
-    print("n_samples_train: ", n_samples_train)
-    print("n_samples_in_bins: ", n_samples_in_bins)
+    # print("=" * 64)
+    # print("weighted_n_samples_right: ", weighted_n_samples_right)
+    # print("weighted_n_samples_train: ", weighted_n_samples_train)
     for bin in range(n_bins):
         # On the left we accumulate the counts
-        n_samples_left += n_samples_in_bins[bin]
+        weighted_n_samples_left += weighted_n_samples_train_in_bins[bin]
         y_sum_left += y_sum_in_bins[bin]
         # And we get the counts on the right from the left
-        n_samples_right -= n_samples_in_bins[bin]
+        weighted_n_samples_right -= weighted_n_samples_train_in_bins[bin]
+
+        if weighted_n_samples_left <= nb_float32(0.0):
+            continue
+
+        if weighted_n_samples_right <= nb_float32(0.0):
+            # There is no more samples on the right, no need to continue to loop over
+            # the bins
+            break
+
+        # print("weighted_n_samples_left: ", weighted_n_samples_left)
+        # print("weighted_n_samples_right: ", weighted_n_samples_right)
+
         y_sum_right -= y_sum_in_bins[bin]
 
-        print("bin: ", bin)
-        print("n_samples_in_bins[bin]: ", n_samples_in_bins[bin])
-        print("n_samples_left: ", n_samples_left, "n_samples_right: ", n_samples_right)
+
+        # print("bin: ", bin)
+        # print("weighted_n_samples_train[bin]: ", weighted_n_samples_train_in_bins[bin])
+        # print("weighted_n_samples_left: ", weighted_n_samples_left, "weighted_n_samples_right: ", weighted_n_samples_right)
 
         # Compute the information gain proxy
         gain_proxy = information_gain_proxy(
             gini_childs,
             n_classes,
-            n_samples_left,
-            n_samples_right,
+            weighted_n_samples_left,
+            weighted_n_samples_right,
             y_sum_left,
             y_sum_right,
         )
@@ -471,9 +491,8 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
             best_split.bin = bin
             best_split.n_samples_left = n_samples_left
             best_split.n_samples_right = n_samples_right
-            # TODO: faudra calculer les weighted version
-            best_split.weighted_samples_left = n_samples_left
-            best_split.weighted_samples_right = n_samples_right
+            best_split.weighted_n_samples_left = weighted_n_samples_left
+            best_split.weighted_n_samples_right = weighted_n_samples_right
             best_split.y_sum_left[:] = y_sum_left
             best_split.y_sum_right[:] = y_sum_right
 
@@ -529,7 +548,6 @@ def split_indices(tree_context, split, node_record):
     #       n_samples_train_left, ", n_samples_train_right: ", n_samples_train_right,
     #       ", end_train: ", end_train)
 
-
     # print("partition_train[start_train:end_train]: ", partition_train[start_train:end_train])
     # print("left_buffer[:n_samples_train_left]: ", left_buffer[:n_samples_train_left])
     # print("right_buffer[:n_samples_train_right]: ", right_buffer[:n_samples_train_right])
@@ -558,3 +576,4 @@ def split_indices(tree_context, split, node_record):
     partition_valid[pos_valid:end_valid] = right_buffer[:n_samples_valid_right]
 
     return pos_train, pos_valid
+
