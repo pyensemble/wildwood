@@ -21,6 +21,9 @@ import numpy as np
 # from scipy.sparse import hstack as sparse_hstack
 from joblib import Parallel
 
+
+from sklearn.ensemble._base import _partition_estimators
+
 from sklearn.base import ClassifierMixin, RegressorMixin, MultiOutputMixin
 
 # from sklearn.metrics import r2_score
@@ -234,11 +237,12 @@ def _accumulate_prediction(predict, X, out, lock):
     """
     prediction = predict(X, check_input=False)
     with lock:
-        if len(out) == 1:
-            out[0] += prediction
-        else:
-            for i in range(len(out)):
-                out[i] += prediction[i]
+        out += prediction
+        # if len(out) == 1:
+        #     out[0] += prediction
+        # else:
+        #     for i in range(len(out)):
+        #         out[i] += prediction[i]
 
 
 # class ForestClassifier(ClassifierMixin, BaseForest, metaclass=ABCMeta):
@@ -650,7 +654,7 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         #     # Free allocated memory, if any
 
         # TODO: ici on initialise les estimateurs. Gerer le warm-start plus tard
-        self.estimators_ = []
+        # self.estimators_ = []
 
         trees = [
             TreeBinaryClassifier(
@@ -1231,31 +1235,41 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         # Check data
         X = self._validate_X_predict(X)
 
+        # TODO: we can also avoid data binning for predictions...
+        # Bin the data
+        X_binned = self._bin_data(X, is_training_data=False)
+
         # Assign chunk of trees to jobs
         n_jobs, _, _ = _partition_estimators(self.n_estimators, self.n_jobs)
 
+        # TODO: on ne gere pas encore le cas multi-output mais juste un label binaire
         # avoid storing the output of every estimator by summing them here
-        all_proba = [
-            np.zeros((X.shape[0], j), dtype=np.float64)
-            for j in np.atleast_1d(self.n_classes_)
-        ]
+        # all_proba = [
+        #     np.zeros((X.shape[0], j), dtype=np.float64)
+        #     for j in np.atleast_1d(self.n_classes_)
+        # ]
+
+        all_proba = np.zeros((X_binned.shape[0], 2))
+
         lock = threading.Lock()
         Parallel(
             n_jobs=n_jobs,
             verbose=self.verbose,
             **_joblib_parallel_args(require="sharedmem"),
         )(
-            delayed(_accumulate_prediction)(e.predict_proba, X, all_proba, lock)
-            for e in self.estimators_
+            delayed(_accumulate_prediction)(e.predict_proba, X_binned, all_proba, lock)
+            for e in self.trees
         )
 
-        for proba in all_proba:
-            proba /= len(self.estimators_)
+        # for proba in all_proba:
+        #     proba /= len(self.trees)
+        all_proba /= len(self.trees)
 
-        if len(all_proba) == 1:
-            return all_proba[0]
-        else:
-            return all_proba
+        # if len(all_proba) == 1:
+        #     return all_proba[0]
+        # else:
+        #     return all_proba
+        return all_proba
 
     def predict_log_proba(self, X):
         """
@@ -1369,7 +1383,7 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         Validate X whenever one tries to predict, apply, predict_proba."""
         check_is_fitted(self)
 
-        return self.estimators_[0]._validate_X_predict(X, check_input=True)
+        return self.trees[0]._validate_X_predict(X, check_input=True)
 
     @property
     def n_features(self):

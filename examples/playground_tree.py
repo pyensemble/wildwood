@@ -94,6 +94,12 @@ X_train, y_train = simulate_data()
 n_classes = int(y_train.max() + 1)
 n_samples_train = X_train.shape[0]
 
+eps = 0.1
+x_min = X_train[:, 0].min() - eps
+x_max = X_train[:, 0].max() + eps
+y_min = X_train[:, 1].min() - eps
+y_max = X_train[:, 1].max() + eps
+
 
 @st.cache
 def get_data_df(X, y):
@@ -109,7 +115,7 @@ df_data = get_data_df(X_train, y_train)
 
 @st.cache
 def get_mesh(grid_size):
-    xx, yy = np.meshgrid(np.linspace(0, 1, grid_size), np.linspace(0, 1, grid_size))
+    xx, yy = np.meshgrid(np.linspace(x_min, x_max, grid_size), np.linspace(y_min, y_max, grid_size))
     xy = np.array([xx.ravel(), yy.ravel()]).T
     xy = np.ascontiguousarray(xy, dtype="float32")
     return xy
@@ -185,9 +191,10 @@ source_tree = ColumnDataSource(ColumnDataSource.from_df(df_tree))
 
 source_data = ColumnDataSource(ColumnDataSource.from_df(df_data))
 
-# source_decision = ColumnDataSource(data={"image": [zz]})
+source_decision = ColumnDataSource(data={"image": [zz]})
 
 
+# TODO: Use max_depth
 plot_tree = figure(
     plot_width=1000, plot_height=500, x_range=[-0.1, 1.1], y_range=[0, 11],
 )
@@ -244,12 +251,15 @@ plot_tree.text(x="x", y="y", text="node_id", source=source_tree)
 
 plot_data = figure(
     plot_width=500, plot_height=500,
-    # x_range=[0, 1], y_range=[0, 1]
+    x_range=[x_min, x_max], y_range=[y_min, y_max]
 )
 
-# plot_data.image(
-#     "image", source=source_decision, x=0, y=0, dw=1, dh=1, palette=cc.CET_D1A
-# )
+plot_data.image(
+    "image", source=source_decision,
+    # x=0, y=0, dw=1, dh=1,
+    x=x_min, y=y_min, dw=x_max - x_min, dh=y_max-y_min,
+    palette=cc.CET_D1A
+)
 
 
 circles_data = plot_data.circle(

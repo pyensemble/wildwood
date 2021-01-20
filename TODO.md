@@ -2,8 +2,11 @@
 
 # TODO
 
-- Refaire marcher le display de l'arbre avec les data pour debugger ... sinon ca va
- etre l'enfer
+- Dans le playground afficher les features binnees plutot et afficher le split dans
+ on passe du dessus d'un noeud
+
+- Checker les histoires de bitsets ? Est ce que ca peut etre interessant ici ?
+
 
 1. Coder le histogram binning
     X Nombre variable de modalités pour chaque feature 

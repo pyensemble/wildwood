@@ -109,6 +109,9 @@ for ds_cnt, ds in enumerate(datasets):
         # truc = np.empty((xx.ravel().shape[0], 2))
         # truc[:, 0] = xx.ravel()
         # truc[:, 1] = yy.ravel()
+
+        clf.predict_proba(X_test)
+
         # Z = clf.predict_proba(truc)[:, 1]
         # # score = roc_auc_score(y_test, clf.predict_proba(X_test)[:, 1])
         # # Put the result into a color plot

@@ -51,7 +51,7 @@ from ._grower import grow
 from ._utils import np_float32, np_uint8
 from ._splitting import TreeContext, NodeContext
 
-from ._tree import Tree, get_nodes
+from ._tree import Tree, get_nodes, tree_predict
 
 
 # from ._tree import BestFirstTreeBuilder
@@ -1152,31 +1152,42 @@ class TreeBinaryClassifier(ClassifierMixin, TreeBase):
             The class probabilities of the input samples. The order of the
             classes corresponds to that in the attribute :term:`classes_`.
         """
-        check_is_fitted(self)
-        X = self._validate_X_predict(X, check_input)
+
+        # TODO: on suppose que l'arbre est fitte et que les donnes sont binnees
+        # check_is_fitted(self)
+        # X = self._validate_X_predict(X, check_input)
 
         # proba = self.tree_.predict(X)
-        proba = _tree_old.tree_predict(self.tree_, X)
 
-        if self.n_outputs_ == 1:
-            proba = proba[:, : self.n_classes_]
-            normalizer = proba.sum(axis=1)[:, np.newaxis]
-            normalizer[normalizer == 0.0] = 1.0
-            proba /= normalizer
+        # TODO: pas encore des proba mais juste des sums
+        proba = tree_predict(self._tree, X)
+        # proba = _tree_old.tree_predict(self.tree_, X)
 
-            return proba
+        # print(proba.shape)
 
-        else:
-            all_proba = []
+        normalizer = proba.sum(axis=1)[:, np.newaxis]
 
-            for k in range(self.n_outputs_):
-                proba_k = proba[:, k, : self.n_classes_[k]]
-                normalizer = proba_k.sum(axis=1)[:, np.newaxis]
-                normalizer[normalizer == 0.0] = 1.0
-                proba_k /= normalizer
-                all_proba.append(proba_k)
+        proba /= normalizer
 
-            return all_proba
+        # if self.n_outputs_ == 1:
+        #     proba = proba[:, : self.n_classes_]
+        #     normalizer = proba.sum(axis=1)[:, np.newaxis]
+        #     normalizer[normalizer == 0.0] = 1.0
+        #     proba /= normalizer
+
+        return proba
+
+        # else:
+        #     all_proba = []
+        #
+        #     for k in range(self.n_outputs_):
+        #         proba_k = proba[:, k, : self.n_classes_[k]]
+        #         normalizer = proba_k.sum(axis=1)[:, np.newaxis]
+        #         normalizer[normalizer == 0.0] = 1.0
+        #         proba_k /= normalizer
+        #         all_proba.append(proba_k)
+        #
+        #     return all_proba
 
     def predict_log_proba(self, X):
         """Predict class log-probabilities of the input samples X.
