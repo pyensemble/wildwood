@@ -30,6 +30,8 @@ from sklearn.model_selection import train_test_split
 
 # from wildwood._classes import DecisionTreeClassifier
 
+from wildwood._binning import Binner
+
 from wildwood.forest import ForestBinaryClassifier
 
 
@@ -85,20 +87,30 @@ dirichlet = st.sidebar.selectbox(
 @st.cache
 def simulate_data():
     X, y = make_circles(
-        n_samples=n_samples, noise=0.2, factor=0.5, random_state=data_random_state
+        n_samples=n_samples, noise=0.1, factor=0.4, random_state=data_random_state
     )
     return X, y
 
 
 X_train, y_train = simulate_data()
+
+X_train_binned = Binner().fit_transform(X_train)
+
 n_classes = int(y_train.max() + 1)
 n_samples_train = X_train.shape[0]
 
-eps = 0.1
+eps = 0.0
 x_min = X_train[:, 0].min() - eps
 x_max = X_train[:, 0].max() + eps
 y_min = X_train[:, 1].min() - eps
 y_max = X_train[:, 1].max() + eps
+
+# eps = 25.0
+# x_min_binned = X_train_binned[:, 0].min() - eps
+# x_max_binned = X_train_binned[:, 0].max() + eps
+# y_min_binned = X_train_binned[:, 1].min() - eps
+# y_max_binned = X_train_binned[:, 1].max() + eps
+
 
 
 @st.cache
@@ -114,14 +126,16 @@ def get_data_df(X, y):
 df_data = get_data_df(X_train, y_train)
 
 @st.cache
-def get_mesh(grid_size):
+def get_mesh(x_min, x_max, y_min, y_max, grid_size):
     xx, yy = np.meshgrid(np.linspace(x_min, x_max, grid_size), np.linspace(y_min, y_max, grid_size))
     xy = np.array([xx.ravel(), yy.ravel()]).T
     xy = np.ascontiguousarray(xy, dtype="float32")
     return xy
 
 
-xy = get_mesh(grid_size)
+xy = get_mesh(x_min, x_max, y_min, y_max, grid_size)
+# xy_binned = get_mesh(x_min_binned, x_max_binned, y_min_binned, y_max_binned,
+# grid_size)
 
 
 @st.cache
@@ -136,6 +150,8 @@ def fit_and_get_tree(use_aggregation, n_estimators, dirichlet, step):
         step=step,
     )
     clf.fit(X_train, y_train)
+
+    # print("clf.is_categorical_):", clf.is_categorical_)
 
     df_tree = clf.get_nodes(0)
     # df_tree["count_0"] = df_tree["y_sum"].apply(lambda t: t[0])
@@ -181,7 +197,7 @@ zz, df_tree = fit_and_get_tree(
 )
 
 
-# df_tree
+df_tree
 
 # zz = zzs[iteration - 1]
 # df_data_current = df_datas[iteration - 1]
@@ -191,12 +207,14 @@ source_tree = ColumnDataSource(ColumnDataSource.from_df(df_tree))
 
 source_data = ColumnDataSource(ColumnDataSource.from_df(df_data))
 
+print(zz)
+
 source_decision = ColumnDataSource(data={"image": [zz]})
 
 
 # TODO: Use max_depth
 plot_tree = figure(
-    plot_width=1000, plot_height=500, x_range=[-0.1, 1.1], y_range=[0, 11],
+    plot_width=800, plot_height=400, x_range=[-0.1, 1.1], y_range=[0, 11],
 )
 
 plot_tree.outline_line_color = None
@@ -213,6 +231,7 @@ circles = plot_tree.circle(
     fill_alpha=0.4,
     source=source_tree,
 )
+
 plot_tree.segment(
     x0="x",
     y0="y",
@@ -246,18 +265,23 @@ tree_hover = HoverTool(
 
 
 plot_tree.add_tools(tree_hover)
-
 plot_tree.text(x="x", y="y", text="node_id", source=source_tree)
+
+# plot_data = figure(
+#     plot_width=500, plot_height=500,
+#     x_range=[x_min_binned, x_max_binned], y_range=[y_min_binned, y_max_binned]
+# )
 
 plot_data = figure(
     plot_width=500, plot_height=500,
     x_range=[x_min, x_max], y_range=[y_min, y_max]
 )
 
+
 plot_data.image(
     "image", source=source_decision,
     # x=0, y=0, dw=1, dh=1,
-    x=x_min, y=y_min, dw=x_max - x_min, dh=y_max-y_min,
+    x=x_min, y=y_min, dw=x_max - x_min, dh=y_max - y_min,
     palette=cc.CET_D1A
 )
 
@@ -277,6 +301,11 @@ circles_data = plot_data.circle(
 
 st.bokeh_chart(plot_tree)
 
+node_id = st.text_input(label="node_id", value=0)
+node_id = int(node_id)
+st.markdown("Showing stuff about node number {node_id}".format(node_id=node_id))
+
+
 plot_data.outline_line_color = None
 plot_data.grid.visible = False
 plot_data.axis.visible = False
@@ -285,12 +314,7 @@ st.bokeh_chart(plot_data)
 
 
 """This small demo illustrates the internal tree construction performed by  
-`AMFClassifier` for binary classification.
-
-## Reference
-
-> J. Mourtada, S. Gaïffas and E. Scornet, *AMF: Aggregated Mondrian Forests for Online Learning*, 
-arXiv link: http://arxiv.org/abs/1906.10529
+`WildWood` for binary classification.
 """
 
 

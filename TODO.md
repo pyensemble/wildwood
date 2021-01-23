@@ -2,8 +2,11 @@
 
 # TODO
 
-- Dans le playground afficher les features binnees plutot et afficher le split dans
- on passe du dessus d'un noeud
+- Pouvoir recuperer start_train, end_train, etc et la partition dans le streamlit
+- Mettre des boutons pour pouvoir afficher les samples de train et valid dans un
+ noeud, afficher son seuil et sa feature, afficher les samples a gauche et a droite
+ , etc ... 
+- Debugger, verifier que tout est OK
 
 - Checker les histoires de bitsets ? Est ce que ca peut etre interessant ici ?
 

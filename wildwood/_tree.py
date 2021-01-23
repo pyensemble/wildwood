@@ -4,13 +4,14 @@ This contains all the data structures for holding tree data
 
 import numpy as np
 from ._utils import (
+    np_bool,
     np_uint8,
     np_size_t,
-    nb_size_t,
     np_ssize_t,
+    nb_bool,
+    nb_size_t,
     nb_ssize_t,
     nb_uint8,
-    np_bool,
     np_float32,
     nb_float32,
     max_size_t,
@@ -182,6 +183,14 @@ spec_node_tree = [
     ("n_samples_valid", nb_size_t),
     ("weighted_n_samples_train", nb_float32),
     ("weighted_n_samples_valid", nb_float32),
+
+    # TODO: on ajoute des trucs dont on a pas besoin pour l'entrainement, mais utile
+    #  pour debugger
+    ("start_train", nb_size_t),
+    ("end_train", nb_size_t),
+    ("start_valid", nb_size_t),
+    ("end_valid", nb_size_t),
+    ("is_left", nb_bool),
 ]
 
 
@@ -200,6 +209,12 @@ np_node_tree = np.dtype(
         ("n_samples_valid", np_size_t),
         ("weighted_n_samples_train", np_float32),
         ("weighted_n_samples_valid", np_float32),
+
+        ("start_train", np_size_t),
+        ("end_train", np_size_t),
+        ("start_valid", np_size_t),
+        ("end_valid", np_size_t),
+        ("is_left", np_bool),
     ]
 )
 
@@ -239,6 +254,11 @@ def set_node_tree(nodes, idx, node):
     node_dtype["n_samples_valid"] = node.n_samples_valid
     node_dtype["weighted_n_samples_train"] = node.weighted_n_samples_train
     node_dtype["weighted_n_samples_valid"] = node.weighted_n_samples_valid
+    node_dtype["start_train"] = node.start_train
+    node_dtype["end_train"] = node.end_train
+    node_dtype["start_valid"] = node.start_valid
+    node_dtype["end_valid"] = node.end_valid
+    node_dtype["is_left"] = node.is_left
 
 
 @njit
@@ -273,6 +293,11 @@ def get_node_tree(nodes, idx):
         node["impurity"],
         node["n_samples"],
         node["weighted_n_samples"],
+        node["start_train"],
+        node["end_train"],
+        node["start_valid"],
+        node["end_valid"],
+        node["is_left"]
     )
 
 
@@ -297,6 +322,12 @@ class NodeTree(object):
         n_samples_valid,
         weighted_n_samples_train,
         weighted_n_samples_valid,
+
+        start_train,
+        end_train,
+        start_valid,
+        end_valid,
+        is_left
     ):
         self.node_id = node_id
         self.parent = parent
@@ -312,174 +343,11 @@ class NodeTree(object):
         self.weighted_n_samples_train = weighted_n_samples_train
         self.weighted_n_samples_valid = weighted_n_samples_valid
 
-
-# cdef class Tree:
-#     # The Tree object is a binary tree structure constructed by the
-#     # TreeBuilder. The tree structure is used for predictions and
-#     # feature importances.
-#
-#     # Input/Output layout
-#     cdef public SIZE_t n_features        # Number of features in X
-#     cdef SIZE_t* n_classes               # Number of classes in y[:, k]
-#     cdef public SIZE_t n_outputs         # Number of outputs in y
-#     cdef public SIZE_t max_n_classes     # max(n_classes)
-#
-#     # Inner structures: values are stored separately from node structure,
-#     # since size is determined at runtime.
-#     cdef public SIZE_t max_depth         # Max depth of the tree
-#     cdef public SIZE_t node_count        # Counter for node IDs
-#     cdef public SIZE_t capacity          # Capacity of tree, in terms of nodes
-#     cdef Node* nodes                     # Array of nodes
-#     cdef double* value                   # (capacity, n_outputs, max_n_classes) array of values
-#     cdef SIZE_t value_stride             # = n_outputs * max_n_classes
-
-# =============================================================================
-# Tree builder
-# =============================================================================
-
-# spec_tree_builder = [
-#     ("splitter", get_numba_type(BestSplitter)),
-#     ("min_samples_split", SIZE_t),
-#     ("min_samples_leaf", SIZE_t),
-#     ("min_weight_leaf", double_t),
-#     ("max_depth", SIZE_t),
-#     ("min_impurity_split", double_t),
-#     ("min_impurity_decrease", double_t),
-# ]
-#
-#
-# @jitclass
-# class TreeBuilder(object):
-#     # cdef class TreeBuilder:
-#     #     # The TreeBuilder recursively builds a Tree object from training samples,
-#     #     # using a Splitter object for splitting internal nodes and assigning
-#     #     # values to leaves.
-#     #     #
-#     #     # This class controls the various stopping criteria and the node splitting
-#     #     # evaluation order, e.g. depth-first or best-first.
-#     #
-#     #     cdef Splitter splitter              # Splitting algorithm
-#     #
-#     #     cdef SIZE_t min_samples_split       # Minimum number of samples in an internal node
-#     #     cdef SIZE_t min_samples_leaf        # Minimum number of samples in a leaf
-#     #     cdef double min_weight_leaf         # Minimum weight in a leaf
-#     #     cdef SIZE_t max_depth               # Maximal tree depth
-#     #     cdef double min_impurity_split
-#     #     cdef double min_impurity_decrease   # Impurity threshold for early stopping
-#
-#     def __init__(self):
-#         pass
-
-
-# @njit
-# def tree_builder_build(tree_builder, tree, X, y, sample_weight):
-#     #cpdef build(self, Tree tree, object X, np.ndarray y, np.ndarray sample_weight=*)
-#     pass
-
-
-# TODO: faudra remettre le check_input, mais pas ici car pas possible dans @njit
-
-#
-# @njit
-# def tree_builder_check_input(tree, X, y, sample_weight):
-#     #     cdef inline _check_input(self, object X, np.ndarray y,
-#     #                              np.ndarray sample_weight):
-#     #         """Check input dtype, layout and format"""
-#     #         if issparse(X):
-#     #             X = X.tocsc()
-#     #             X.sort_indices()
-#     #
-#     #             if X.data.dtype != DTYPE:
-#     #                 X.data = np.ascontiguousarray(X.data, dtype=DTYPE)
-#     #
-#     #             if X.indices.dtype != np.int32 or X.indptr.dtype != np.int32:
-#     #                 raise ValueError("No support for np.int64 index based "
-#     #                                  "sparse matrices")
-#     #
-#     #         elif X.dtype != DTYPE:
-#     #             # since we have to copy we will make it fortran for efficiency
-#     #             X = np.asfortranarray(X, dtype=DTYPE)
-#     #
-#     #         if y.dtype != DOUBLE or not y.flags.contiguous:
-#     #             y = np.ascontiguousarray(y, dtype=DOUBLE)
-#     #
-#     #         if (sample_weight is not None and
-#     #             (sample_weight.dtype != DOUBLE or
-#     #             not sample_weight.flags.contiguous)):
-#     #                 sample_weight = np.asarray(sample_weight, dtype=DOUBLE,
-#     #                                            order="C")
-#     #
-#     #         return X, y, sample_weight
-#
-#         """Check input dtype, layout and format"""
-#         if issparse(X):
-#             X = X.tocsc()
-#             X.sort_indices()
-#
-#             if X.data.dtype != DTYPE:
-#                 X.data = np.ascontiguousarray(X.data, dtype=DTYPE)
-#
-#             if X.indices.dtype != np.int32 or X.indptr.dtype != np.int32:
-#                 raise ValueError("No support for np.int64 index based "
-#                                  "sparse matrices")
-#
-#         elif X.dtype != DTYPE:
-#             # since we have to copy we will make it fortran for efficiency
-#             X = np.asfortranarray(X, dtype=DTYPE)
-#
-#         if y.dtype != DOUBLE or not y.flags.contiguous:
-#             y = np.ascontiguousarray(y, dtype=DOUBLE)
-#
-#         if (sample_weight is not None and
-#             (sample_weight.dtype != DOUBLE or
-#             not sample_weight.flags.contiguous)):
-#                 sample_weight = np.asarray(sample_weight, dtype=DOUBLE,
-#                                            order="C")
-#
-#         return X, y, sample_weight
-
-
-#
-# from cpython cimport Py_INCREF, PyObject, PyTypeObject
-#
-# from libc.stdlib cimport free
-# from libc.math cimport fabs
-# from libc.string cimport memcpy
-# from libc.string cimport memset
-# from libc.stdint cimport SIZE_MAX
-#
-#
-# cimport numpy as np
-# np.import_array()
-#
-#
-# from ._utils cimport Stack
-# from ._utils cimport StackRecord
-# from ._utils cimport PriorityHeap
-# from ._utils cimport PriorityHeapRecord
-# from ._utils cimport safe_realloc
-# from ._utils cimport sizet_ptr_to_ndarray
-#
-
-
-# cdef extern from "numpy/arrayobject.h":
-#     object PyArray_NewFromDescr(PyTypeObject* subtype, np.dtype descr,
-#                                 int nd, np.npy_intp* dims,
-#                                 np.npy_intp* strides,
-#                                 void* data, int flags, object obj)
-#     int PyArray_SetBaseObject(np.ndarray arr, PyObject* obj)
-#
-# # =============================================================================
-# # Types and constants
-# # =============================================================================
-#
-# from numpy import float32 as DTYPE
-# from numpy import float64 as DOUBLE
-#
-# cdef double INFINITY = np.inf
-# cdef double EPSILON = np.finfo('double').eps
-#
-# # Some handy constants (BestFirstTreeBuilder)
+        self.start_train = start_train
+        self.end_train = end_train
+        self.start_valid = start_valid
+        self.end_valid = end_valid
+        self.is_left = is_left
 
 
 @njit
@@ -603,6 +471,11 @@ def get_nodes(tree):
         "n_samples_valid",
         "weighted_n_samples_train",
         "weighted_n_samples_valid",
+        "start_train",
+        "end_train",
+        "start_valid",
+        "end_valid",
+        "is_left"
     ]
 
     # columns = [col_name for col_name, _ in np_node_tree]
