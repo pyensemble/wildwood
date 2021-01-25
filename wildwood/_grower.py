@@ -116,21 +116,18 @@ def grow(tree, tree_context, node_context):
     # print(get_records(records))
 
     while not has_records(records):
-
-        # print("records.top: ", records.top)
-        node_record = pop_node_record(records)
-
-        # TODO: plutot creer un node ici
-
         # Get information about the current node
+        # TODO: plutot creer un node ici
+        node_record = pop_node_record(records)
         parent = node_record["parent"]
         depth = node_record["depth"]
-
         start_train = node_record["start_train"]
         end_train = node_record["end_train"]
         start_valid = node_record["start_valid"]
         end_valid = node_record["end_valid"]
         is_left = node_record["is_left"]
+        # TODO: we get the impurity from the record
+        impurity = node_record["impurity"]
 
         # print("records.top: ", records.top)
 
@@ -140,8 +137,6 @@ def grow(tree, tree_context, node_context):
         # print("node_context.n_samples_train: ", node_context.n_samples_train)
         # print("node_context.n_samples_valid: ", node_context.n_samples_valid)
 
-        #
-        # impurity = node_record["impurity"]
         # n_constant_features = node_record["n_constant_features"]
         # Mettre a jour le local_context ici ?
 
@@ -160,6 +155,10 @@ def grow(tree, tree_context, node_context):
         # We won't split a node if the number of training or validation samples it
         # contains is too small. If the number of validation sample is too small,
         # we won't use nodes with no validation sample anyway !
+
+        # TODO: faire tres attention a ce test. On ne split pas un node si il
+        #  contient moins de 1 ou 2 points de train et de valid ou si le node est pur
+        #  (impurity=0)
         is_leaf = (node_context.n_samples_train < min_samples_split) or (
             node_context.n_samples_valid < min_samples_split
         )
@@ -188,24 +187,31 @@ def grow(tree, tree_context, node_context):
         #
         # # print("impurity: ", impurity)
         # # print("min_impurity_split: ", min_impurity_split)
-        # is_leaf = is_leaf or (impurity <= min_impurity_split)
+
+        # If the node is pure it's a leaf: we won't split it
+        # TODO: is_leaf = is_leaf or (impurity == 0)
+
+        min_impurity_split = 0.0
+
+        is_leaf = is_leaf or (impurity <= min_impurity_split)
 
         # print("is_leaf: ", is_leaf)
 
         # If the node is not a leaf
 
         if is_leaf:
-            bin_threshold = 0
-            feature = 0
-            impurity = -infinity
-            # Faudrait que split soit defini dans tous les cas...
             split = None
+            bin = 0
+            feature = 0
+            # TODO: pourquoi on mettrai impurity = infini ici ?
+            # impurity = -infinity
+            # Faudrait que split soit defini dans tous les cas...
         else:
             split = find_node_split(tree_context, node_context)
-            bin_threshold = split.bin
+            bin = split.bin
             feature = split.feature
-            # TODO: ici on calcule le vrai information gain
-            impurity = split.gain_proxy
+            # # TODO: ici on calcule le vrai information gain
+            # impurity = split.gain_proxy
 
             # split, n_total_constants = best_splitter_node_split(
             #     splitter, impurity, n_constant_features, X_idx_sort
@@ -240,7 +246,7 @@ def grow(tree, tree_context, node_context):
             is_leaf,
             feature,
             threshold,
-            bin_threshold,
+            bin,
             # TODO: attention c'est pas le vrai information gain mais le proxy. A
             #  voir si c'est utile ou pas de le calculer
             impurity,
@@ -256,19 +262,8 @@ def grow(tree, tree_context, node_context):
         )
 
         # print_tree(tree)
-
         # TODO: remettre le y_sum correct
-
         tree.y_pred[node_id, :] = node_context.y_pred
-
-        # splitter.criterion.sum_total
-        # # #
-        # #     sum_total = criterion.sum_total
-        #     dest[node_id, :, :] = sum_total
-
-        # splitter_node_value(splitter, tree.value + node_id * tree.value_stride)
-
-        # splitter.node_value(tree.value + node_id * tree.value_stride)
 
         # print("is_leaf: ", is_leaf)
         if not is_leaf:
@@ -278,19 +273,17 @@ def grow(tree, tree_context, node_context):
             # First, we need to update partition_train and partition_valid
             pos_train, pos_valid = split_indices(tree_context, split, node_record)
 
-            # Then, we can add both childs records
-
-            # Add the left child
+            # Then, we can add both childs records: add the left child
             push_node_record(
                 records,
-                start_train,          # TODO
+                start_train,          # strain_train from the node
                 pos_train,            # TODO
                 start_valid,          # TODO
                 pos_valid,            # TODO
                 depth + 1,            # depth is increased by one
                 node_id,              # The parent is the previous node_id
                 True,                 # is_left=True
-                impurity,             # TODO: for now we don't care about that
+                split.impurity_left,  # Impurity of childs was saved in the split
                 n_constant_features,  # TODO: for now we don't care about that
             )
 
@@ -304,7 +297,7 @@ def grow(tree, tree_context, node_context):
                 depth + 1,            # depth is increased by one
                 node_id,              # The parent is the previous node_id
                 False,                # is_left=False
-                impurity,             # TODO: for now we don't care about that
+                split.impurity_right, # Impurity of childs was saved in the split
                 n_constant_features,  # TODO: for now we don't care about that
             )
 
@@ -313,7 +306,7 @@ def grow(tree, tree_context, node_context):
             max_depth_seen = depth
 
     # print_tree(tree)
-    print(get_nodes(tree))
+    # print(get_nodes(tree))
 
 
         # print_records(records)

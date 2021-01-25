@@ -4,6 +4,9 @@
 - Mettre des boutons pour pouvoir afficher les samples de train et valid dans un
  noeud, afficher son seuil et sa feature, afficher les samples a gauche et a droite
  , etc ...
+
+- Quand on trouve plusieurs splits avec meme gain_proxy on prefere celui qui met
+ autant de valid samples des deux cotes 
  
 - On split comme des debiles meme si le noeud est pur, car pas de critere d'arret sur
  l'impurete du noeud... 

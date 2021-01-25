@@ -36,9 +36,10 @@ spec_split_info = [
     ("n_samples_valid_right", nb_size_t),
     ("w_samples_valid_left", nb_float32),
     ("w_samples_valid_right", nb_float32),
-
     ("y_sum_left", nb_float32[::1]),
     ("y_sum_right", nb_float32[::1]),
+    ("impurity_left", nb_float32),
+    ("impurity_right", nb_float32)
 ]
 
 
@@ -67,9 +68,13 @@ class SplitInfo(object):
         self.y_sum_left = np.empty(n_classes, dtype=np_float32)
         self.y_sum_right = np.empty(n_classes, dtype=np_float32)
 
+        self.impurity_left = 0.0
+        self.impurity_right = 0.0
+
 
 @njit
 def copy_split(from_split, to_split):
+    to_split.found_split = from_split.found_split
     to_split.gain_proxy = from_split.gain_proxy
     to_split.feature = from_split.feature
     to_split.bin = from_split.bin
@@ -82,6 +87,9 @@ def copy_split(from_split, to_split):
     to_split.n_samples_valid_right = from_split.n_samples_valid_right
     to_split.w_samples_valid_left = from_split.w_samples_valid_left
     to_split.w_samples_valid_right = from_split.w_samples_valid_right
+
+    to_split.impurity_left = from_split.impurity_left
+    to_split.impurity_right = from_split.impurity_right
 
     to_split.y_sum_left[:] = from_split.y_sum_left
     to_split.y_sum_right[:] = from_split.y_sum_right
@@ -316,6 +324,9 @@ def init_node_context(tree_context, node_context, node_record):
             # TODO: pour l'aggregation faudra eventuellement utiliser les
             #  samples_weights ?
             sample_weight = sample_weights[sample]
+
+            # print("sample_weight: ", sample_weight)
+
             if f == 0:
                 w_samples_valid += sample_weight
 
@@ -328,6 +339,8 @@ def init_node_context(tree_context, node_context, node_record):
     node_context.n_samples_valid = end_valid - start_valid
     node_context.w_samples_train = w_samples_train
     node_context.w_samples_valid = w_samples_valid
+
+    # print()
 
 
 @njit
@@ -356,13 +369,21 @@ def find_node_split(tree_context, local_context):
         find_best_split_along_feature(
             tree_context, local_context, feature, candidate_split
         )
+
+        print("For feature: ", feature, " found a best split")
+        print("found_split:", candidate_split.found_split)
+        print("bin:", candidate_split.bin)
+        print("gain_proxy:", candidate_split.gain_proxy)
+
         # If we found a candidate split along the feature
         if candidate_split.found_split:
             # And if it's better than the current one
-            if candidate_split.gain_proxy > best_gain_proxy:
+            if candidate_split.gain_proxy >= best_gain_proxy:
                 # Then we replace the best current split
                 copy_split(candidate_split, best_split)
                 best_gain_proxy = candidate_split.gain_proxy
+
+        # exit(0)
 
     # TODO: ici faut calculer le vrai gain et le mettre dans le best split ?
 
@@ -412,6 +433,11 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
     w_samples_valid_left = nb_float32(0)
     w_samples_valid_right = w_samples_valid
 
+    # print("w_samples_train_left:", w_samples_train_left)
+    # print("w_samples_train_right:", w_samples_train_right)
+    # print("w_samples_valid_left:", w_samples_valid_left)
+    # print("w_samples_valid_right:", w_samples_valid_right)
+
     y_sum_left = np.zeros(n_classes, dtype=np_float32)
     y_sum_right = np.empty(n_classes, dtype=np_float32)
     y_sum_right[:] = y_sum_in_bins.sum(axis=0)
@@ -445,18 +471,13 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
         w_samples_train_right -= w_samples_train_in_bins[bin]
         w_samples_valid_right -= w_samples_valid_in_bins[bin]
 
-        print("bin: ", bin)
-        print("w_samples_train_left: ", w_samples_train_left,
-              ", w_samples_train_right: ", w_samples_train_right)
-        print("w_samples_valid_left: ", w_samples_valid_left,
-              ", w_samples_valid_right: ", w_samples_valid_right)
-
         # print("w_samples_train_left: ", w_samples_train_left)
         # print("w_samples_train_left: ", w_samples_train_left)
         # print("weighted_n_samples_right: ", weighted_n_samples_right)
 
         # TODO: on peut pas mettre ca apres les tests ?
         y_sum_left += y_sum_in_bins[bin]
+        y_sum_right -= y_sum_in_bins[bin]
 
         # If the split would lead to 0 training or 0 validation samples in the left
         # child then we don't consider the split
@@ -472,15 +493,14 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
         # print("weighted_n_samples_left: ", weighted_n_samples_left)
         # print("weighted_n_samples_right: ", weighted_n_samples_right)
 
-        y_sum_right -= y_sum_in_bins[bin]
-
         # print("bin: ", bin)
         # print("weighted_n_samples_train[bin]: ", weighted_n_samples_train_in_bins[bin])
         # print("weighted_n_samples_left: ", weighted_n_samples_left, "weighted_n_samples_right: ", weighted_n_samples_right)
 
         # Compute the information gain proxy
-        gain_proxy = information_gain_proxy(
-            gini_childs,
+
+        # Get the impurities of the left and right childs
+        impurity_left, impurity_right = gini_childs(
             n_classes,
             w_samples_train_left,
             w_samples_train_right,
@@ -488,19 +508,62 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
             y_sum_right,
         )
 
+        gain_proxy = information_gain_proxy(
+            impurity_left,
+            impurity_right,
+            w_samples_train_left,
+            w_samples_train_right,
+        )
+
         if gain_proxy > best_gain_proxy:
+            print("================ Found better split with ================:")
+            print("bin: ", bin)
+            print(
+                "w_samples_train_left: ",
+                w_samples_train_left,
+                ", w_samples_train_right: ",
+                w_samples_train_right,
+            )
+            print(
+                "w_samples_valid_left: ",
+                w_samples_valid_left,
+                ", w_samples_valid_right: ",
+                w_samples_valid_right,
+            )
+            print("gain_proxy: ", gain_proxy)
+
             # We've found a better split
             best_gain_proxy = gain_proxy
             best_split.found_split = True
             best_split.gain_proxy = gain_proxy
             best_split.feature = feature
             best_split.bin = bin
+
+            best_split.impurity_left = impurity_left
+            best_split.impurity_right = impurity_right
             best_split.n_samples_train_left = n_samples_train_left
             best_split.n_samples_train_right = n_samples_train_right
             best_split.w_samples_train_left = w_samples_train_left
             best_split.w_samples_train_right = w_samples_train_right
             best_split.y_sum_left[:] = y_sum_left
             best_split.y_sum_right[:] = y_sum_right
+        else:
+            print("bin: ", bin)
+            print(
+                "w_samples_train_left: ",
+                w_samples_train_left,
+                ", w_samples_train_right: ",
+                w_samples_train_right,
+            )
+            print(
+                "w_samples_valid_left: ",
+                w_samples_valid_left,
+                ", w_samples_valid_right: ",
+                w_samples_valid_right,
+            )
+            print("gain_proxy: ", gain_proxy)
+
+    # exit(0)
 
 
 @njit

@@ -10,12 +10,10 @@ from ._utils import njit, nb_float32, nb_uint32
 
 @njit
 def information_gain_proxy(
-    get_childs_impurity,
-    n_classes,
+    impurity_left,
+    impurity_right,
     n_samples_left,
     n_samples_right,
-    y_sum_left,
-    y_sum_right,
 ):
     """Computes a proxy of the information gain (improvement in impurity) using the
     equation
@@ -41,10 +39,9 @@ def information_gain_proxy(
     output : float32
         Information gain after splitting parent into left and child nodes
     """
-
-    impurity_left, impurity_right = get_childs_impurity(
-        n_classes, n_samples_left, n_samples_right, y_sum_left, y_sum_right
-    )
+    # impurity_left, impurity_right = get_childs_impurity(
+    #     n_classes, n_samples_left, n_samples_right, y_sum_left, y_sum_right
+    # )
     return - n_samples_left * impurity_left - n_samples_right * impurity_right
 
 
