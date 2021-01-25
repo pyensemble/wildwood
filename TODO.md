@@ -1,119 +1,53 @@
 
+# Bilan 2021 / 01 / 25
+
+- Dans les splits (le long d'une feature) on fait attention a ce que les childs aient au
+ moins 1 train et 1 valid
+ 
+- Normalement impurity est OK dans les noeuds. On ne splitte pas un noeud pur
+
 # TODO
 
-- Mettre des boutons pour pouvoir afficher les samples de train et valid dans un
- noeud, afficher son seuil et sa feature, afficher les samples a gauche et a droite
- , etc ...
+- Faire marcher numba a nouveau
+
+- Coder l'aggregation
 
 - Quand on trouve plusieurs splits avec meme gain_proxy on prefere celui qui met
  autant de valid samples des deux cotes 
  
-- On split comme des debiles meme si le noeud est pur, car pas de critere d'arret sur
- l'impurete du noeud... 
-- Debugger, verifier que tout est OK
-
-- Y'a plein de feuilles avec n_samples_valid = 0, car rien ne l'empeche (mais ca
- devrait etre pareil avec n_samples_train). Faut faire des tests sur les childs avant
-  d'accepter un split. Un split peut etre bon, mais amener a un noeud avec 0
-   sample_vailid, est ce un bon split ?
+- Ajouter des tests sur les childs avant d'accepter un split
 
 - Checker les histoires de bitsets ? Est ce que ca peut etre interessant ici ?
 
+- RandomSplitter et ExtremeRandomSplitter ? Faut tirer les features au hasard 
 
-1. Coder le histogram binning
-    X Nombre variable de modalités pour chaque feature 
-    - Que de passe-t-il si on a une feature categorielle avec plus que 255 modalités ?
-    - On gère les NA comme LightGBM : on met la modalite NA a la fin
-    - Le truc de sklearn met les NA en bin 255 et c'est tout
-    
-    -> pour l'instant on utilise le truc de sklearn.ensemble.experimental
+- Que de passe-t-il si on a une feature categorielle avec 
 
-2. Coder `wildwood.BinaryClassifier`
-    - C'est la foret pour classif binaire
-    - Coder les properties avec toutes les options 
-    - Coder le bootstrap: faut le faire des maintenant car on peut pas dupliquer les
-     data, et ca impacte tout le reste du code (faut se trimbaler samples_train
-     , samples_valid partout)
+- Gestion des features categorielles : tri 
 
-3. Calcul des splits : `_splitting.py`
-    - On reprend du code de pygbm
-    - Une fonction qui calcule ls splits pour une feature
-    - Pre-calcul de tous les histogrammes ou : maintenir en memoire plein d
-    'histogrammes pour toutes les features
-    - Faut balayer dans de la gauche vers la droite si pas de donnee manquante, et
-     aussi de la droite vers la gauche si il y a des NA dans cette feature   
+- Gestion des features categorielles : #modalites <= max_bins
 
+- Gestion des features categorielles : #modalites >= 255
 
+- Gestion des NAN: split vers la gauche et la droite
 
-5. ERM et MOM
+- Histogram binning : pour l'instant on utilise le truc de sklearn.ensemble.experimental
 
+- ForestBinaryClassifier : properties et options 
 
+- ERM et MOM strategy
 
-# Avancement
+- Gerer le random state
 
-- 2020 / 12 / 18 : presque exactement les meme resultats de scikit, sauf avec
- beaucoup de donnees 
+- Sparse features ?
 
-- pretri ok mais super lent en fait a cause du masque alors que c'est cense etre plus
- rapide ?
- 
- 
-
-# TODO generaux
-
-- se contenter du sort lent et implementer l'aggregation
-
-- comprendre la construction de l'arbre a partir de node_id = tree_add_node et printer
-
-- ecrire code en reprenant onelearn qui affiche l'arbre pour debbuger
-
-- comprendre le rc=0 ou -1 qui resize aussi le tree ?!?
-
-- coder la forest et kes echantillons bootstrap
-
-
-- Verifier que c'est OK aussi avec un sample_weight et en multi-classe, multi-label
-
-- Ecrire directement des unittests
-
-- Gerer le random state : a priori OK
+# Vieux TODOs
 
 - **C'est l'option fastmath=True dans @njit qui fait que les resultats avec scikit diff
 èrent !**
 
-- Avec beaucoup beaucoup de points on a pas exactement le même resultat mais ce n'est
- pas loin... ca ira je pense 
 
-- faut que je comprenne mieux ce qui se passe dans la splitting strategy
- 
-- faire marcher le tri avec la pre-sort strategy
-
-- On a pas exactement le meme nombre de noeuds compare a scikit learn, on en a
- toujours un peu plus, c'est bizarre...
-
-- Simplifier / nettoyer le code
-    - j'ai commence. Virer petit a petit les jitclass... 
-- random state doit marcher et on doit parfaitement matcher scikit
-    
-- RandomSplitter ou un truc du genre pour la foret ?
-- calculer loss dans chaque noeud (regarder onelearn) sur un validation set : faut
- avoir les indices quelque part pour la validation, regarder le code de scikit 
-
-- redecouper splitter en sous fonctions car trop de cas
-    - strategy
-    - dense/sparse
-    - histogram ou pas (feature categorielle ou pas)
-    - approximation
-
-- splitter sparse
-- spliter mom
-
-- Traduire la foret en numba
-
-1. Faire marcher la foret avec aggregation avec dense splitter
-
-
-# Optimisation
+# Vieux Optimisation
 
 
 ## 2020 / 12 / 10
