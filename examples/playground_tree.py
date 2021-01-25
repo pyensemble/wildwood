@@ -188,16 +188,16 @@ def fit_and_get_tree(use_aggregation, n_estimators, dirichlet, step):
     zz = clf.predict_proba(xy)[:, 1].reshape(grid_size, grid_size)
     # zz = None
 
-    return zz, df_tree
+    return zz, df_tree, clf
 
 
-zz, df_tree = fit_and_get_tree(
+zz, df_tree, clf = fit_and_get_tree(
     use_aggregation=use_aggregation, n_estimators=n_estimators, dirichlet=dirichlet,
     step=step
 )
 
 
-df_tree
+# df_tree
 
 # zz = zzs[iteration - 1]
 # df_data_current = df_datas[iteration - 1]
@@ -250,11 +250,16 @@ tree_hover = HoverTool(
         ("parent", "@parent"),
         ("left", "@left_child"),
         ("right", "@right_child"),
-        # ("is_leaf", "@is_leaf"),
-        # ("feature", "@feature"),
+        ("is_leaf", "@is_leaf"),
+        ("feature", "@feature"),
+        ("impurity", "@impurity"),
         ("bin_threshold", "@bin_threshold"),
         ("n_samples_train", "@n_samples_train"),
         ("n_samples_valid", "@n_samples_valid"),
+        ("start_train", "@start_train"),
+        ("end_train", "@end_train"),
+        ("start_valid", "@start_valid"),
+        ("end_valid", "@end_valid"),
         # ("weight", "@weight"),
         # ("log_weight_tree", "@log_weight_tree"),
         # ("count_0", "@count_0"),
@@ -299,11 +304,64 @@ circles_data = plot_data.circle(
 )
 
 
+def show_samples_in_node(node_id):
+    tree_id = 0
+    partition_train = clf.trees[tree_id]._tree_context.partition_train
+    partition_valid = clf.trees[tree_id]._tree_context.partition_valid
+
+    start_train = df_tree.loc[node_id, "start_train"]
+    end_train = df_tree.loc[node_id, "end_train"]
+    start_valid = df_tree.loc[node_id, "start_valid"]
+    end_valid = df_tree.loc[node_id, "end_valid"]
+
+    train_indices = partition_train[start_train:end_train]
+    valid_indices = partition_valid[start_valid:end_valid]
+
+    df_data_train = df_data.loc[train_indices].copy()
+    df_data_train["type"] = "green"
+    df_data_valid = df_data.loc[valid_indices].copy()
+    df_data_valid["type"] = "pink"
+
+    out = pd.concat([df_data_train, df_data_valid], axis="index")
+    print(out)
+    return out
+
+    # return df_data.loc[train_indices], df_data.loc[valid_indices]
+
+    # print(start_train, end_train)
+    # print(clf.trees[0]._tree_context.partition_train)
+    # print(clf.trees[0]._tree_context.partition_valid)
+    #
+    # pass
+
+
 st.bokeh_chart(plot_tree)
 
 node_id = st.text_input(label="node_id", value=0)
 node_id = int(node_id)
 st.markdown("Showing stuff about node number {node_id}".format(node_id=node_id))
+
+
+df_node_data = show_samples_in_node(node_id)
+
+
+source_node_data = ColumnDataSource(ColumnDataSource.from_df(df_node_data))
+
+
+circles_node_data = plot_data.circle(
+    x="x1",
+    y="x2",
+    size=10,
+    color="y",
+    line_width=3,
+    line_color="type",
+    name="circles",
+    alpha=0.7,
+    source=source_node_data,
+)
+
+
+# show_samples_in_node(0)
 
 
 plot_data.outline_line_color = None

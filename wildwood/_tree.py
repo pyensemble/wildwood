@@ -506,6 +506,11 @@ def add_node_tree(
     n_samples_valid,
     weighted_n_samples_train,
     weighted_n_samples_valid,
+
+    start_train,
+    end_train,
+    start_valid,
+    end_valid,
 ):
     # New node index is given by the current number of nodes in the tree
     node_idx = tree.node_count
@@ -526,6 +531,11 @@ def add_node_tree(
     node["n_samples_valid"] = n_samples_valid
     node["weighted_n_samples_train"] = weighted_n_samples_train
     node["weighted_n_samples_valid"] = weighted_n_samples_valid
+
+    node["start_train"] = start_train
+    node["end_train"] = end_train
+    node["start_valid"] = start_valid
+    node["end_valid"] = end_valid
 
     if parent != TREE_UNDEFINED:
         if is_left:

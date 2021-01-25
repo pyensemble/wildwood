@@ -1,12 +1,18 @@
 
-
 # TODO
 
-- Pouvoir recuperer start_train, end_train, etc et la partition dans le streamlit
 - Mettre des boutons pour pouvoir afficher les samples de train et valid dans un
  noeud, afficher son seuil et sa feature, afficher les samples a gauche et a droite
- , etc ... 
+ , etc ...
+ 
+- On split comme des debiles meme si le noeud est pur, car pas de critere d'arret sur
+ l'impurete du noeud... 
 - Debugger, verifier que tout est OK
+
+- Y'a plein de feuilles avec n_samples_valid = 0, car rien ne l'empeche (mais ca
+ devrait etre pareil avec n_samples_train). Faut faire des tests sur les childs avant
+  d'accepter un split. Un split peut etre bon, mais amener a un noeud avec 0
+   sample_vailid, est ce un bon split ?
 
 - Checker les histoires de bitsets ? Est ce que ca peut etre interessant ici ?
 

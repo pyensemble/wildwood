@@ -246,9 +246,13 @@ def grow(tree, tree_context, node_context):
             impurity,
             node_context.n_samples_train,
             node_context.n_samples_valid,
-            node_context.weighted_n_samples_train,
+            node_context.w_samples_train,
             # TODO: pour l'instant on ne le calcule pas, on verra si c'est utile
-            weighted_n_samples_valid
+            weighted_n_samples_valid,
+            start_train,
+            end_train,
+            start_valid,
+            end_valid
         )
 
         # print_tree(tree)
