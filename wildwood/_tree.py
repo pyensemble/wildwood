@@ -174,7 +174,7 @@ spec_node_tree = [
     ("parent", nb_ssize_t),
     ("left_child", nb_ssize_t),
     ("right_child", nb_ssize_t),
-    ("depth", np_size_t),
+    ("depth", nb_size_t),
     ("feature", nb_ssize_t),
     ("threshold", nb_float32),
     ("bin_threshold", nb_uint8),

@@ -48,7 +48,7 @@ from ._grower import grow
 
 # from . import _tree_old
 
-from ._utils import np_float32, np_uint8
+from ._utils import np_float32, np_uint8, np_size_t, np_ssize_t
 from ._splitting import TreeContext, NodeContext
 
 from ._tree import Tree, get_nodes, tree_predict
@@ -412,7 +412,7 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
         # TODO: on obtiendra cette info via le binner qui est dans la foret
         n_samples, n_features = X.shape
         n_bins_per_feature = max_bins * np.ones(n_features)
-        n_bins_per_feature = n_bins_per_feature.astype(np_uint8)
+        n_bins_per_feature = n_bins_per_feature.astype(np_ssize_t)
 
         print(y.flags)
         print("y.dtype: ", y.dtype)
@@ -441,8 +441,9 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
             max_features,
         )
 
+        print("Creating context...")
         node_context = NodeContext(tree_context)
-
+        print("Done creating context")
 
         # TODO: j'en suis ICI ICI ICI ICI 2021 / 01 / 15 faut creer ici le tree numba
         #  et le passer a cette fonction, verifier le calcul des splits, gerer la

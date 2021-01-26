@@ -87,7 +87,7 @@ dirichlet = st.sidebar.selectbox(
 @st.cache
 def simulate_data():
     X, y = make_circles(
-        n_samples=n_samples, noise=0.1, factor=0.4, random_state=data_random_state
+        n_samples=n_samples, noise=0.3, factor=0.4, random_state=data_random_state
     )
     return X, y
 

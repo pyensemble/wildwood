@@ -4,6 +4,10 @@ import numpy as np
 from ._utils import (
     njit,
     jitclass,
+    nb_ssize_t,
+    nb_size_t,
+    np_ssize_t,
+    np_size_t,
     nb_bool,
     np_uint8,
     nb_uint8,
@@ -134,9 +138,9 @@ spec_tree_context = [
     # The number of classes
     ("n_classes", nb_size_t),
     # Maximum number of bins
-    ("max_bins", nb_uint8),
+    ("max_bins", nb_ssize_t),
     # Actual number of bins used for each feature
-    ("n_bins_per_feature", nb_uint8[::1]),
+    ("n_bins_per_feature", nb_ssize_t[::1]),
     # Maximum number of features to try for splitting
     ("max_features", nb_size_t),
     ("partition_train", nb_size_t[::1]),
@@ -232,18 +236,32 @@ class NodeContext:
         # TODO: features a tirer au hasard plus tard
         # features
     ):
-        self.features = np.arange(0, context.n_features, dtype=np_size_t)
         max_features = context.max_features
         max_bins = context.max_bins
         n_classes = context.n_classes
-        self.w_samples_train_in_bins = np.empty(
-            (max_features, max_bins), dtype=np_float32
+        n_features = context.n_features
+
+        print("In NodeContext constructor")
+        print(max_features, max_bins, n_classes, n_features)
+
+        self.features = np.arange(0, n_features, dtype=np_size_t)
+
+        print("(max_features, max_bins): ", (max_features, max_bins))
+
+        w_samples_train_in_bins = np.empty(
+            (max_features, max_bins - 1), dtype=np_float32
         )
+        print(w_samples_train_in_bins)
+        self.w_samples_train_in_bins = w_samples_train_in_bins
+
+        print("Out of NodeContext constructor")
+
         self.w_samples_valid_in_bins = np.empty(
             (max_features, max_bins), dtype=np_float32
         )
         self.y_sum = np.empty((max_features, max_bins, n_classes), dtype=np_float32)
-        self.y_pred = np.empty((n_classes,), dtype=np_float32)
+        self.y_pred = np.empty(n_classes, dtype=np_float32)
+
 
 
 # init_node_context ou update_node_context ?
