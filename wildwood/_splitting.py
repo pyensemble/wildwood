@@ -241,20 +241,20 @@ class NodeContext:
         n_classes = context.n_classes
         n_features = context.n_features
 
-        print("In NodeContext constructor")
-        print(max_features, max_bins, n_classes, n_features)
+        # print("In NodeContext constructor")
+        # print(max_features, max_bins, n_classes, n_features)
 
         self.features = np.arange(0, n_features, dtype=np_size_t)
 
-        print("(max_features, max_bins): ", (max_features, max_bins))
+        # print("(max_features, max_bins): ", (max_features, max_bins))
 
         w_samples_train_in_bins = np.empty(
             (max_features, max_bins - 1), dtype=np_float32
         )
-        print(w_samples_train_in_bins)
+        # print(w_samples_train_in_bins)
         self.w_samples_train_in_bins = w_samples_train_in_bins
 
-        print("Out of NodeContext constructor")
+        # print("Out of NodeContext constructor")
 
         self.w_samples_valid_in_bins = np.empty(
             (max_features, max_bins), dtype=np_float32
@@ -268,7 +268,8 @@ class NodeContext:
 
 
 @njit
-def init_node_context(tree_context, node_context, node_record):
+def init_node_context(tree_context, node_context, start_train, end_train,
+                      start_valid, end_valid):
     """
     Initialize the node_context with the given node_record
 
@@ -282,11 +283,12 @@ def init_node_context(tree_context, node_context, node_record):
 
     """
     # TODO: initialize node_context.features with Fisher-Yates ?
-    start_train = node_record["start_train"]
-    end_train = node_record["end_train"]
-    start_valid = node_record["start_valid"]
-    end_valid = node_record["end_valid"]
+    # start_train = node_record["start_train"]
+    # end_train = node_record["end_train"]
+    # start_valid = node_record["start_valid"]
+    # end_valid = node_record["end_valid"]
 
+    print("================ Begin init_node_context ================")
     w_samples_train_in_bins = node_context.w_samples_train_in_bins
     w_samples_train_in_bins[:] = nb_float32(0.0)
     w_samples_valid_in_bins = node_context.w_samples_valid_in_bins
@@ -358,12 +360,14 @@ def init_node_context(tree_context, node_context, node_record):
     node_context.w_samples_train = w_samples_train
     node_context.w_samples_valid = w_samples_valid
 
+    print("================ End   init_node_context ================")
+
     # print()
 
 
 @njit
 def find_node_split(tree_context, local_context):
-
+    print("================ Begin find_node_split ================")
     features = local_context.features
     # Loop over the possible features
 
@@ -388,10 +392,10 @@ def find_node_split(tree_context, local_context):
             tree_context, local_context, feature, candidate_split
         )
 
-        print("For feature: ", feature, " found a best split")
-        print("found_split:", candidate_split.found_split)
-        print("bin:", candidate_split.bin)
-        print("gain_proxy:", candidate_split.gain_proxy)
+        # print("For feature: ", feature, " found a best split")
+        # print("found_split:", candidate_split.found_split)
+        # print("bin:", candidate_split.bin)
+        # print("gain_proxy:", candidate_split.gain_proxy)
 
         # If we found a candidate split along the feature
         if candidate_split.found_split:
@@ -405,6 +409,11 @@ def find_node_split(tree_context, local_context):
 
     # TODO: ici faut calculer le vrai gain et le mettre dans le best split ?
 
+    print("Best split is feature: ", best_split.feature,
+          ", bin:", best_split.bin, "gain proxy: ", best_split.gain_proxy)
+
+    print("================ End   find_node_split ================")
+
     return best_split
 
 
@@ -416,6 +425,8 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
     # TODO: a terme utiliser ca :
     # n_bins = context.n_bins_per_feature[feature]
     # n_bins = 255
+
+    print("================ Begin find_best_split_along_feature ================")
 
     n_classes = tree_context.n_classes
     n_bins = tree_context.max_bins
@@ -534,21 +545,21 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
         )
 
         if gain_proxy > best_gain_proxy:
-            print("================ Found better split with ================:")
-            print("bin: ", bin)
-            print(
-                "w_samples_train_left: ",
-                w_samples_train_left,
-                ", w_samples_train_right: ",
-                w_samples_train_right,
-            )
-            print(
-                "w_samples_valid_left: ",
-                w_samples_valid_left,
-                ", w_samples_valid_right: ",
-                w_samples_valid_right,
-            )
-            print("gain_proxy: ", gain_proxy)
+            # print("================ Found better split with ================:")
+            # print("bin: ", bin)
+            # print(
+            #     "w_samples_train_left: ",
+            #     w_samples_train_left,
+            #     ", w_samples_train_right: ",
+            #     w_samples_train_right,
+            # )
+            # print(
+            #     "w_samples_valid_left: ",
+            #     w_samples_valid_left,
+            #     ", w_samples_valid_right: ",
+            #     w_samples_valid_right,
+            # )
+            # print("gain_proxy: ", gain_proxy)
 
             # We've found a better split
             best_gain_proxy = gain_proxy
@@ -566,26 +577,29 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
             best_split.y_sum_left[:] = y_sum_left
             best_split.y_sum_right[:] = y_sum_right
         else:
-            print("bin: ", bin)
-            print(
-                "w_samples_train_left: ",
-                w_samples_train_left,
-                ", w_samples_train_right: ",
-                w_samples_train_right,
-            )
-            print(
-                "w_samples_valid_left: ",
-                w_samples_valid_left,
-                ", w_samples_valid_right: ",
-                w_samples_valid_right,
-            )
-            print("gain_proxy: ", gain_proxy)
+            pass
+            # print("bin: ", bin)
+            # print(
+            #     "w_samples_train_left: ",
+            #     w_samples_train_left,
+            #     ", w_samples_train_right: ",
+            #     w_samples_train_right,
+            # )
+            # print(
+            #     "w_samples_valid_left: ",
+            #     w_samples_valid_left,
+            #     ", w_samples_valid_right: ",
+            #     w_samples_valid_right,
+            # )
+            # print("gain_proxy: ", gain_proxy)
 
+    print("Best split is bin:", best_split.bin, "gain proxy: ", gain_proxy)
+    print("================ End   find_best_split_along_feature ================")
     # exit(0)
 
 
 @njit
-def split_indices(tree_context, split, node_record):
+def split_indices(tree_context, split, start_train, end_train, start_valid, end_valid):
 
     # The feature and bin used for this split
     feature = split.feature
@@ -599,10 +613,10 @@ def split_indices(tree_context, split, node_record):
 
     # TODO: faudrait avoir le calcul du nombre de train et valid dans le split
 
-    start_train = node_record["start_train"]
-    end_train = node_record["end_train"]
-    start_valid = node_record["start_valid"]
-    end_valid = node_record["end_valid"]
+    # start_train = node_record["start_train"]
+    # end_train = node_record["end_train"]
+    # start_valid = node_record["start_valid"]
+    # end_valid = node_record["end_valid"]
 
     # The current training sample indices in the node
     partition_train = tree_context.partition_train

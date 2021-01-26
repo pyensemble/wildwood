@@ -17,7 +17,60 @@
 
 # from wildwood._utils import MAX_INT
 
-from wildwood._utils import njit
+from wildwood._utils import njit, jitclass
+
+from numba import from_dtype
+import numpy as np
+from wildwood._utils import np_float32, np_size_t, nb_float32, nb_size_t
+
+
+np_record = np.dtype([("a", np_float32), ("b", np_size_t)])
+
+
+nb_record = from_dtype(np_record)
+
+
+spec_record = [
+    ("a", nb_float32),
+    ("b", nb_size_t)
+]
+
+
+@jitclass(spec_record)
+class Record(object):
+
+    def __init__(self, a, b):
+        self.a = a
+        self.b = b
+
+
+@njit
+def set_record(records, idx, a, b):
+    record = records[idx]
+    record["a"] = a
+    record["b"] = b
+
+
+@njit
+def get_record(records, idx):
+    record = records[idx]
+    return record["a"], record["b"]
+
+
+@njit
+def main():
+    records = np.empty((10,), dtype=np_record)
+    set_record(records, 0, 3.14, 17)
+    record = get_record(records, 0)
+    print(record)
+
+
+main()
+
+
+
+
+
 
 #
 # from wildwood._tree import Stack, print_stack
@@ -29,13 +82,13 @@ from wildwood._utils import njit
 # print()
 
 
-@njit
-def myprint():
-
-    print("Split({gain_proxy}".format(gain_proxy=2e-3))
-
-
-myprint()
+# @njit
+# def myprint():
+#
+#     print("Split({gain_proxy}".format(gain_proxy=2e-3))
+#
+#
+# myprint()
 
 from cffi import FFI
 
@@ -509,6 +562,12 @@ from numba import cfunc, types, carray
 #
 #
 #
+
+
+
+
+
+
 # # >>> struct_dtype = np.dtype([('row', np.float64), ('col', np.float64)])
 # # >>> ty = numba.from_dtype(struct_dtype)
 # # >>> ty

@@ -1,5 +1,6 @@
 import numpy as np
 from numba import (
+    jit,
     boolean,
     float32,
     float64,
@@ -30,6 +31,7 @@ nb_float32 = float32
 np_float32 = np.float32
 nb_float64 = float64
 np_float64 = np.float64
+
 np_size_t = np.uintp
 nb_size_t = uintp
 np_ssize_t = np.intp
@@ -68,20 +70,25 @@ def get_numba_type(class_):
         return class_type.instance_type
 
 
-@njit
+@jit(nopython=True, nogil=True, locals={"new_size": nb_size_t})
 def resize(a, new_size, zeros=False):
-    # if zeros:
-    #     new = np.zeros(new_size, a.dtype)
-    # else:
-    #     new = np.empty(new_size, a.dtype)
-    new = np.empty(new_size, a.dtype)
-    # if zeros:
-    #     new[:] = 0
+    print("================ Begin resize ================")
+    print("new_size: ", new_size)
+    if zeros:
+        new = np.zeros(new_size, a.dtype)
+    else:
+        new = np.empty(new_size, a.dtype)
+
     new[: a.size] = a
+    print("================ End   resize ================")
     return new
 
 
-@njit
+@jit(
+    nopython=True,
+    nogil=True,
+    locals={"new_size": nb_size_t, "d0": nb_size_t, "d1": nb_size_t},
+)
 def resize2d(a, new_size, zeros=False):
     d0, d1 = a.shape
     if zeros:
@@ -92,7 +99,11 @@ def resize2d(a, new_size, zeros=False):
     return new
 
 
-@njit
+@jit(
+    nopython=True,
+    nogil=True,
+    locals={"new_size": nb_size_t, "d0": nb_size_t, "d1": nb_size_t, "d2": nb_size_t},
+)
 def resize3d(a, new_size, zeros=False):
     d0, d1, d2 = a.shape
     if zeros:

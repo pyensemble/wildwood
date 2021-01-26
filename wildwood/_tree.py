@@ -112,6 +112,8 @@ def push_node_record(
 
     stack_top = records.stack[top]
     stack_top["start_train"] = start_train
+    print("start_train: ", start_train)
+    print("stack_top['start_train']: ", stack_top["start_train"])
     stack_top["end_train"] = end_train
     stack_top["start_valid"] = start_valid
     stack_top["end_valid"] = end_valid
@@ -120,6 +122,9 @@ def push_node_record(
     stack_top["is_left"] = is_left
     stack_top["impurity"] = impurity
     stack_top["n_constant_features"] = n_constant_features
+
+    print("end_valid: ", end_valid)
+    print("stack_top['end_valid']: ", stack_top["end_valid"])
 
     # We have one more record in the stack
     records.top = top + nb_size_t(1)
@@ -133,23 +138,51 @@ def has_records(records):
 
 @njit
 def pop_node_record(records):
+    print("================ Begin pop_node_record(records) ================")
     top = records.top
+    print("top: ", top)
     stack = records.stack
     # print("top: ", top)
     # print("stack_: ", stack_)
     # print("top - 1", top-1)
+    print("np_size_t(top - 1):", np_size_t(top - 1))
     stack_record = stack[np_size_t(top - 1)]
+    print(stack_record)
     records.top = nb_size_t(top - 1)
     # print("stack.top: ", stack.top)
-    return stack_record
+    # print("pop_node_record(records):")
+    # print(stack_record)
+    print("================ End   pop_node_record(records) ================")
+
+    return (
+        stack_record["start_train"],
+        stack_record["end_train"],
+        stack_record["start_valid"],
+        stack_record["end_valid"],
+        stack_record["depth"],
+        stack_record["parent"],
+        stack_record["is_left"],
+        stack_record["impurity"],
+        stack_record["n_constant_features"]
+    )
 
 
+@njit
 def print_records(records):
-    s = "Records("
-    s += "capacity={capacity}".format(capacity=records.capacity)
-    s += ", top={top}".format(top=records.top)
-    s += ")"
-    print(s)
+    # s = "Records("
+    # s += "capacity={capacity}".format(capacity=records.capacity)
+    # s += ", top={top}".format(top=records.top)
+    # s += ")"
+    # print(s)
+    # print("Records")
+    print("****************************************************************")
+    print("| Records(capacity=", records.capacity, ", top=", records.top, ")")
+    top = 0
+    for i in range(records.top):
+        print("|", records.stack[i])
+    print("****************************************************************")
+    # for record in records.stack:
+    #     print(record)
 
 
 def get_records(records):
@@ -295,7 +328,7 @@ def get_node_tree(nodes, idx):
         node["end_train"],
         node["start_valid"],
         node["end_valid"],
-        node["is_left"]
+        node["is_left"],
     )
 
 
@@ -320,12 +353,11 @@ class NodeTree(object):
         n_samples_valid,
         weighted_n_samples_train,
         weighted_n_samples_valid,
-
         start_train,
         end_train,
         start_valid,
         end_valid,
-        is_left
+        is_left,
     ):
         self.node_id = node_id
         self.parent = parent
@@ -419,9 +451,9 @@ class Tree(object):
     def __init__(self, n_features, n_classes):
         self.n_features = n_features
         self.n_classes = n_classes
-        self.max_depth = 0
-        self.node_count = 0
-        self.capacity = 0
+        self.max_depth = nb_size_t(0)
+        self.node_count = nb_size_t(0)
+        self.capacity = nb_size_t(0)
         # Both values and nodes arrays have zero on the first axis and are resized
         # later when we know the capacity of the tree
         # The array of nodes contained in the tree
@@ -473,7 +505,7 @@ def get_nodes(tree):
         "end_train",
         "start_valid",
         "end_valid",
-        "is_left"
+        "is_left",
     ]
 
     # columns = [col_name for col_name, _ in np_node_tree]
@@ -509,11 +541,17 @@ def add_node_tree(
     start_valid,
     end_valid,
 ):
+    print("================ Begin add_node_tree ================")
+
     # New node index is given by the current number of nodes in the tree
     node_idx = tree.node_count
 
     print("In add_node_tree")
+    print("node_idx >= tree.capacity:", node_idx, tree.capacity)
+
     if node_idx >= tree.capacity:
+
+        print("node_idx >= tree.capacity:", node_idx, tree.capacity)
         # print("In tree_add_node calling tree_resize with no capacity")
         # tree_add_node
         tree_resize(tree)
@@ -556,12 +594,15 @@ def add_node_tree(
         node["bin_threshold"] = bin_threshold
 
     tree.node_count += 1
+    print("================ End   add_node_tree ================")
 
     return node_idx
 
 
 @njit
 def tree_resize(tree, capacity=max_size_t):
+    print("================ Begin tree_resize ================")
+
     # TODO: When does this happen ?
     # if capacity == tree.capacity and tree.nodes != NULL:
     # print("----------------")
@@ -576,14 +617,27 @@ def tree_resize(tree, capacity=max_size_t):
         return 0
 
     if capacity == max_size_t:
-        if tree.capacity == 0:
-            capacity = 3  # default initial value
+        if tree.capacity == nb_size_t(0):
+            capacity = nb_size_t(3)  # default initial value
         else:
-            capacity = 2 * tree.capacity
+            capacity = nb_size_t(2 * tree.capacity)
 
     # print("new capacity: ", capacity)
+
+    # print("resizing nodes...")
+
+    print("capacity:", capacity)
+
     tree.nodes = resize(tree.nodes, capacity)
+
+    # new = np.empty(capacity, np_node_record)
+    # return
+
+    # print("Done resizing nodes...")
+
+    # print("resizing y_pred...")
     tree.y_pred = resize2d(tree.y_pred, capacity, zeros=True)
+    # print("Done resizing y_pred...")
 
     # value memory is initialised to 0 to enable classifier argmax
     # if capacity > tree.capacity:
@@ -596,6 +650,9 @@ def tree_resize(tree, capacity=max_size_t):
         tree.node_count = capacity
 
     tree.capacity = capacity
+
+    print("================ End   tree_resize ================")
+
     return 0
 
 

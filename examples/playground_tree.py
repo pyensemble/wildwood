@@ -84,10 +84,10 @@ dirichlet = st.sidebar.selectbox(
 )
 
 
-@st.cache
+# @st.cache
 def simulate_data():
     X, y = make_circles(
-        n_samples=n_samples, noise=0.3, factor=0.4, random_state=data_random_state
+        n_samples=n_samples, noise=0.2, factor=0.4, random_state=data_random_state
     )
     return X, y
 
@@ -113,7 +113,7 @@ y_max = X_train[:, 1].max() + eps
 
 
 
-@st.cache
+# @st.cache
 def get_data_df(X, y):
     y_color = {0: "blue", 1: "red"}
     df = pd.DataFrame(
@@ -125,7 +125,7 @@ def get_data_df(X, y):
 
 df_data = get_data_df(X_train, y_train)
 
-@st.cache
+# @st.cache
 def get_mesh(x_min, x_max, y_min, y_max, grid_size):
     xx, yy = np.meshgrid(np.linspace(x_min, x_max, grid_size), np.linspace(y_min, y_max, grid_size))
     xy = np.array([xx.ravel(), yy.ravel()]).T
@@ -138,7 +138,7 @@ xy = get_mesh(x_min, x_max, y_min, y_max, grid_size)
 # grid_size)
 
 
-@st.cache
+# @st.cache
 def fit_and_get_tree(use_aggregation, n_estimators, dirichlet, step):
     # TODO: add a progress bar
     clf = ForestBinaryClassifier(

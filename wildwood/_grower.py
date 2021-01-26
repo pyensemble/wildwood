@@ -15,7 +15,7 @@ from ._splitting import (
     NodeContext,
     find_node_split,
     init_node_context,
-    split_indices
+    split_indices,
     # split_indices,
     # find_node_split,
     # find_node_split_subtraction,
@@ -39,28 +39,35 @@ from ._tree import (
 from ._utils import njit, infinity, nb_size_t
 
 
-
 INITIAL_STACK_SIZE = nb_size_t(10)
 
 
 @njit
 def grow(tree, tree_context, node_context):
-
-
-    # print("inside grow")
+    print("**** Inside grow")
 
     # This is the output split
-    if tree.max_depth <= 10:
-        init_capacity = (2 ** (tree.max_depth + 1)) - 1
-    else:
-        init_capacity = 2047
+    # TODO: redo this ?
+    # if tree.max_depth <= 10:
+    #     init_capacity = (2 ** (tree.max_depth + 1)) - 1
+    # else:
+    #     init_capacity = 2047
 
+    init_capacity = 2
+
+    print("tree.max_depth: ", tree.max_depth)
+
+    print("tree.max_depth: ", tree.max_depth)
+    print("tree_resize(tree, init_capacity)")
+    print("init_capacity: ", init_capacity)
     tree_resize(tree, init_capacity)
+    print("Done.")
+
+    print(tree.nodes.shape)
+    print(tree.y_pred.shape)
 
     # TODO: get back parameters from the tree
     # TODO: decide a posteriori what goes into SplittingContext and Tree ?
-
-
 
     # TODO: creer un local_context ici
 
@@ -69,33 +76,32 @@ def grow(tree, tree_context, node_context):
 
     max_depth_seen = -1
 
+    # print("n_samples_train:", n_samples_train)
+    # print("n_samples_valid:", n_samples_valid)
+
     # TODO: explain why there is a stack and a tree
     records = Records(INITIAL_STACK_SIZE)
-    # cdef StackRecord stack_record
 
-    # These vectors will contain a reordering of train_indices and valid_indices so
-    # that the train and valid indices of each nodes are contiguous. This will allow
-    # to access the training and validation samples of a node using
-    # idx_train = partition_train[start_train:end_train]
-    # idx_valid = partition_valid[start_valid:end_valid]
-    # X[idx_train], y[idx_train]
-
-    # partition_train = tree_context.partition_train
-    # partition_valid = tree_context.partition_valid
+    # print(records)
 
     # Let us first define all the attributes of root
-    start_train = 0
-    end_train = n_samples_train
-    start_valid = 0
-    end_valid = n_samples_valid
-    depth = 0
+    start_train = nb_size_t(0)
+
+    end_train = nb_size_t(n_samples_train)
+    start_valid = nb_size_t(0)
+    end_valid = nb_size_t(n_samples_valid)
+    depth = nb_size_t(0)
     # root as no parent
     parent = TREE_UNDEFINED
     is_left = False
     impurity = infinity
     n_constant_features = 0
 
+    # print("start_train:", start_train)
+    # print("end_valid:", end_valid)
+
     # Add the root node into the stack
+    print("Pushing root in the stack")
     push_node_record(
         records,
         start_train,
@@ -108,6 +114,7 @@ def grow(tree, tree_context, node_context):
         impurity,
         n_constant_features,
     )
+    print("Done pushing root in the stack")
 
     # TODO: this option will come for the forest later
     min_samples_split = 2
@@ -116,23 +123,60 @@ def grow(tree, tree_context, node_context):
     # print(get_records(records))
 
     while not has_records(records):
+        print("================ while not has_records(records) ================")
+
         # Get information about the current node
         # TODO: plutot creer un node ici
-        node_record = pop_node_record(records)
-        parent = node_record["parent"]
-        depth = node_record["depth"]
-        start_train = node_record["start_train"]
-        end_train = node_record["end_train"]
-        start_valid = node_record["start_valid"]
-        end_valid = node_record["end_valid"]
-        is_left = node_record["is_left"]
-        # TODO: we get the impurity from the record
-        impurity = node_record["impurity"]
+
+        print_records(records)
+
+        # Get information about the current node
+        (
+            start_train,
+            end_train,
+            start_valid,
+            end_valid,
+            depth,
+            parent,
+            is_left,
+            impurity,
+            n_constant_features,
+        ) = pop_node_record(records)
+
+        # node_record = pop_node_record(records)
+        # print("node_record = pop_node_record(records)")
+        # print("node_record: ", node_record)
+
+        # return
+
+        # parent = node_record["parent"]
+        # depth = node_record["depth"]
+        # start_train = node_record["start_train"]
+        # end_train = node_record["end_train"]
+        # start_valid = node_record["start_valid"]
+        # end_valid = node_record["end_valid"]
+        # is_left = node_record["is_left"]
+        # # TODO: we get the impurity from the record
+        # impurity = node_record["impurity"]
+
+        # print("parent: ", parent)
+        # print("depth: ", depth)
+        # print("start_train: ", start_train)
+        # print("end_train: ", end_train)
+        # print("start_valid: ", start_valid)
+        # print("end_valid: ", end_valid)
+        # print("is_left: ", is_left)
+        #
+        # print(node_record)
+        # return
 
         # print("records.top: ", records.top)
 
         # Initialize the node context, this computes the node statistics
-        init_node_context(tree_context, node_context, node_record)
+        init_node_context(
+            tree_context, node_context, start_train, end_train, start_valid, end_valid
+        )
+
 
         # print("node_context.n_samples_train: ", node_context.n_samples_train)
         # print("node_context.n_samples_valid: ", node_context.n_samples_valid)
@@ -200,6 +244,9 @@ def grow(tree, tree_context, node_context):
         # If the node is not a leaf
 
         if is_leaf:
+
+            print("Node is a leaf")
+
             split = None
             bin = 0
             feature = 0
@@ -207,9 +254,13 @@ def grow(tree, tree_context, node_context):
             # impurity = -infinity
             # Faudrait que split soit defini dans tous les cas...
         else:
+            print("Node is not a leaf")
+
             split = find_node_split(tree_context, node_context)
             bin = split.bin
             feature = split.feature
+            print("Found split with feature=", feature, "and bin=", bin)
+
             # # TODO: ici on calcule le vrai information gain
             # impurity = split.gain_proxy
 
@@ -258,8 +309,10 @@ def grow(tree, tree_context, node_context):
             start_train,
             end_train,
             start_valid,
-            end_valid
+            end_valid,
         )
+
+        # return
 
         # print_tree(tree)
         # TODO: remettre le y_sum correct
@@ -271,18 +324,20 @@ def grow(tree, tree_context, node_context):
             # so that they can be added in the tree and eventually be splitted later.
 
             # First, we need to update partition_train and partition_valid
-            pos_train, pos_valid = split_indices(tree_context, split, node_record)
+            pos_train, pos_valid = split_indices(
+                tree_context, split, start_train, end_train, start_valid, end_valid
+            )
 
             # Then, we can add both childs records: add the left child
             push_node_record(
                 records,
-                start_train,          # strain_train from the node
-                pos_train,            # TODO
-                start_valid,          # TODO
-                pos_valid,            # TODO
-                depth + 1,            # depth is increased by one
-                node_id,              # The parent is the previous node_id
-                True,                 # is_left=True
+                start_train,  # strain_train from the node
+                pos_train,  # TODO
+                start_valid,  # TODO
+                pos_valid,  # TODO
+                depth + 1,  # depth is increased by one
+                node_id,  # The parent is the previous node_id
+                True,  # is_left=True
                 split.impurity_left,  # Impurity of childs was saved in the split
                 n_constant_features,  # TODO: for now we don't care about that
             )
@@ -290,14 +345,14 @@ def grow(tree, tree_context, node_context):
             # Add the right child
             push_node_record(
                 records,
-                pos_train,            # TODO
-                end_train,            # TODO
-                pos_valid,            # TODO
-                end_valid,            # TODO
-                depth + 1,            # depth is increased by one
-                node_id,              # The parent is the previous node_id
-                False,                # is_left=False
-                split.impurity_right, # Impurity of childs was saved in the split
+                pos_train,  # TODO
+                end_train,  # TODO
+                pos_valid,  # TODO
+                end_valid,  # TODO
+                depth + 1,  # depth is increased by one
+                node_id,  # The parent is the previous node_id
+                False,  # is_left=False
+                split.impurity_right,  # Impurity of childs was saved in the split
                 n_constant_features,  # TODO: for now we don't care about that
             )
 
@@ -308,9 +363,8 @@ def grow(tree, tree_context, node_context):
     # print_tree(tree)
     # print(get_nodes(tree))
 
-
-        # print_records(records)
-        # print(get_records(records))
+    # print_records(records)
+    # print(get_records(records))
 
     # TODO: put back this crap
     # if rc >= 0:
@@ -329,7 +383,6 @@ def grow(tree, tree_context, node_context):
     # Ca c'est le code de pygbm :
     # while self.can_split_further():
     #     self.split_next()
-
 
 
 # class TreeGrower:

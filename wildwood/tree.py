@@ -392,12 +392,12 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
 
         # TODO: ICI ICI ICI faut y aller
 
-        print("In tree fit we have the following stuff")
-        print(X, X.dtype)
-        print(y)
-        print(train_indices)
-        print(valid_indices)
-        print(sample_weights)
+        # print("In tree fit we have the following stuff")
+        # print(X, X.dtype)
+        # print(y)
+        # print(train_indices)
+        # print(valid_indices)
+        # print(sample_weights)
 
         # Faut coder un grower d'arbre...
 
@@ -414,10 +414,10 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
         n_bins_per_feature = max_bins * np.ones(n_features)
         n_bins_per_feature = n_bins_per_feature.astype(np_ssize_t)
 
-        print(y.flags)
-        print("y.dtype: ", y.dtype)
-        print("train_indices.flags: ", train_indices.flags)
-        print("train_indices.dtypes: ", train_indices.dtype)
+        # print(y.flags)
+        # print("y.dtype: ", y.dtype)
+        # print("train_indices.flags: ", train_indices.flags)
+        # print("train_indices.dtypes: ", train_indices.dtype)
 
         # Then, we create the tree object, which is mostly a data container for the
         # nodes.
@@ -451,6 +451,7 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
         #  devrait etre bon !
 
         # On ne peut pas passer self a grow car self est une classe python...
+        print("grow(tree, tree_context, node_context)")
         grow(tree, tree_context, node_context)
 
         self._tree = tree
