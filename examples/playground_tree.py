@@ -62,7 +62,7 @@ clf_kwargs = {"n_estimators": 1, "min_samples_split": 2, "random_state": random_
 
 grid_size = 200
 random_state = 42
-n_estimators = 1
+n_estimators = 10
 
 
 st.title("`WildWood` playground")

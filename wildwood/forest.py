@@ -656,6 +656,8 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         # TODO: ici on initialise les estimateurs. Gerer le warm-start plus tard
         # self.estimators_ = []
 
+        print("self.n_estimators: ", self.n_estimators)
+
         trees = [
             TreeBinaryClassifier(
                 criterion=self.criterion,
@@ -709,6 +711,9 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         )
 
         self.trees = trees
+
+        print("len(self.trees): ", len(self.trees))
+
 
         # tree, X, y, sample_weight, tree_idx, n_trees, verbose=0
 
