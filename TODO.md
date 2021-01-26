@@ -6,9 +6,12 @@
  
 - Normalement impurity est OK dans les noeuds. On ne splitte pas un noeud pur
 
+- Numba remarche apparemment
+
 # TODO
 
-- Faire marcher numba a nouveau
+- Faire en sorte que la foret marche en parallele (verifier que ca tourne bien en
+ parallele)
 
 - Coder l'aggregation
 
