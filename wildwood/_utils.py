@@ -70,10 +70,13 @@ def get_numba_type(class_):
 
 @njit
 def resize(a, new_size, zeros=False):
-    if zeros:
-        new = np.zeros(new_size, a.dtype)
-    else:
-        new = np.empty(new_size, a.dtype)
+    # if zeros:
+    #     new = np.zeros(new_size, a.dtype)
+    # else:
+    #     new = np.empty(new_size, a.dtype)
+    new = np.empty(new_size, a.dtype)
+    # if zeros:
+    #     new[:] = 0
     new[: a.size] = a
     return new
 

@@ -183,7 +183,6 @@ spec_node_tree = [
     ("n_samples_valid", nb_size_t),
     ("weighted_n_samples_train", nb_float32),
     ("weighted_n_samples_valid", nb_float32),
-
     # TODO: on ajoute des trucs dont on a pas besoin pour l'entrainement, mais utile
     #  pour debugger
     ("start_train", nb_size_t),
@@ -209,7 +208,6 @@ np_node_tree = np.dtype(
         ("n_samples_valid", np_size_t),
         ("weighted_n_samples_train", np_float32),
         ("weighted_n_samples_valid", np_float32),
-
         ("start_train", np_size_t),
         ("end_train", np_size_t),
         ("start_valid", np_size_t),
@@ -506,7 +504,6 @@ def add_node_tree(
     n_samples_valid,
     weighted_n_samples_train,
     weighted_n_samples_valid,
-
     start_train,
     end_train,
     start_valid,
@@ -515,6 +512,7 @@ def add_node_tree(
     # New node index is given by the current number of nodes in the tree
     node_idx = tree.node_count
 
+    print("In add_node_tree")
     if node_idx >= tree.capacity:
         # print("In tree_add_node calling tree_resize with no capacity")
         # tree_add_node
