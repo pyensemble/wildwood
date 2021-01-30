@@ -44,7 +44,7 @@ INITIAL_STACK_SIZE = nb_size_t(10)
 
 @njit
 def grow(tree, tree_context, node_context):
-    print("**** Inside grow")
+    # print("**** Inside grow")
 
     # This is the output split
     # TODO: redo this ?
@@ -55,16 +55,16 @@ def grow(tree, tree_context, node_context):
 
     init_capacity = 2
 
-    print("tree.max_depth: ", tree.max_depth)
-
-    print("tree.max_depth: ", tree.max_depth)
-    print("tree_resize(tree, init_capacity)")
-    print("init_capacity: ", init_capacity)
+    # print("tree.max_depth: ", tree.max_depth)
+    #
+    # print("tree.max_depth: ", tree.max_depth)
+    # print("tree_resize(tree, init_capacity)")
+    # print("init_capacity: ", init_capacity)
     tree_resize(tree, init_capacity)
-    print("Done.")
+    # print("Done.")
 
-    print(tree.nodes.shape)
-    print(tree.y_pred.shape)
+    # print(tree.nodes.shape)
+    # print(tree.y_pred.shape)
 
     # TODO: get back parameters from the tree
     # TODO: decide a posteriori what goes into SplittingContext and Tree ?
@@ -101,7 +101,7 @@ def grow(tree, tree_context, node_context):
     # print("end_valid:", end_valid)
 
     # Add the root node into the stack
-    print("Pushing root in the stack")
+    # print("Pushing root in the stack")
     push_node_record(
         records,
         start_train,
@@ -114,7 +114,7 @@ def grow(tree, tree_context, node_context):
         impurity,
         n_constant_features,
     )
-    print("Done pushing root in the stack")
+    # print("Done pushing root in the stack")
 
     # TODO: this option will come for the forest later
     min_samples_split = 2
@@ -123,12 +123,12 @@ def grow(tree, tree_context, node_context):
     # print(get_records(records))
 
     while not has_records(records):
-        print("================ while not has_records(records) ================")
+        # print("================ while not has_records(records) ================")
 
         # Get information about the current node
         # TODO: plutot creer un node ici
 
-        print_records(records)
+        # print_records(records)
 
         # Get information about the current node
         (
@@ -245,7 +245,7 @@ def grow(tree, tree_context, node_context):
 
         if is_leaf:
 
-            print("Node is a leaf")
+            # print("Node is a leaf")
 
             split = None
             bin = 0
@@ -254,12 +254,12 @@ def grow(tree, tree_context, node_context):
             # impurity = -infinity
             # Faudrait que split soit defini dans tous les cas...
         else:
-            print("Node is not a leaf")
+            # print("Node is not a leaf")
 
             split = find_node_split(tree_context, node_context)
             bin = split.bin
             feature = split.feature
-            print("Found split with feature=", feature, "and bin=", bin)
+            # print("Found split with feature=", feature, "and bin=", bin)
 
             # # TODO: ici on calcule le vrai information gain
             # impurity = split.gain_proxy

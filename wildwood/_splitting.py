@@ -288,7 +288,7 @@ def init_node_context(tree_context, node_context, start_train, end_train,
     # start_valid = node_record["start_valid"]
     # end_valid = node_record["end_valid"]
 
-    print("================ Begin init_node_context ================")
+    # print("================ Begin init_node_context ================")
     w_samples_train_in_bins = node_context.w_samples_train_in_bins
     w_samples_train_in_bins[:] = nb_float32(0.0)
     w_samples_valid_in_bins = node_context.w_samples_valid_in_bins
@@ -360,14 +360,14 @@ def init_node_context(tree_context, node_context, start_train, end_train,
     node_context.w_samples_train = w_samples_train
     node_context.w_samples_valid = w_samples_valid
 
-    print("================ End   init_node_context ================")
+    # print("================ End   init_node_context ================")
 
     # print()
 
 
 @njit
 def find_node_split(tree_context, local_context):
-    print("================ Begin find_node_split ================")
+    # print("================ Begin find_node_split ================")
     features = local_context.features
     # Loop over the possible features
 
@@ -409,10 +409,10 @@ def find_node_split(tree_context, local_context):
 
     # TODO: ici faut calculer le vrai gain et le mettre dans le best split ?
 
-    print("Best split is feature: ", best_split.feature,
-          ", bin:", best_split.bin, "gain proxy: ", best_split.gain_proxy)
-
-    print("================ End   find_node_split ================")
+    # print("Best split is feature: ", best_split.feature,
+    #       ", bin:", best_split.bin, "gain proxy: ", best_split.gain_proxy)
+    #
+    # print("================ End   find_node_split ================")
 
     return best_split
 
@@ -426,7 +426,7 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
     # n_bins = context.n_bins_per_feature[feature]
     # n_bins = 255
 
-    print("================ Begin find_best_split_along_feature ================")
+    # print("================ Begin find_best_split_along_feature ================")
 
     n_classes = tree_context.n_classes
     n_bins = tree_context.max_bins
@@ -593,8 +593,8 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
             # )
             # print("gain_proxy: ", gain_proxy)
 
-    print("Best split is bin:", best_split.bin, "gain proxy: ", gain_proxy)
-    print("================ End   find_best_split_along_feature ================")
+    # print("Best split is bin:", best_split.bin, "gain proxy: ", gain_proxy)
+    # print("================ End   find_best_split_along_feature ================")
     # exit(0)
 
 

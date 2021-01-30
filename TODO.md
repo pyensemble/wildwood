@@ -10,8 +10,18 @@
 
 # TODO
 
+- Le code numba est compile pour les n_jobs threads, faudrait forcer la compilation
+ avant... 
+
+- Il doit y avoir des divisions par zero lors de la prediction: 
+/Users/stephanegaiffas/Code/wildwood/wildwood/tree.py:1114: RuntimeWarning: invalid value encountered in true_divide
+
 - Faire en sorte que la foret marche en parallele (verifier que ca tourne bien en
- parallele)
+ parallele) : on dirait que n_estimators marche pas ou alors que tous les arbres sont
+  identiques ? : Maintenant c'est OK, j'ai juste utilise random_state + tree_idx pour
+   avoir des samples differents, je ne comprends pas comment ils font dans scikit
+
+- faire de progression TQDM sur les arbres entraines
 
 - Coder l'aggregation
 

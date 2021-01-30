@@ -21,6 +21,7 @@ import numpy as np
 # from scipy.sparse import hstack as sparse_hstack
 from joblib import Parallel
 
+from time import time
 
 from sklearn.ensemble._base import _partition_estimators
 
@@ -64,7 +65,7 @@ __all__ = ["BinaryClassifier"]
 from wildwood.tree import TreeBinaryClassifier
 
 
-def _generate_train_valid_samples(random_state, n_samples):
+def _generate_train_valid_samples(random_state, n_samples, tree_idx):
     """
     This functions generates "in-the-bag" (train) and "out-of-the-bag" samples
 
@@ -83,7 +84,8 @@ def _generate_train_valid_samples(random_state, n_samples):
         * output[1] contains the indices of the validation samples
         * output[2] contains the counts of the training samples
     """
-    random_instance = check_random_state(random_state)
+    # TODO: add the tree_idx to get different indices ???
+    random_instance = check_random_state(random_state + tree_idx)
     # Sample the bootstrap samples (uniform sampling with replacement)
 
     sample_indices = random_instance.randint(0, n_samples, n_samples)
@@ -108,8 +110,8 @@ def _parallel_build_trees(tree, X, y, sample_weight, tree_idx, n_trees, verbose=
     """
     Private function used to fit a single tree in parallel.
     """
-    if verbose > 1:
-        print("building tree %d of %d" % (tree_idx + 1, n_trees))
+    # if verbose > 1:
+    print("building tree %d of %d" % (tree_idx + 1, n_trees))
 
     n_samples = X.shape[0]
     if sample_weight is None:
@@ -118,9 +120,13 @@ def _parallel_build_trees(tree, X, y, sample_weight, tree_idx, n_trees, verbose=
         # Do a copy with float32 dtype
         sample_weight = sample_weight.astype(np.float32)
 
+    # TODO: all trees have the same train and valid indices...
     train_indices, valid_indices, train_indices_count = _generate_train_valid_samples(
-        tree.random_state, n_samples
+        tree.random_state, n_samples, tree_idx
     )
+
+    # print("train_indices:", train_indices)
+    # print("valid_indices:", valid_indices)
 
     # sample_weight_train = sample_weight_full[train_indices]
     # sample_weight_valid = sample_weight_full[valid_indices]
@@ -140,6 +146,7 @@ def _parallel_build_trees(tree, X, y, sample_weight, tree_idx, n_trees, verbose=
     # elif class_weight == "balanced_subsample":
     #     curr_sample_weight *= compute_sample_weight("balanced", y, indices=indices)
 
+    tic = time()
     tree.fit(
         X,
         y,
@@ -148,6 +155,9 @@ def _parallel_build_trees(tree, X, y, sample_weight, tree_idx, n_trees, verbose=
         sample_weight,
         check_input=False,
     )
+    toc = time()
+    print("Done building tree %d with %d nodes in %.2f s" % (tree_idx,
+                                                              tree.n_nodes_, toc-tic))
 
     return tree
 
@@ -645,8 +655,8 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
             .astype(np.uint8)
         )
 
-        if self.verbose:
-            print("Fitting gradient boosted rounds:")
+        # if self.verbose:
+        #     print("Fitting gradient boosted rounds:")
 
         n_samples = X_binned.shape[0]
 
@@ -656,7 +666,7 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         # TODO: ici on initialise les estimateurs. Gerer le warm-start plus tard
         # self.estimators_ = []
 
-        print("self.n_estimators: ", self.n_estimators)
+        # print("self.n_estimators: ", self.n_estimators)
 
         trees = [
             TreeBinaryClassifier(
@@ -703,16 +713,16 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
                 y,
                 # TODO: deal with sample_weight
                 None,
-                i,
+                tree_idx,
                 len(trees),
                 verbose=self.verbose,
             )
-            for i, tree in enumerate(trees)
+            for tree_idx, tree in enumerate(trees)
         )
 
         self.trees = trees
 
-        print("len(self.trees): ", len(self.trees))
+        # print("len(self.trees): ", len(self.trees))
 
 
         # tree, X, y, sample_weight, tree_idx, n_trees, verbose=0

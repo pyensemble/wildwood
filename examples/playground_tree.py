@@ -1,5 +1,3 @@
-
-
 # Authors: Stephane Gaiffas <stephane.gaiffas@gmail.com>
 # License: BSD 3 clause
 
@@ -25,10 +23,6 @@ from matplotlib.colors import ListedColormap
 
 from sklearn.datasets import make_circles, make_moons
 from sklearn.model_selection import train_test_split
-# from sklearn.tree import DecisionTreeClassifier as SkDecisionTreeClassifier
-# from sklearn.tree import ExtraTreeClassifier as SkExtraTreeClassifier
-
-# from wildwood._classes import DecisionTreeClassifier
 
 from wildwood._binning import Binner
 
@@ -58,7 +52,7 @@ data_random_state = 123
 random_state = 42
 
 
-clf_kwargs = {"n_estimators": 1, "min_samples_split": 2, "random_state": random_state}
+clf_kwargs = {"n_estimators": 10, "min_samples_split": 2, "random_state": random_state}
 
 grid_size = 200
 random_state = 42
@@ -78,13 +72,16 @@ hyperparameters of the AMFClassifier"""
 )
 use_aggregation = st.sidebar.checkbox("use_aggregation", value=True)
 # split_pure = st.sidebar.checkbox("split_pure", value=True)
-step = st.sidebar.selectbox("step", [1.0, 0.1, 2.0, 3.0], index=0)
-dirichlet = st.sidebar.selectbox(
-    "dirichlet", [1e-8, 0.01, 0.05, 0.1, 0.5, 1.0, 2.0], index=3
-)
+
+tree_idx = st.sidebar.selectbox("Number of the tree", range(n_estimators), index=0)
+
+# step = st.sidebar.selectbox("step", [1.0, 0.1, 2.0, 3.0], index=0)
+# dirichlet = st.sidebar.selectbox(
+#     "dirichlet", [1e-8, 0.01, 0.05, 0.1, 0.5, 1.0, 2.0], index=3
+# )
 
 
-# @st.cache
+@st.cache
 def simulate_data():
     X, y = make_circles(
         n_samples=n_samples, noise=0.2, factor=0.4, random_state=data_random_state
@@ -94,26 +91,31 @@ def simulate_data():
 
 X_train, y_train = simulate_data()
 
-X_train_binned = Binner().fit_transform(X_train)
 
-n_classes = int(y_train.max() + 1)
-n_samples_train = X_train.shape[0]
-
-eps = 0.0
-x_min = X_train[:, 0].min() - eps
-x_max = X_train[:, 0].max() + eps
-y_min = X_train[:, 1].min() - eps
-y_max = X_train[:, 1].max() + eps
-
-# eps = 25.0
-# x_min_binned = X_train_binned[:, 0].min() - eps
-# x_max_binned = X_train_binned[:, 0].max() + eps
-# y_min_binned = X_train_binned[:, 1].min() - eps
-# y_max_binned = X_train_binned[:, 1].max() + eps
+# n_classes = int(y_train.max() + 1)
+# n_samples_train = X_train.shape[0]
 
 
+@st.cache
+def compute_features_range(eps=0.0):
+    x_min = X_train[:, 0].min() - eps
+    x_max = X_train[:, 0].max() + eps
+    y_min = X_train[:, 1].min() - eps
+    y_max = X_train[:, 1].max() + eps
+    return x_min, x_max, y_min, y_max
 
-# @st.cache
+
+x_min, x_max, y_min, y_max = compute_features_range()
+
+# eps = 0.0
+# x_min = X_train[:, 0].min() - eps
+# x_max = X_train[:, 0].max() + eps
+# y_min = X_train[:, 1].min() - eps
+# y_max = X_train[:, 1].max() + eps
+#
+
+
+@st.cache
 def get_data_df(X, y):
     y_color = {0: "blue", 1: "red"}
     df = pd.DataFrame(
@@ -125,35 +127,36 @@ def get_data_df(X, y):
 
 df_data = get_data_df(X_train, y_train)
 
-# @st.cache
+
+@st.cache
 def get_mesh(x_min, x_max, y_min, y_max, grid_size):
-    xx, yy = np.meshgrid(np.linspace(x_min, x_max, grid_size), np.linspace(y_min, y_max, grid_size))
+    xx, yy = np.meshgrid(
+        np.linspace(x_min, x_max, grid_size), np.linspace(y_min, y_max, grid_size)
+    )
     xy = np.array([xx.ravel(), yy.ravel()]).T
     xy = np.ascontiguousarray(xy, dtype="float32")
     return xy
 
 
 xy = get_mesh(x_min, x_max, y_min, y_max, grid_size)
-# xy_binned = get_mesh(x_min_binned, x_max_binned, y_min_binned, y_max_binned,
-# grid_size)
 
 
-# @st.cache
-def fit_and_get_tree(use_aggregation, n_estimators, dirichlet, step):
-    # TODO: add a progress bar
+def fit_forest(X_train, y_train, n_estimators=10, dirichlet=0.5, step=1.0):
     clf = ForestBinaryClassifier(
         n_estimators=n_estimators,
         random_state=random_state,
-        # use_aggregation=use_aggregation,
-        # split_pure=split_pure,
         dirichlet=dirichlet,
         step=step,
     )
     clf.fit(X_train, y_train)
+    return clf
 
-    # print("clf.is_categorical_):", clf.is_categorical_)
 
-    df_tree = clf.get_nodes(0)
+clf = fit_forest(X_train, y_train)
+
+
+def get_tree(clf, tree_idx):
+    df_tree = clf.get_nodes(tree_idx)
     # df_tree["count_0"] = df_tree["y_sum"].apply(lambda t: t[0])
     # df_tree["count_1"] = df_tree["y_sum"].apply(lambda t: t[1])
     df_tree.sort_values(by=["depth", "parent", "node_id"], inplace=True)
@@ -191,10 +194,60 @@ def fit_and_get_tree(use_aggregation, n_estimators, dirichlet, step):
     return zz, df_tree, clf
 
 
-zz, df_tree, clf = fit_and_get_tree(
-    use_aggregation=use_aggregation, n_estimators=n_estimators, dirichlet=dirichlet,
-    step=step
-)
+# @st.cache
+# def fit_and_get_tree(use_aggregation, n_estimators, dirichlet, step):
+#     # TODO: add a progress bar
+#     clf = ForestBinaryClassifier(
+#         n_estimators=n_estimators,
+#         random_state=random_state,
+#         # use_aggregation=use_aggregation,
+#         # split_pure=split_pure,
+#         dirichlet=dirichlet,
+#         step=step,
+#     )
+#     clf.fit(X_train, y_train)
+#
+#     # print("clf.is_categorical_):", clf.is_categorical_)
+#
+#     df_tree = clf.get_nodes(0)
+#     # df_tree["count_0"] = df_tree["y_sum"].apply(lambda t: t[0])
+#     # df_tree["count_1"] = df_tree["y_sum"].apply(lambda t: t[1])
+#     df_tree.sort_values(by=["depth", "parent", "node_id"], inplace=True)
+#     max_depth = df_tree.depth.max()
+#     max_depth = 10
+#     n_nodes = df_tree.shape[0]
+#     x = np.zeros(n_nodes)
+#     x[0] = 0.5
+#     indexes = df_tree["node_id"].values
+#     df_tree["x"] = x
+#     df_tree["y"] = max_depth - df_tree["depth"]
+#     df_tree["x0"] = df_tree["x"]
+#     df_tree["y0"] = df_tree["y"]
+#     for node in range(1, n_nodes):
+#         index = indexes[node]
+#         parent = df_tree.at[index, "parent"]
+#         depth = df_tree.at[index, "depth"]
+#         left_parent = df_tree.at[parent, "left_child"]
+#         x_parent = df_tree.at[parent, "x"]
+#         if left_parent == index:
+#             # It's a left node
+#             df_tree.at[index, "x"] = x_parent - 0.5 ** (depth + 1)
+#         else:
+#             df_tree.at[index, "x"] = x_parent + 0.5 ** (depth + 1)
+#         df_tree.at[index, "x0"] = x_parent
+#         df_tree.at[index, "y0"] = df_tree.at[parent, "y"]
+#
+#     # df_tree["color"] = df_tree["is_leaf"].astype("str")
+#     # df_tree.replace({"color": {"False": "blue", "True": "green"}}, inplace=True)
+#
+#     # Compute the decision function
+#     zz = clf.predict_proba(xy)[:, 1].reshape(grid_size, grid_size)
+#     # zz = None
+#
+#     return zz, df_tree, clf
+
+
+zz, df_tree, clf = get_tree(clf, tree_idx)
 
 
 # df_tree
@@ -207,7 +260,7 @@ source_tree = ColumnDataSource(ColumnDataSource.from_df(df_tree))
 
 source_data = ColumnDataSource(ColumnDataSource.from_df(df_data))
 
-print(zz)
+# print(zz)
 
 source_decision = ColumnDataSource(data={"image": [zz]})
 
@@ -278,16 +331,19 @@ plot_tree.text(x="x", y="y", text="node_id", source=source_tree)
 # )
 
 plot_data = figure(
-    plot_width=500, plot_height=500,
-    x_range=[x_min, x_max], y_range=[y_min, y_max]
+    plot_width=500, plot_height=500, x_range=[x_min, x_max], y_range=[y_min, y_max]
 )
 
 
 plot_data.image(
-    "image", source=source_decision,
+    "image",
+    source=source_decision,
     # x=0, y=0, dw=1, dh=1,
-    x=x_min, y=y_min, dw=x_max - x_min, dh=y_max - y_min,
-    palette=cc.CET_D1A
+    x=x_min,
+    y=y_min,
+    dw=x_max - x_min,
+    dh=y_max - y_min,
+    palette=cc.CET_D1A,
 )
 
 
@@ -374,5 +430,3 @@ st.bokeh_chart(plot_data)
 """This small demo illustrates the internal tree construction performed by  
 `WildWood` for binary classification.
 """
-
-

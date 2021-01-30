@@ -112,8 +112,8 @@ def push_node_record(
 
     stack_top = records.stack[top]
     stack_top["start_train"] = start_train
-    print("start_train: ", start_train)
-    print("stack_top['start_train']: ", stack_top["start_train"])
+    # print("start_train: ", start_train)
+    # print("stack_top['start_train']: ", stack_top["start_train"])
     stack_top["end_train"] = end_train
     stack_top["start_valid"] = start_valid
     stack_top["end_valid"] = end_valid
@@ -123,8 +123,8 @@ def push_node_record(
     stack_top["impurity"] = impurity
     stack_top["n_constant_features"] = n_constant_features
 
-    print("end_valid: ", end_valid)
-    print("stack_top['end_valid']: ", stack_top["end_valid"])
+    # print("end_valid: ", end_valid)
+    # print("stack_top['end_valid']: ", stack_top["end_valid"])
 
     # We have one more record in the stack
     records.top = top + nb_size_t(1)
@@ -138,21 +138,21 @@ def has_records(records):
 
 @njit
 def pop_node_record(records):
-    print("================ Begin pop_node_record(records) ================")
+    # print("================ Begin pop_node_record(records) ================")
     top = records.top
-    print("top: ", top)
+    # print("top: ", top)
     stack = records.stack
     # print("top: ", top)
     # print("stack_: ", stack_)
     # print("top - 1", top-1)
-    print("np_size_t(top - 1):", np_size_t(top - 1))
+    # print("np_size_t(top - 1):", np_size_t(top - 1))
     stack_record = stack[np_size_t(top - 1)]
-    print(stack_record)
+    # print(stack_record)
     records.top = nb_size_t(top - 1)
     # print("stack.top: ", stack.top)
     # print("pop_node_record(records):")
     # print(stack_record)
-    print("================ End   pop_node_record(records) ================")
+    # print("================ End   pop_node_record(records) ================")
 
     return (
         stack_record["start_train"],
@@ -541,17 +541,17 @@ def add_node_tree(
     start_valid,
     end_valid,
 ):
-    print("================ Begin add_node_tree ================")
+    # print("================ Begin add_node_tree ================")
 
     # New node index is given by the current number of nodes in the tree
     node_idx = tree.node_count
 
-    print("In add_node_tree")
-    print("node_idx >= tree.capacity:", node_idx, tree.capacity)
+    # print("In add_node_tree")
+    # print("node_idx >= tree.capacity:", node_idx, tree.capacity)
 
     if node_idx >= tree.capacity:
 
-        print("node_idx >= tree.capacity:", node_idx, tree.capacity)
+        # print("node_idx >= tree.capacity:", node_idx, tree.capacity)
         # print("In tree_add_node calling tree_resize with no capacity")
         # tree_add_node
         tree_resize(tree)
@@ -594,14 +594,14 @@ def add_node_tree(
         node["bin_threshold"] = bin_threshold
 
     tree.node_count += 1
-    print("================ End   add_node_tree ================")
+    # print("================ End   add_node_tree ================")
 
     return node_idx
 
 
 @njit
 def tree_resize(tree, capacity=max_size_t):
-    print("================ Begin tree_resize ================")
+    # print("================ Begin tree_resize ================")
 
     # TODO: When does this happen ?
     # if capacity == tree.capacity and tree.nodes != NULL:
@@ -626,7 +626,7 @@ def tree_resize(tree, capacity=max_size_t):
 
     # print("resizing nodes...")
 
-    print("capacity:", capacity)
+    # print("capacity:", capacity)
 
     tree.nodes = resize(tree.nodes, capacity)
 
@@ -651,7 +651,7 @@ def tree_resize(tree, capacity=max_size_t):
 
     tree.capacity = capacity
 
-    print("================ End   tree_resize ================")
+    # print("================ End   tree_resize ================")
 
     return 0
 

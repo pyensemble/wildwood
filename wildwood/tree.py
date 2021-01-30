@@ -441,9 +441,9 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
             max_features,
         )
 
-        print("Creating context...")
+        # print("Creating context...")
         node_context = NodeContext(tree_context)
-        print("Done creating context")
+        # print("Done creating context")
 
         # TODO: j'en suis ICI ICI ICI ICI 2021 / 01 / 15 faut creer ici le tree numba
         #  et le passer a cette fonction, verifier le calcul des splits, gerer la
@@ -451,7 +451,7 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
         #  devrait etre bon !
 
         # On ne peut pas passer self a grow car self est une classe python...
-        print("grow(tree, tree_context, node_context)")
+        # print("grow(tree, tree_context, node_context)")
         grow(tree, tree_context, node_context)
 
         self._tree = tree
@@ -725,90 +725,32 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
         else:
             self._random_state = val
 
-    # def _prune_tree(self):
-    #     """Prune tree using Minimal Cost-Complexity Pruning."""
-    #     check_is_fitted(self)
+    # @property
+    # def feature_importances_(self):
+    #     """Return the feature importances.
     #
-    #     if self.ccp_alpha < 0.0:
-    #         raise ValueError("ccp_alpha must be greater than or equal to 0")
+    #     The importance of a feature is computed as the (normalized) total
+    #     reduction of the criterion brought by that feature.
+    #     It is also known as the Gini importance.
     #
-    #     if self.ccp_alpha == 0.0:
-    #         return
-    #
-    #     # build pruned tree
-    #     if is_classifier(self):
-    #         n_classes = np.atleast_1d(self.n_classes_)
-    #         pruned_tree = Tree(self.n_features_, n_classes, self.n_outputs_)
-    #     else:
-    #         pruned_tree = Tree(self.n_features_,
-    #                            # TODO: the tree shouldn't need this param
-    #                            np.array([1] * self.n_outputs_, dtype=np.intp),
-    #                            self.n_outputs_)
-    #     _build_pruned_tree_ccp(pruned_tree, self.tree_, self.ccp_alpha)
-    #
-    #     self.tree_ = pruned_tree
-
-    # def cost_complexity_pruning_path(self, X, y, sample_weight=None):
-    #     """Compute the pruning path during Minimal Cost-Complexity Pruning.
-    #
-    #     See :ref:`minimal_cost_complexity_pruning` for details on the pruning
-    #     process.
-    #
-    #     Parameters
-    #     ----------
-    #     X : {array-like, sparse matrix} of shape (n_samples, n_features)
-    #         The training input samples. Internally, it will be converted to
-    #         ``dtype=np.float32`` and if a sparse matrix is provided
-    #         to a sparse ``csc_matrix``.
-    #
-    #     y : array-like of shape (n_samples,) or (n_samples, n_outputs)
-    #         The target values (class labels) as integers or strings.
-    #
-    #     sample_weight : array-like of shape (n_samples,), default=None
-    #         Sample weights. If None, then samples are equally weighted. Splits
-    #         that would create child nodes with net zero or negative weight are
-    #         ignored while searching for a split in each node. Splits are also
-    #         ignored if they would result in any single class carrying a
-    #         negative weight in either child node.
+    #     Warning: impurity-based feature importances can be misleading for
+    #     high cardinality features (many unique values). See
+    #     :func:`sklearn.inspection.permutation_importance` as an alternative.
     #
     #     Returns
     #     -------
-    #     ccp_path : :class:`~sklearn.utils.Bunch`
-    #         Dictionary-like object, with the following attributes.
-    #
-    #         ccp_alphas : ndarray
-    #             Effective alphas of subtree during pruning.
-    #
-    #         impurities : ndarray
-    #             Sum of the impurities of the subtree leaves for the
-    #             corresponding alpha value in ``ccp_alphas``.
+    #     feature_importances_ : ndarray of shape (n_features,)
+    #         Normalized total reduction of criteria by feature
+    #         (Gini importance).
     #     """
-    #     est = clone(self).set_params(ccp_alpha=0.0)
-    #     est.fit(X, y, sample_weight=sample_weight)
-    #     return Bunch(**ccp_pruning_path(est.tree_))
+    #     check_is_fitted(self)
+    #
+    #     return self.tree_.compute_feature_importances()
 
     @property
-    def feature_importances_(self):
-        """Return the feature importances.
-
-        The importance of a feature is computed as the (normalized) total
-        reduction of the criterion brought by that feature.
-        It is also known as the Gini importance.
-
-        Warning: impurity-based feature importances can be misleading for
-        high cardinality features (many unique values). See
-        :func:`sklearn.inspection.permutation_importance` as an alternative.
-
-        Returns
-        -------
-        feature_importances_ : ndarray of shape (n_features,)
-            Normalized total reduction of criteria by feature
-            (Gini importance).
-        """
-        check_is_fitted(self)
-
-        return self.tree_.compute_feature_importances()
-
+    def n_nodes_(self):
+        # TODO: what if the tree is not trained yet ?
+        return self._tree.node_count
 
 # =============================================================================
 # Public estimators

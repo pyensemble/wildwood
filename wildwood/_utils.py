@@ -72,15 +72,15 @@ def get_numba_type(class_):
 
 @jit(nopython=True, nogil=True, locals={"new_size": nb_size_t})
 def resize(a, new_size, zeros=False):
-    print("================ Begin resize ================")
-    print("new_size: ", new_size)
+    # print("================ Begin resize ================")
+    # print("new_size: ", new_size)
     if zeros:
         new = np.zeros(new_size, a.dtype)
     else:
         new = np.empty(new_size, a.dtype)
 
     new[: a.size] = a
-    print("================ End   resize ================")
+    # print("================ End   resize ================")
     return new
 
 
