@@ -46,7 +46,7 @@ np.set_printoptions(precision=2)
 # logging.info("Spent {time} compiling.".format(time=toc - tic))
 
 
-n_samples = 100
+n_samples = 200
 # n_samples = 200
 data_random_state = 123
 random_state = 42
@@ -56,7 +56,7 @@ clf_kwargs = {"n_estimators": 10, "min_samples_split": 2, "random_state": random
 
 grid_size = 200
 random_state = 42
-n_estimators = 10
+n_estimators = 20
 
 
 st.title("`WildWood` playground")
@@ -81,12 +81,20 @@ tree_idx = st.sidebar.selectbox("Number of the tree", range(n_estimators), index
 # )
 
 
+# @st.cache
+# def simulate_data():
+#     X, y = make_circles(
+#         n_samples=n_samples, noise=0.2, factor=0.4, random_state=data_random_state
+#     )
+#     return X, y
+
 @st.cache
 def simulate_data():
-    X, y = make_circles(
-        n_samples=n_samples, noise=0.2, factor=0.4, random_state=data_random_state
+    X, y = make_moons(n_samples=n_samples, noise=0.3, random_state=data_random_state)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.4, random_state=42
     )
-    return X, y
+    return X_train, y_train
 
 
 X_train, y_train = simulate_data()
@@ -97,7 +105,7 @@ X_train, y_train = simulate_data()
 
 
 @st.cache
-def compute_features_range(eps=0.0):
+def compute_features_range(eps=0.5):
     x_min = X_train[:, 0].min() - eps
     x_max = X_train[:, 0].max() + eps
     y_min = X_train[:, 1].min() - eps
@@ -142,12 +150,10 @@ xy = get_mesh(x_min, x_max, y_min, y_max, grid_size)
 
 
 def fit_forest(X_train, y_train, n_estimators=10, dirichlet=0.5, step=1.0):
-    clf = ForestBinaryClassifier(
-        n_estimators=n_estimators,
-        random_state=random_state,
-        dirichlet=dirichlet,
-        step=step,
-    )
+    clf_kwargs = {"n_estimators": 20, "min_samples_split": 2, "random_state":
+        random_state, "n_jobs": 1}
+
+    clf = ForestBinaryClassifier(**clf_kwargs)
     clf.fit(X_train, y_train)
     return clf
 
@@ -187,11 +193,14 @@ def get_tree(clf, tree_idx):
     # df_tree["color"] = df_tree["is_leaf"].astype("str")
     # df_tree.replace({"color": {"False": "blue", "True": "green"}}, inplace=True)
 
-    # Compute the decision function
+    # Compute the decision function of all the trees and of the whole forest
     zz = clf.predict_proba(xy)[:, 1].reshape(grid_size, grid_size)
+    zz_trees = clf.predict_proba_trees(xy)
+
+    # zz = clf.predict_proba(xy)[:, 1].reshape(grid_size, grid_size)
     # zz = None
 
-    return zz, df_tree, clf
+    return zz, df_tree, clf, zz_trees
 
 
 # @st.cache
@@ -247,7 +256,7 @@ def get_tree(clf, tree_idx):
 #     return zz, df_tree, clf
 
 
-zz, df_tree, clf = get_tree(clf, tree_idx)
+zz, df_tree, clf, zz_trees = get_tree(clf, tree_idx)
 
 
 # df_tree
@@ -263,6 +272,13 @@ source_data = ColumnDataSource(ColumnDataSource.from_df(df_data))
 # print(zz)
 
 source_decision = ColumnDataSource(data={"image": [zz]})
+
+
+source_decision_tree = ColumnDataSource(
+    data={
+        "image": [zz_trees[tree_idx][:, 1].reshape(grid_size, grid_size)]
+    }
+)
 
 
 # TODO: Use max_depth
@@ -334,10 +350,26 @@ plot_data = figure(
     plot_width=500, plot_height=500, x_range=[x_min, x_max], y_range=[y_min, y_max]
 )
 
+plot_tree_decision = figure(
+    plot_width=500, plot_height=500, x_range=[x_min, x_max], y_range=[y_min, y_max]
+)
+
 
 plot_data.image(
     "image",
     source=source_decision,
+    # x=0, y=0, dw=1, dh=1,
+    x=x_min,
+    y=y_min,
+    dw=x_max - x_min,
+    dh=y_max - y_min,
+    palette=cc.CET_D1A,
+)
+
+
+plot_tree_decision.image(
+    "image",
+    source=source_decision_tree,
     # x=0, y=0, dw=1, dh=1,
     x=x_min,
     y=y_min,
@@ -425,6 +457,9 @@ plot_data.grid.visible = False
 plot_data.axis.visible = False
 
 st.bokeh_chart(plot_data)
+
+st.bokeh_chart(plot_tree_decision)
+
 
 
 """This small demo illustrates the internal tree construction performed by  

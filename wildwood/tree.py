@@ -1111,6 +1111,8 @@ class TreeBinaryClassifier(ClassifierMixin, TreeBase):
 
         normalizer = proba.sum(axis=1)[:, np.newaxis]
 
+        # print(normalizer)
+
         proba /= normalizer
 
         # if self.n_outputs_ == 1:

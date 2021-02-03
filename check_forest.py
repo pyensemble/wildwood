@@ -35,8 +35,8 @@ np.set_printoptions(precision=2)
 # logging.info("Spent {time} compiling.".format(time=toc - tic))
 
 
-# n_samples = 200
-n_samples = 2_000_000
+n_samples = 200
+# n_samples = 2_000_000
 
 # n_samples = 10
 random_state = 42
@@ -56,7 +56,8 @@ datasets = [
     ),
 ]
 
-clf_kwargs = {"min_samples_split": 2, "random_state": random_state, "n_jobs": 16}
+clf_kwargs = {"n_estimators": 100, "min_samples_split": 2, "random_state":
+    random_state, "n_jobs": 16}
 
 
 # classifiers = [
@@ -66,8 +67,8 @@ clf_kwargs = {"min_samples_split": 2, "random_state": random_state, "n_jobs": 16
 
 classifiers = [
     # ("forest", ForestBinaryClassifier(n_estimators=1, **clf_kwargs)),
-    ("forest", ForestBinaryClassifier(n_estimators=200, **clf_kwargs)),
-    ("sk_forest", RandomForestClassifier(n_estimators=200, **clf_kwargs))
+    ("forest", ForestBinaryClassifier(**clf_kwargs)),
+    # ("sk_forest", RandomForestClassifier(**clf_kwargs))
     # ("tree", DecisionTreeClassifier(**clf_kwargs)),
     # ("sk_tree", SkDecisionTreeClassifier(**clf_kwargs)),
 ]
@@ -144,6 +145,7 @@ def plot_decision_classification(classifiers, datasets):
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=0.4, random_state=42
         )
+
         x_min, x_max = X[:, 0].min() - 0.5, X[:, 0].max() + 0.5
         y_min, y_max = X[:, 1].min() - 0.5, X[:, 1].max() + 0.5
         xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
@@ -170,7 +172,10 @@ def plot_decision_classification(classifiers, datasets):
             truc = np.empty((xx.ravel().shape[0], 2))
             truc[:, 0] = xx.ravel()
             truc[:, 1] = yy.ravel()
+
             Z = clf.predict_proba(truc)[:, 1]
+            # Z = clf.predict_proba_trees(truc)[0][:, 1]
+
             # score = roc_auc_score(y_test, clf.predict_proba(X_test)[:, 1])
             # Put the result into a color plot
             Z = Z.reshape(xx.shape)

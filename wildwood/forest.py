@@ -255,6 +255,12 @@ def _accumulate_prediction(predict, X, out, lock):
         #         out[i] += prediction[i]
 
 
+def _get_tree_prediction(predict, X, out, lock, tree_idx):
+    prediction = predict(X, check_input=False)
+    with lock:
+        out[tree_idx] = prediction
+
+
 # class ForestClassifier(ClassifierMixin, BaseForest, metaclass=ABCMeta):
 #     """
 #     Base class for forest of trees-based classifiers.
@@ -1285,6 +1291,29 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         # else:
         #     return all_proba
         return all_proba
+
+    def predict_proba_trees(self, X):
+        check_is_fitted(self)
+        # Check data
+        X = self._validate_X_predict(X)
+        # TODO: we can also avoid data binning for predictions...
+        X_binned = self._bin_data(X, is_training_data=False)
+        n_samples, n_features = X.shape
+        n_estimators = len(self.trees)
+        n_jobs, _, _ = _partition_estimators(self.n_estimators, self.n_jobs)
+        probas = np.empty((n_estimators, n_samples, n_features))
+
+        lock = threading.Lock()
+        Parallel(
+            n_jobs=n_jobs,
+            verbose=self.verbose,
+            **_joblib_parallel_args(require="sharedmem"),
+        )(
+            delayed(_get_tree_prediction)(e.predict_proba, X_binned, probas, lock, tree_idx)
+            for tree_idx, e in enumerate(self.trees)
+        )
+        return probas
+        # return self.trees[tree_idx].predict_proba(X)
 
     def predict_log_proba(self, X):
         """

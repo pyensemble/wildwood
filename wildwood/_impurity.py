@@ -3,6 +3,9 @@ This module contains functions allowing to compute impurity criterions in nodes 
 their childs, and the information gain associated to it
 """
 
+# TODO: rename this module _node and put in there all the impurities and
+#  loss functions
+
 from ._utils import njit, nb_float32, nb_uint32
 
 

@@ -244,21 +244,21 @@ def grow(tree, tree_context, node_context):
         # If the node is not a leaf
 
         if is_leaf:
-
             # print("Node is a leaf")
-
             split = None
             bin = 0
             feature = 0
+            found_split = False
             # TODO: pourquoi on mettrai impurity = infini ici ?
             # impurity = -infinity
             # Faudrait que split soit defini dans tous les cas...
         else:
             # print("Node is not a leaf")
-
             split = find_node_split(tree_context, node_context)
             bin = split.bin
             feature = split.feature
+            found_split = split.found_split
+
             # print("Found split with feature=", feature, "and bin=", bin)
 
             # # TODO: ici on calcule le vrai information gain
@@ -278,14 +278,13 @@ def grow(tree, tree_context, node_context):
             #         or (split.improvement + EPSILON < min_impurity_decrease)
             # )
 
-        # TODO: Once we've found the best split for this node, we add the node in the
-        #  tree
+        # If we did not find a split then the node is a leaf, since we can't split it
+        is_leaf = is_leaf or not found_split
 
         # TODO: on met un threshold a la con ici
         threshold = 0.42
         # n_samples_node = 42
         # weighted_n_node_samples = 42.0
-
         weighted_n_samples_valid = 42.0
 
         node_id = add_node_tree(
@@ -313,7 +312,6 @@ def grow(tree, tree_context, node_context):
         )
 
         # return
-
         # print_tree(tree)
         # TODO: remettre le y_sum correct
         tree.y_pred[node_id, :] = node_context.y_pred

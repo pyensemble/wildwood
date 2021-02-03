@@ -10,6 +10,16 @@
 
 # TODO
 
+- Parametre dirichlet et predictions avec prior dirichlet par un noeud
+
+- Ou est-ce qu'on met le calcul des poids d'aggregation ? Au moment de l'ajout du
+ noeud ? Ou alors au moment du init_node_context (y'a une boucle deja. On a besoin de
+  connaitre deux choses pour ca : y_pred du noeud et valid_indices du noeud, c'est tout)
+
+- Calcul des loss de validation dans les noeuds valid_loss et du poids d'aggregtion
+
+- On peut changer le step dans re-entrainer un arbre en fait...
+
 - Le code numba est compile pour les n_jobs threads, faudrait forcer la compilation
  avant... 
 
