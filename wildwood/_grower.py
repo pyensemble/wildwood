@@ -36,10 +36,12 @@ from ._tree import (
     get_nodes,
     TREE_UNDEFINED,
 )
-from ._utils import njit, infinity, nb_size_t
+from ._utils import njit, infinity, nb_size_t, nb_float32, log_sum_2_exp, nb_ssize_t
+# from ._tree import TREE_LEAF
 
 
 INITIAL_STACK_SIZE = nb_size_t(10)
+
 
 
 @njit
@@ -177,7 +179,6 @@ def grow(tree, tree_context, node_context):
             tree_context, node_context, start_train, end_train, start_valid, end_valid
         )
 
-
         # print("node_context.n_samples_train: ", node_context.n_samples_train)
         # print("node_context.n_samples_valid: ", node_context.n_samples_valid)
 
@@ -309,7 +310,7 @@ def grow(tree, tree_context, node_context):
             end_train,
             start_valid,
             end_valid,
-            node_context.loss_valid
+            node_context.loss_valid,
         )
 
         # return
@@ -359,29 +360,97 @@ def grow(tree, tree_context, node_context):
         if depth > max_depth_seen:
             max_depth_seen = depth
 
-    # print_tree(tree)
-    # print(get_nodes(tree))
+    # We finished to grow the tree, now we can compute the tree aggregation weights
 
-    # print_records(records)
-    # print(get_records(records))
+    # TREE_LEAF = nb_ssize_t(-1)
+    step = nb_float32(1.0)
+    # Since the tree is grown in a depth-first fashion, we know that if we iterate
+    # through the nodes in reverse order, we'll always iterate over childs before
+    # iteration over parents.
 
-    # TODO: put back this crap
-    # if rc >= 0:
-    #     # print("In depth_first_tree_builder_build calling tree_resize "
-    #     #       "with tree.node_count: ", tree.node_count)
-    #     rc = tree_resize(tree, tree.node_count)
-    #     # rc = tree._resize_c(tree.node_count)
+    # tree.node_count
+    # for node_idx in range():
+    # for node in tree.nodes[::-1]:
+
+    node_count = tree.node_count
+    print("node_count: ", node_count)
+
+    print(type(node_count))
+
+    for node_idx in range(node_count - 1, -1, -1):
+        print("node_idx: ", print(node_idx))
+        node = tree.nodes[node_idx]
+        print("node_idx:", node_idx)
+        print("node_id:", node["node_id"])
+        print("is_leaf: ", node["is_leaf"])
+
+        if node["is_leaf"]:
+            # If the node is a leaf, the logarithm of its tree weight is simply step *
+            # loss
+            node["log_weight_tree"] = step * node["loss_valid"]
+        else:
+            # If the node is not a leaf, then we apply context tree weighting
+            weight = step * node["loss_valid"]
+            left_child = nb_ssize_t(node["left_child"])
+            right_child = nb_ssize_t(node["right_child"])
+            print("left_child: ", left_child, ", right_child: ", right_child)
+            log_weight_tree_left = tree.nodes[left_child]["log_weight_tree"]
+            log_weight_tree_right = tree.nodes[right_child]["log_weight_tree"]
+            node["log_weight_tree"] = log_sum_2_exp(
+                weight, log_weight_tree_left + log_weight_tree_right
+            )
+
+        node_idx -= 1
+
+    # If it's a leaf, then
+    # node["log_weight_tree"] = step * node["loss_valid"]
+    # # TODO: here we must go up in the tree to compute the tree weights
     #
-    # if rc >= 0:
-    #     tree.max_depth = max_depth_seen
+    # parent = node["parent"]
+    # node_up = nodes[parent]
+    # log_weight_tree = node_up["log_weight_tree"]
+    # if np.isnan(log_weight_tree):
+    #         # If it's not a leaf, then the tree weight will be computed when we find the
+    #         # leaf of the path of this node. For now, we indicate that we did not
+    #         # computed the tree weight of this node
+    #         node["log_weight_tree"] = np.nan
+    #         # If it'a not a leaf, then we use context tree weighting
+    #
+    #         # weight = step * node["loss_valid"]
+    #         #
 
-    # TODO: ca ne sert a rien et c'est merdique
-    # if rc == -1:
-    #     raise MemoryError()
+    #         #         left = nodes.left[idx_node]
+    #         #         right = nodes.right[idx_node]
+    #         #         weight = nodes.weight[idx_node]
+    #         #         log_weight_tree = nodes.log_weight_tree
+    #         #         log_weight_tree[idx_node] = log_sum_2_exp(
+    #         #             weight, log_weight_tree[left] + log_weight_tree[right]
+    #         #         )
 
-    # Ca c'est le code de pygbm :
-    # while self.can_split_further():
-    #     self.split_next()
+
+# print_tree(tree)
+# print(get_nodes(tree))
+
+# print_records(records)
+# print(get_records(records))
+
+# TODO: put back this crap
+# if rc >= 0:
+#     # print("In depth_first_tree_builder_build calling tree_resize "
+#     #       "with tree.node_count: ", tree.node_count)
+#     rc = tree_resize(tree, tree.node_count)
+#     # rc = tree._resize_c(tree.node_count)
+#
+# if rc >= 0:
+#     tree.max_depth = max_depth_seen
+
+# TODO: ca ne sert a rien et c'est merdique
+# if rc == -1:
+#     raise MemoryError()
+
+# Ca c'est le code de pygbm :
+# while self.can_split_further():
+#     self.split_next()
 
 
 # class TreeGrower:

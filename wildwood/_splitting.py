@@ -373,7 +373,7 @@ def init_node_context(
                 # Get the label
                 label = nb_size_t(y[sample])
                 loss_valid += -log(y_pred[label])
-                print("loss_valid:", loss_valid)
+                # print("loss_valid:", loss_valid)
 
                 # TODO: inserer ici le calcul de la loss de validation
                 # @njit(float32(get_type(TreeClassifier), uint32, uint32))

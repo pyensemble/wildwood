@@ -207,6 +207,7 @@ def get_records(records):
 spec_node_tree = [
     ("node_id", nb_size_t),
     ("parent", nb_ssize_t),
+    ("is_leaf", nb_bool),
     ("left_child", nb_ssize_t),
     ("right_child", nb_ssize_t),
     ("depth", nb_size_t),
@@ -235,6 +236,7 @@ np_node_tree = np.dtype(
     [
         ("node_id", np_size_t),
         ("parent", np_ssize_t),
+        ("is_leaf", np_bool),
         ("left_child", np_ssize_t),
         ("right_child", np_ssize_t),
         ("depth", np_size_t),
@@ -260,134 +262,134 @@ np_node_tree = np.dtype(
 nb_node_tree = numba.from_dtype(np_node_tree)
 
 
-@njit
-def set_node_tree(nodes, idx, node):
-    """
-    Set a node in an array of nodes at index idx
+# @njit
+# def set_node_tree(nodes, idx, node):
+#     """
+#     Set a node in an array of nodes at index idx
+#
+#     Parameters
+#     ----------
+#     nodes : array of np_node
+#         Array containing the nodes in the tree.
+#
+#     idx : intp
+#         Destination index of the node.
+#
+#     node : NodeTree
+#         The node to be inserted.
+#     """
+#     node_dtype = nodes[idx]
+#     if idx != node.node_id:
+#         raise ValueError("idx != node.node_id")
+#
+#     node_dtype["node_id"] = node.node_id
+#     node_dtype["parent"] = node.parent
+#     node_dtype["left_child"] = node.left_child
+#     node_dtype["right_child"] = node.right_child
+#     node_dtype["depth"] = node.depth
+#     node_dtype["feature"] = node.feature
+#     node_dtype["threshold"] = node.threshold
+#     node_dtype["bin_threshold"] = node.bin_threshold
+#     node_dtype["impurity"] = node.impurity
+#     node_dtype["n_samples_train"] = node.n_samples_train
+#     node_dtype["n_samples_valid"] = node.n_samples_valid
+#     node_dtype["weighted_n_samples_train"] = node.weighted_n_samples_train
+#     node_dtype["weighted_n_samples_valid"] = node.weighted_n_samples_valid
+#     node_dtype["start_train"] = node.start_train
+#     node_dtype["end_train"] = node.end_train
+#     node_dtype["start_valid"] = node.start_valid
+#     node_dtype["end_valid"] = node.end_valid
+#     node_dtype["is_left"] = node.is_left
+#     node_dtype["loss_valid"] = node.loss_valid
+#     node_dtype["log_weight_tree"] = node.log_weight_tree
 
-    Parameters
-    ----------
-    nodes : array of np_node
-        Array containing the nodes in the tree.
+# @njit
+# def get_node_tree(nodes, idx):
+#     """
+#     Get node at index idx
+#
+#     Parameters
+#     ----------
+#     nodes : array of np_node
+#         Array containing the nodes in the tree.
+#
+#     idx : intp
+#         Index of the node to retrieve.
+#
+#     Returns
+#     -------
+#     output : NodeTree
+#         Retrieved node
+#     """
+#     # It's a jitclass object
+#     node = nodes[idx]
+#     return NodeTree(
+#         node["node_id"],
+#         node["parent"],
+#         node["left_child"],
+#         node["right_child"],
+#         node["depth"],
+#         node["feature"],
+#         node["threshold"],
+#         node["bin_threshold"],
+#         node["impurity"],
+#         node["n_samples"],
+#         node["weighted_n_samples"],
+#         node["start_train"],
+#         node["end_train"],
+#         node["start_valid"],
+#         node["end_valid"],
+#         node["is_left"],
+#     )
 
-    idx : intp
-        Destination index of the node.
-
-    node : NodeTree
-        The node to be inserted.
-    """
-    node_dtype = nodes[idx]
-    if idx != node.node_id:
-        raise ValueError("idx != node.node_id")
-
-    node_dtype["node_id"] = node.node_id
-    node_dtype["parent"] = node.parent
-    node_dtype["left_child"] = node.left_child
-    node_dtype["right_child"] = node.right_child
-    node_dtype["depth"] = node.depth
-    node_dtype["feature"] = node.feature
-    node_dtype["threshold"] = node.threshold
-    node_dtype["bin_threshold"] = node.bin_threshold
-    node_dtype["impurity"] = node.impurity
-    node_dtype["n_samples_train"] = node.n_samples_train
-    node_dtype["n_samples_valid"] = node.n_samples_valid
-    node_dtype["weighted_n_samples_train"] = node.weighted_n_samples_train
-    node_dtype["weighted_n_samples_valid"] = node.weighted_n_samples_valid
-    node_dtype["start_train"] = node.start_train
-    node_dtype["end_train"] = node.end_train
-    node_dtype["start_valid"] = node.start_valid
-    node_dtype["end_valid"] = node.end_valid
-    node_dtype["is_left"] = node.is_left
-    node_dtype["loss_valid"] = node.loss_valid
-    node_dtype["log_weight_tree"] = node.log_weight_tree
-
-@njit
-def get_node_tree(nodes, idx):
-    """
-    Get node at index idx
-
-    Parameters
-    ----------
-    nodes : array of np_node
-        Array containing the nodes in the tree.
-
-    idx : intp
-        Index of the node to retrieve.
-
-    Returns
-    -------
-    output : NodeTree
-        Retrieved node
-    """
-    # It's a jitclass object
-    node = nodes[idx]
-    return NodeTree(
-        node["node_id"],
-        node["parent"],
-        node["left_child"],
-        node["right_child"],
-        node["depth"],
-        node["feature"],
-        node["threshold"],
-        node["bin_threshold"],
-        node["impurity"],
-        node["n_samples"],
-        node["weighted_n_samples"],
-        node["start_train"],
-        node["end_train"],
-        node["start_valid"],
-        node["end_valid"],
-        node["is_left"],
-    )
-
-
-# TODO: On a pas vraiment besoin de NodeTree en fait non ?
-@jitclass(spec_node_tree)
-class NodeTree(object):
-    def __init__(
-        self,
-        node_id,
-        parent,
-        left_child,
-        right_child,
-        depth,
-        feature,
-        threshold,
-        bin_threshold,
-        impurity,
-        n_samples_train,
-        n_samples_valid,
-        weighted_n_samples_train,
-        weighted_n_samples_valid,
-        start_train,
-        end_train,
-        start_valid,
-        end_valid,
-        is_left,
-        loss_valid,
-        log_weight_tree
-    ):
-        self.node_id = node_id
-        self.parent = parent
-        self.left_child = left_child
-        self.right_child = right_child
-        self.depth = depth
-        self.feature = feature
-        self.threshold = threshold
-        self.bin_threshold = bin_threshold
-        self.impurity = impurity
-        self.n_samples_train = n_samples_train
-        self.n_samples_valid = n_samples_valid
-        self.weighted_n_samples_train = weighted_n_samples_train
-        self.weighted_n_samples_valid = weighted_n_samples_valid
-
-        self.start_train = start_train
-        self.end_train = end_train
-        self.start_valid = start_valid
-        self.end_valid = end_valid
-        self.is_left = is_left
-        self.loss_valid = loss_valid
-        self.log_weight_tree = log_weight_tree
+#
+# # TODO: On a pas vraiment besoin de NodeTree en fait non ?
+# @jitclass(spec_node_tree)
+# class NodeTree(object):
+#     def __init__(
+#         self,
+#         node_id,
+#         parent,
+#         left_child,
+#         right_child,
+#         depth,
+#         feature,
+#         threshold,
+#         bin_threshold,
+#         impurity,
+#         n_samples_train,
+#         n_samples_valid,
+#         weighted_n_samples_train,
+#         weighted_n_samples_valid,
+#         start_train,
+#         end_train,
+#         start_valid,
+#         end_valid,
+#         is_left,
+#         loss_valid,
+#         log_weight_tree
+#     ):
+#         self.node_id = node_id
+#         self.parent = parent
+#         self.left_child = left_child
+#         self.right_child = right_child
+#         self.depth = depth
+#         self.feature = feature
+#         self.threshold = threshold
+#         self.bin_threshold = bin_threshold
+#         self.impurity = impurity
+#         self.n_samples_train = n_samples_train
+#         self.n_samples_valid = n_samples_valid
+#         self.weighted_n_samples_train = weighted_n_samples_train
+#         self.weighted_n_samples_valid = weighted_n_samples_valid
+#
+#         self.start_train = start_train
+#         self.end_train = end_train
+#         self.start_valid = start_valid
+#         self.end_valid = end_valid
+#         self.is_left = is_left
+#         self.loss_valid = loss_valid
+#         self.log_weight_tree = log_weight_tree
 
 
 @njit
@@ -502,6 +504,7 @@ def get_nodes(tree):
         "parent",
         "left_child",
         "right_child",
+        "is_leaf",
         "depth",
         "feature",
         "threshold",
@@ -516,7 +519,8 @@ def get_nodes(tree):
         "start_valid",
         "end_valid",
         "is_left",
-        "loss_valid"
+        "loss_valid",
+        "log_weight_tree"
     ]
 
     # columns = [col_name for col_name, _ in np_node_tree]
@@ -569,11 +573,14 @@ def add_node_tree(
         tree_resize(tree)
 
     nodes = tree.nodes
+    # print("Adding node in tree node_idx:", node_idx)
+    # print("is_leaf:", is_leaf)
     node = nodes[node_idx]
 
     node["node_id"] = node_idx
     node["parent"] = parent
     node["depth"] = depth
+    node["is_leaf"] = is_leaf
     node["impurity"] = impurity
     node["n_samples_train"] = n_samples_train
     node["n_samples_valid"] = n_samples_valid
@@ -584,11 +591,9 @@ def add_node_tree(
     node["end_train"] = end_train
     node["start_valid"] = start_valid
     node["end_valid"] = end_valid
-
     node["loss_valid"] = loss_valid
 
-    # TODO: use the correct step
-    step = 1.0
+    node["log_weight_tree"] = np.nan
 
     if parent != TREE_UNDEFINED:
         if is_left:
@@ -597,37 +602,17 @@ def add_node_tree(
             nodes[parent]["right_child"] = node_idx
 
     if is_leaf:
-        # pass
-        # TODO: ca ne sert a rien ca si ?
         node["left_child"] = TREE_LEAF
         node["right_child"] = TREE_LEAF
         node["feature"] = TREE_UNDEFINED
         node["threshold"] = TREE_UNDEFINED
         node["bin_threshold"] = TREE_UNDEFINED
-        # If it's a leaf, then the logarithm of the tree weight is step * loss
-        node["log_weight_tree"] = step * node["loss_valid"]
     else:
         node["feature"] = feature
         node["threshold"] = threshold
         node["bin_threshold"] = bin_threshold
-        # If it'a not a leaf, then we use context tree weighting
-        left_child = node["left_child"]
-        right_child = node["right_child"]
 
-        weight = step * node["loss_valid"]
-        log_weight_tree_left = nodes[left_child]["log_weight_tree"]
-        log_weight_tree_right = nodes[right_child]["log_weight_tree"]
-
-        node["log_weight_tree"] = log_sum_2_exp(weight, log_weight_tree_left + log_weight_tree_right)
-        #         left = nodes.left[idx_node]
-        #         right = nodes.right[idx_node]
-        #         weight = nodes.weight[idx_node]
-        #         log_weight_tree = nodes.log_weight_tree
-        #         log_weight_tree[idx_node] = log_sum_2_exp(
-        #             weight, log_weight_tree[left] + log_weight_tree[right]
-        #         )
-
-    tree.node_count += 1
+    tree.node_count += nb_size_t(1)
     # print("================ End   add_node_tree ================")
 
     return node_idx

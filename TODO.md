@@ -10,11 +10,20 @@
 
 # TODO
 
+- On dirait que Le calcul des poids d'aggregation marche avec numba mais pas python
+ ?!? Et ca a l'air plutôt OK ?!?
+
+- Y'a vraiment un bug bizarre avec ssize_t et la facon dont je fais les tests
+ -> mettre un flag pour dire si un noeud est une feuille ou pas... OK
+
 - Use jit everywhere with spec and correct options
 
 - Y'a aussi le feature bootstrap a mettre !
 
 - Faire marcher le parametre dirichlet -> OK a priori
+
+- Faire marcher predict avec threshold sans bin_threshold
+
 
 - Coder le calcul de la loss de validation dans init_node_context, mais pas besoin d
 'utiliser tout de suite le step ? Ou est-ce qu'on met le calcul des poids d'aggregation ? Au moment de l'ajout du

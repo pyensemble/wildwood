@@ -65,7 +65,22 @@ def main():
     print(record)
 
 
-main()
+# main()
+
+
+from numba import float32
+
+
+
+import numba
+
+@numba.jit(nopython=True, nogil=True, fastmath=True, locals={"x": numba.float32})
+def main2():
+    x = np.nan
+    print(x)
+    print(np.isnan(x))
+
+main2()
 
 
 
