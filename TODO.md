@@ -10,11 +10,22 @@
 
 # TODO
 
-- Parametre dirichlet et predictions avec prior dirichlet par un noeud
+- Use jit everywhere with spec and correct options
 
-- Ou est-ce qu'on met le calcul des poids d'aggregation ? Au moment de l'ajout du
+- Y'a aussi le feature bootstrap a mettre !
+
+- Faire marcher le parametre dirichlet -> OK a priori
+
+- Coder le calcul de la loss de validation dans init_node_context, mais pas besoin d
+'utiliser tout de suite le step ? Ou est-ce qu'on met le calcul des poids d'aggregation ? Au moment de l'ajout du
  noeud ? Ou alors au moment du init_node_context (y'a une boucle deja. On a besoin de
-  connaitre deux choses pour ca : y_pred du noeud et valid_indices du noeud, c'est tout)
+  connaitre deux choses pour ca : y_pred du noeud et valid_indices du noeud, c'est
+   tout) -> OK aussi a priori (check streamlit)
+
+- IDEE: pour le calcul des poids d'aggregation, on est en mode "depth first", donc on
+ traite toujours les enfants avant les parents. Donc quand on ajoute un noeud dans l
+ 'arbre, on est sur qu'on a deja ajoute ses enfants. Donc c'est a mettre dans la
+  fonction add_node_tree
 
 - Calcul des loss de validation dans les noeuds valid_loss et du poids d'aggregtion
 
@@ -23,12 +34,7 @@
 - Le code numba est compile pour les n_jobs threads, faudrait forcer la compilation
  avant... 
 
-- Il doit y avoir des divisions par zero lors de la prediction: 
-/Users/stephanegaiffas/Code/wildwood/wildwood/tree.py:1114: RuntimeWarning: invalid value encountered in true_divide
-
-- Faire en sorte que la foret marche en parallele (verifier que ca tourne bien en
- parallele) : on dirait que n_estimators marche pas ou alors que tous les arbres sont
-  identiques ? : Maintenant c'est OK, j'ai juste utilise random_state + tree_idx pour
+- J'ai juste utilise random_state + tree_idx pour
    avoir des samples differents, je ne comprends pas comment ils font dans scikit
 
 - faire de progression TQDM sur les arbres entraines

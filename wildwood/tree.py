@@ -407,6 +407,7 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
 
         # TODO: Faudra changer le self.n_classes_ a terme
         # n_classes = self.n_classes_[0]
+
         n_classes = 2
         max_bins = 255
         # TODO: on obtiendra cette info via le binner qui est dans la foret
@@ -426,6 +427,8 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
         # TODO: faudra verifier ca aussi
         max_features = 2
 
+        dirichlet = self.dirichlet
+
         # We build a tree context, that contains global information about
         # the data, in particular the way we'll organize data into contiguous
         # node indexes both for training and validation samples
@@ -439,16 +442,12 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
             max_bins,
             n_bins_per_feature,
             max_features,
+            dirichlet,
         )
 
         # print("Creating context...")
         node_context = NodeContext(tree_context)
         # print("Done creating context")
-
-        # TODO: j'en suis ICI ICI ICI ICI 2021 / 01 / 15 faut creer ici le tree numba
-        #  et le passer a cette fonction, verifier le calcul des splits, gerer la
-        #  croissance de l'arbre et gerer partition_train et partition_valid et ca
-        #  devrait etre bon !
 
         # On ne peut pas passer self a grow car self est une classe python...
         # print("grow(tree, tree_context, node_context)")
@@ -1105,15 +1104,13 @@ class TreeBinaryClassifier(ClassifierMixin, TreeBase):
 
         # TODO: pas encore des proba mais juste des sums
         proba = tree_predict(self._tree, X)
+
         # proba = _tree_old.tree_predict(self.tree_, X)
 
         # print(proba.shape)
-
-        normalizer = proba.sum(axis=1)[:, np.newaxis]
-
+        # normalizer = proba.sum(axis=1)[:, np.newaxis]
         # print(normalizer)
-
-        proba /= normalizer
+        # proba /= normalizer
 
         # if self.n_outputs_ == 1:
         #     proba = proba[:, : self.n_classes_]

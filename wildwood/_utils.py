@@ -1,3 +1,4 @@
+from math import log, exp
 import numpy as np
 from numba import (
     jit,
@@ -112,3 +113,28 @@ def resize3d(a, new_size, zeros=False):
         new = np.empty((new_size, d1, d2), a.dtype)
     new[:d0, :, :] = a
     return new
+
+# @njit(nb_float32(np_float32, np_float32))
+@njit
+def log_sum_2_exp(a, b):
+    """Computation of log( (e^a + e^b) / 2) in an overflow-proof way
+
+    Parameters
+    ----------
+    a : `float32`
+        First number
+
+    b : `float32`
+        Second number
+
+    Returns
+    -------
+    output : `float32`
+        Value of log( (e^a + e^b) / 2) for the given a and b
+    """
+    # TODO: if |a - b| > 50 skip
+    # TODO: try several log and exp implementations
+    if a > b:
+        return a + log((1 + exp(b - a)) / 2)
+    else:
+        return b + log((1 + exp(a - b)) / 2)

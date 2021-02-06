@@ -309,6 +309,7 @@ def grow(tree, tree_context, node_context):
             end_train,
             start_valid,
             end_valid,
+            node_context.loss_valid
         )
 
         # return

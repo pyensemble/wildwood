@@ -20,6 +20,7 @@ from ._utils import (
     jitclass,
     resize,
     resize2d,
+    log_sum_2_exp
 )
 
 
@@ -201,6 +202,7 @@ def get_records(records):
     )
 
 
+# TODO: a mettre dans _node
 # A numpy dtype containing the node information saved in the tree
 spec_node_tree = [
     ("node_id", nb_size_t),
@@ -223,9 +225,12 @@ spec_node_tree = [
     ("start_valid", nb_size_t),
     ("end_valid", nb_size_t),
     ("is_left", nb_bool),
+    ("loss_valid", nb_float32),
+    # Logarithm of the subtree aggregation weight
+    ("log_weight_tree", nb_float32)
 ]
 
-
+# TODO: a mettre dans _node
 np_node_tree = np.dtype(
     [
         ("node_id", np_size_t),
@@ -246,9 +251,12 @@ np_node_tree = np.dtype(
         ("start_valid", np_size_t),
         ("end_valid", np_size_t),
         ("is_left", np_bool),
+        ("loss_valid", np_float32),
+        ("log_weight_tree", np_float32)
     ]
 )
 
+# TODO: a mettre dans _node
 nb_node_tree = numba.from_dtype(np_node_tree)
 
 
@@ -290,7 +298,8 @@ def set_node_tree(nodes, idx, node):
     node_dtype["start_valid"] = node.start_valid
     node_dtype["end_valid"] = node.end_valid
     node_dtype["is_left"] = node.is_left
-
+    node_dtype["loss_valid"] = node.loss_valid
+    node_dtype["log_weight_tree"] = node.log_weight_tree
 
 @njit
 def get_node_tree(nodes, idx):
@@ -332,10 +341,7 @@ def get_node_tree(nodes, idx):
     )
 
 
-# TODO: do we really need a dataclass for this ? a namedtuple instead ? or juste a
-#  dtype ?
-
-
+# TODO: On a pas vraiment besoin de NodeTree en fait non ?
 @jitclass(spec_node_tree)
 class NodeTree(object):
     def __init__(
@@ -358,6 +364,8 @@ class NodeTree(object):
         start_valid,
         end_valid,
         is_left,
+        loss_valid,
+        log_weight_tree
     ):
         self.node_id = node_id
         self.parent = parent
@@ -378,6 +386,8 @@ class NodeTree(object):
         self.start_valid = start_valid
         self.end_valid = end_valid
         self.is_left = is_left
+        self.loss_valid = loss_valid
+        self.log_weight_tree = log_weight_tree
 
 
 @njit
@@ -506,6 +516,7 @@ def get_nodes(tree):
         "start_valid",
         "end_valid",
         "is_left",
+        "loss_valid"
     ]
 
     # columns = [col_name for col_name, _ in np_node_tree]
@@ -540,6 +551,7 @@ def add_node_tree(
     end_train,
     start_valid,
     end_valid,
+    loss_valid
 ):
     # print("================ Begin add_node_tree ================")
 
@@ -573,6 +585,11 @@ def add_node_tree(
     node["start_valid"] = start_valid
     node["end_valid"] = end_valid
 
+    node["loss_valid"] = loss_valid
+
+    # TODO: use the correct step
+    step = 1.0
+
     if parent != TREE_UNDEFINED:
         if is_left:
             nodes[parent]["left_child"] = node_idx
@@ -580,18 +597,35 @@ def add_node_tree(
             nodes[parent]["right_child"] = node_idx
 
     if is_leaf:
-        pass
+        # pass
         # TODO: ca ne sert a rien ca si ?
         node["left_child"] = TREE_LEAF
         node["right_child"] = TREE_LEAF
         node["feature"] = TREE_UNDEFINED
         node["threshold"] = TREE_UNDEFINED
         node["bin_threshold"] = TREE_UNDEFINED
+        # If it's a leaf, then the logarithm of the tree weight is step * loss
+        node["log_weight_tree"] = step * node["loss_valid"]
     else:
-        # left_child and right_child will be set later
         node["feature"] = feature
         node["threshold"] = threshold
         node["bin_threshold"] = bin_threshold
+        # If it'a not a leaf, then we use context tree weighting
+        left_child = node["left_child"]
+        right_child = node["right_child"]
+
+        weight = step * node["loss_valid"]
+        log_weight_tree_left = nodes[left_child]["log_weight_tree"]
+        log_weight_tree_right = nodes[right_child]["log_weight_tree"]
+
+        node["log_weight_tree"] = log_sum_2_exp(weight, log_weight_tree_left + log_weight_tree_right)
+        #         left = nodes.left[idx_node]
+        #         right = nodes.right[idx_node]
+        #         weight = nodes.weight[idx_node]
+        #         log_weight_tree = nodes.log_weight_tree
+        #         log_weight_tree[idx_node] = log_sum_2_exp(
+        #             weight, log_weight_tree[left] + log_weight_tree[right]
+        #         )
 
     tree.node_count += 1
     # print("================ End   add_node_tree ================")

@@ -76,9 +76,9 @@ use_aggregation = st.sidebar.checkbox("use_aggregation", value=True)
 tree_idx = st.sidebar.selectbox("Number of the tree", range(n_estimators), index=0)
 
 # step = st.sidebar.selectbox("step", [1.0, 0.1, 2.0, 3.0], index=0)
-# dirichlet = st.sidebar.selectbox(
-#     "dirichlet", [1e-8, 0.01, 0.05, 0.1, 0.5, 1.0, 2.0], index=3
-# )
+dirichlet = st.sidebar.selectbox(
+    "dirichlet", [1e-8, 0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 100], index=3
+)
 
 
 # @st.cache
@@ -87,6 +87,7 @@ tree_idx = st.sidebar.selectbox("Number of the tree", range(n_estimators), index
 #         n_samples=n_samples, noise=0.2, factor=0.4, random_state=data_random_state
 #     )
 #     return X, y
+
 
 @st.cache
 def simulate_data():
@@ -150,15 +151,21 @@ xy = get_mesh(x_min, x_max, y_min, y_max, grid_size)
 
 
 def fit_forest(X_train, y_train, n_estimators=10, dirichlet=0.5, step=1.0):
-    clf_kwargs = {"n_estimators": 20, "min_samples_split": 2, "random_state":
-        random_state, "n_jobs": 1}
+    clf_kwargs = {
+        "n_estimators": n_estimators,
+        "min_samples_split": 2,
+        "random_state": random_state,
+        "n_jobs": 1,
+        "step": step,
+        "dirichlet": dirichlet,
+    }
 
     clf = ForestBinaryClassifier(**clf_kwargs)
     clf.fit(X_train, y_train)
     return clf
 
 
-clf = fit_forest(X_train, y_train)
+clf = fit_forest(X_train, y_train, n_estimators, dirichlet)
 
 
 def get_tree(clf, tree_idx):
@@ -275,9 +282,7 @@ source_decision = ColumnDataSource(data={"image": [zz]})
 
 
 source_decision_tree = ColumnDataSource(
-    data={
-        "image": [zz_trees[tree_idx][:, 1].reshape(grid_size, grid_size)]
-    }
+    data={"image": [zz_trees[tree_idx][:, 1].reshape(grid_size, grid_size)]}
 )
 
 
@@ -323,6 +328,7 @@ tree_hover = HoverTool(
         ("feature", "@feature"),
         ("impurity", "@impurity"),
         ("bin_threshold", "@bin_threshold"),
+        ("loss_valid", "@loss_valid"),
         ("n_samples_train", "@n_samples_train"),
         ("n_samples_valid", "@n_samples_valid"),
         ("start_train", "@start_train"),
@@ -459,7 +465,6 @@ plot_data.axis.visible = False
 st.bokeh_chart(plot_data)
 
 st.bokeh_chart(plot_tree_decision)
-
 
 
 """This small demo illustrates the internal tree construction performed by  

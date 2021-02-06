@@ -56,8 +56,8 @@ datasets = [
     ),
 ]
 
-clf_kwargs = {"n_estimators": 100, "min_samples_split": 2, "random_state":
-    random_state, "n_jobs": 16}
+clf_kwargs = {"n_estimators": 1, "min_samples_split": 2, "random_state":
+    random_state, "n_jobs": 1}
 
 
 # classifiers = [
