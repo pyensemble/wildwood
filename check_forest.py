@@ -35,7 +35,7 @@ np.set_printoptions(precision=2)
 # logging.info("Spent {time} compiling.".format(time=toc - tic))
 
 
-n_samples = 200
+n_samples = 2000
 # n_samples = 2_000_000
 
 # n_samples = 10
@@ -56,14 +56,15 @@ datasets = [
     ),
 ]
 
-clf_kwargs = {"n_estimators": 1, "min_samples_split": 2, "random_state":
-    random_state, "n_jobs": 1}
+clf_kwargs = {"n_estimators": 10, "min_samples_split": 2, "random_state":
+    random_state, "n_jobs": 1, "dirichlet": 0.5}
 
 
 # classifiers = [
 #     ("tree", DecisionTreeClassifier),
 #     ("sk_tree", SkDecisionTreeClassifier)
 # ]
+
 
 classifiers = [
     # ("forest", ForestBinaryClassifier(n_estimators=1, **clf_kwargs)),

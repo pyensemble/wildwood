@@ -428,6 +428,7 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
         max_features = 2
 
         dirichlet = self.dirichlet
+        aggregation = self.aggregation
 
         # We build a tree context, that contains global information about
         # the data, in particular the way we'll organize data into contiguous
@@ -442,6 +443,7 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
             max_bins,
             n_bins_per_feature,
             max_features,
+            aggregation,
             dirichlet,
         )
 
@@ -1103,7 +1105,7 @@ class TreeBinaryClassifier(ClassifierMixin, TreeBase):
         # proba = self.tree_.predict(X)
 
         # TODO: pas encore des proba mais juste des sums
-        proba = tree_predict(self._tree, X)
+        proba = tree_predict(self._tree, X, self._tree_context.aggregation)
 
         # proba = _tree_old.tree_predict(self.tree_, X)
 

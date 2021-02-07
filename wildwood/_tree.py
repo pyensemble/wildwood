@@ -1,7 +1,7 @@
 """
 This contains all the data structures for holding tree data
 """
-
+from math import exp
 import numpy as np
 from ._utils import (
     np_bool,
@@ -684,25 +684,26 @@ def tree_resize(tree, capacity=max_size_t):
 
 
 @njit
-def tree_predict(tree, X):
+def tree_predict(tree, X, aggregation):
     # Index of the leaves containing the samples in X (note that X has been binned by
     # the forest)
-    idx_leaves = tree_apply(tree, X)
-    n_samples = X.shape[0]
-    # TODO: only binary classification right ?
-    out = np.empty((n_samples, 2))
-    # Predictions given by each leaf node of the tree
-    y_pred = tree.y_pred
-    i = 0
-    # TODO: idx_leaves.shape[0] == n_samples
-    for i in range(n_samples):
-        idx_leaf = idx_leaves[i]
-        out[i] = y_pred[idx_leaf]
 
-    # out = tree.y_pred.take(idx_leaves, axis=0)
-    # if tree.n_outputs == 1:
-    #     out = out.reshape(X.shape[0], tree.max_n_classes)
-    return out
+    if aggregation:
+        return tree_predict_aggregate(tree, X)
+    else:
+        idx_leaves = tree_apply(tree, X)
+        n_samples = X.shape[0]
+        # TODO: only binary classification right ?
+        out = np.empty((n_samples, 2), dtype=np_float32)
+        # Predictions given by each leaf node of the tree
+        y_pred = tree.y_pred
+        i = 0
+        # TODO: idx_leaves.shape[0] == n_samples
+        for i in range(n_samples):
+            idx_leaf = idx_leaves[i]
+            out[i] = y_pred[idx_leaf]
+
+        return out
 
 
 @njit
@@ -723,7 +724,7 @@ def tree_apply_dense(tree, X):
         idx_leaf = 0
         node = nodes[idx_leaf]
         # While node not a leaf
-        while node["left_child"] != TREE_LEAF:
+        while not node["is_leaf"]:
             # ... and node.right_child != TREE_LEAF:
             if X[i, node["feature"]] <= node["bin_threshold"]:
                 idx_leaf = node["left_child"]
@@ -735,3 +736,86 @@ def tree_apply_dense(tree, X):
         out[i] = nb_size_t(idx_leaf)
 
     return out
+
+
+
+import numba
+
+@numba.jit(nopython=True, nogil=True, locals={"i": nb_size_t, "idx_current": nb_size_t})
+def tree_predict_aggregate(tree, X):
+    n_samples = X.shape[0]
+    n_classes = tree.n_classes
+    nodes = tree.nodes
+    y_pred = tree.y_pred
+    out = np.zeros((n_samples, n_classes), dtype=np_float32)
+    step = 1.0
+
+    for i in range(n_samples):
+        # print(i)
+        # Index of the leaf containing the sample
+        # idx_current = nb_size_t(0)
+        idx_current = 0
+        node = nodes[idx_current]
+        # While node not a leaf
+        while not node["is_leaf"]:
+            if X[i, node["feature"]] <= node["bin_threshold"]:
+                idx_current = node["left_child"]
+            else:
+                idx_current = node["right_child"]
+            node = nodes[idx_current]
+        # Now idx_current is the index of the leaf node containing X[i]
+
+        # The aggregated prediction of the tree is saved in out[i]
+        # y_pred_tree = out[i].view()
+        # We first put the predictions of the leaf
+        # print(y_pred_tree.shape, y_pred[idx_current].shape)
+        # print(idx_current, type(idx_current))
+        # print(i, type(i))
+        out[i, :] = y_pred[idx_current]
+        # Go up in the tree
+        idx_current = node["parent"]
+
+        while idx_current != 0:
+            # Get the current node
+            node = nodes[idx_current]
+            # The prediction given by the current node
+            node_pred = y_pred[idx_current]
+            # The aggregation weights of the current node
+            log_weight = step * node["loss_valid"]
+            log_weight_tree = node["log_weight_tree"]
+            w = exp(log_weight - log_weight_tree)
+            # Apply the dark magic recursive formula from CTW
+            out[i, :] = 0.5 * w * node_pred + (1 - 0.5 * w) * out[i, :]
+            # Go up in the tree
+            idx_current = node["parent"]
+
+    return out
+
+# #
+# # @njit(void(get_type(TreeClassifier), float32[::1], float32[::1], boolean))
+# def tree_classifier_predict(tree, x_t, scores, use_aggregation):
+#     nodes = tree.nodes
+#     leaf = tree_get_leaf(tree, x_t)
+#     if not use_aggregation:
+#         node_classifier_predict(tree, leaf, scores)
+#         return
+#     current = leaf
+#     # Allocate once and for all
+#     pred_new = np.empty(tree.n_classes, float32)
+#     while True:
+#         # This test is useless ?
+#         if nodes.is_leaf[current]:
+#             node_classifier_predict(tree, current, scores)
+#         else:
+#             weight = nodes.weight[current]
+#             log_weight_tree = nodes.log_weight_tree[current]
+#             w = exp(weight - log_weight_tree)
+#             # Get the predictions of the current node
+#             node_classifier_predict(tree, current, pred_new)
+#             for c in range(tree.n_classes):
+#                 scores[c] = 0.5 * w * pred_new[c] + (1 - 0.5 * w) * scores[c]
+#         # Root must be update as well
+#         if current == 0:
+#             break
+#         # And now we go up
+#         current = nodes.parent[current]

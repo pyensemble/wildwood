@@ -145,6 +145,8 @@ spec_tree_context = [
     ("max_features", nb_size_t),
     # TODO: only for classification
     # Dirichlet parameter
+    ("aggregation", nb_bool),
+    # Dirichlet parameter
     ("dirichlet", nb_float32),
     ("partition_train", nb_size_t[::1]),
     ("partition_valid", nb_size_t[::1]),
@@ -170,7 +172,8 @@ class TreeContext:
         max_bins,
         n_bins_per_feature,
         max_features,
-        dirichlet,
+        aggregation,
+        dirichlet
     ):
         self.X = X
         self.y = y
@@ -181,6 +184,7 @@ class TreeContext:
         self.max_features = max_features
         self.train_indices = train_indices
         self.valid_indices = valid_indices
+        self.aggregation = aggregation
         self.dirichlet = dirichlet
         self.partition_train = train_indices.copy()
         self.partition_valid = valid_indices.copy()

@@ -363,6 +363,9 @@ def grow(tree, tree_context, node_context):
     # We finished to grow the tree, now we can compute the tree aggregation weights
 
     # TREE_LEAF = nb_ssize_t(-1)
+
+    aggregation = tree_context.aggregation
+
     step = nb_float32(1.0)
     # Since the tree is grown in a depth-first fashion, we know that if we iterate
     # through the nodes in reverse order, we'll always iterate over childs before
@@ -372,35 +375,36 @@ def grow(tree, tree_context, node_context):
     # for node_idx in range():
     # for node in tree.nodes[::-1]:
 
-    node_count = tree.node_count
-    print("node_count: ", node_count)
+    node_count = int(tree.node_count)
+    # print("node_count: ", node_count)
+    #
+    # print(type(node_count))
 
-    print(type(node_count))
+    if aggregation:
+        for node_idx in range(node_count - 1, -1, -1):
+            print("node_idx: ", print(node_idx))
+            node = tree.nodes[node_idx]
+            print("node_idx:", node_idx)
+            print("node_id:", node["node_id"])
+            print("is_leaf: ", node["is_leaf"])
 
-    for node_idx in range(node_count - 1, -1, -1):
-        print("node_idx: ", print(node_idx))
-        node = tree.nodes[node_idx]
-        print("node_idx:", node_idx)
-        print("node_id:", node["node_id"])
-        print("is_leaf: ", node["is_leaf"])
+            if node["is_leaf"]:
+                # If the node is a leaf, the logarithm of its tree weight is simply step *
+                # loss
+                node["log_weight_tree"] = step * node["loss_valid"]
+            else:
+                # If the node is not a leaf, then we apply context tree weighting
+                weight = step * node["loss_valid"]
+                left_child = nb_ssize_t(node["left_child"])
+                right_child = nb_ssize_t(node["right_child"])
+                # print("left_child: ", left_child, ", right_child: ", right_child)
+                log_weight_tree_left = tree.nodes[left_child]["log_weight_tree"]
+                log_weight_tree_right = tree.nodes[right_child]["log_weight_tree"]
+                node["log_weight_tree"] = log_sum_2_exp(
+                    weight, log_weight_tree_left + log_weight_tree_right
+                )
 
-        if node["is_leaf"]:
-            # If the node is a leaf, the logarithm of its tree weight is simply step *
-            # loss
-            node["log_weight_tree"] = step * node["loss_valid"]
-        else:
-            # If the node is not a leaf, then we apply context tree weighting
-            weight = step * node["loss_valid"]
-            left_child = nb_ssize_t(node["left_child"])
-            right_child = nb_ssize_t(node["right_child"])
-            print("left_child: ", left_child, ", right_child: ", right_child)
-            log_weight_tree_left = tree.nodes[left_child]["log_weight_tree"]
-            log_weight_tree_right = tree.nodes[right_child]["log_weight_tree"]
-            node["log_weight_tree"] = log_sum_2_exp(
-                weight, log_weight_tree_left + log_weight_tree_right
-            )
-
-        node_idx -= 1
+            node_idx -= 1
 
     # If it's a leaf, then
     # node["log_weight_tree"] = step * node["loss_valid"]

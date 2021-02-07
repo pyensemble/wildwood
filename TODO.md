@@ -10,6 +10,12 @@
 
 # TODO
 
+- Options dirichlet, step, aggregation qui doivent marcher dans la foret
+
+- Verifier tout ca dans streamlit
+
+- Tout doit marcher en python ET numba... 
+
 - On dirait que Le calcul des poids d'aggregation marche avec numba mais pas python
  ?!? Et ca a l'air plutôt OK ?!?
 
@@ -23,7 +29,6 @@
 - Faire marcher le parametre dirichlet -> OK a priori
 
 - Faire marcher predict avec threshold sans bin_threshold
-
 
 - Coder le calcul de la loss de validation dans init_node_context, mais pas besoin d
 'utiliser tout de suite le step ? Ou est-ce qu'on met le calcul des poids d'aggregation ? Au moment de l'ajout du
