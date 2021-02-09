@@ -148,6 +148,8 @@ spec_tree_context = [
     ("aggregation", nb_bool),
     # Dirichlet parameter
     ("dirichlet", nb_float32),
+    # Step-size used in the aggregation weights
+    ("step", nb_float32),
     ("partition_train", nb_size_t[::1]),
     ("partition_valid", nb_size_t[::1]),
     ("left_buffer", nb_size_t[::1]),
@@ -173,7 +175,8 @@ class TreeContext:
         n_bins_per_feature,
         max_features,
         aggregation,
-        dirichlet
+        dirichlet,
+        step
     ):
         self.X = X
         self.y = y
@@ -186,6 +189,7 @@ class TreeContext:
         self.valid_indices = valid_indices
         self.aggregation = aggregation
         self.dirichlet = dirichlet
+        self.step = step
         self.partition_train = train_indices.copy()
         self.partition_valid = valid_indices.copy()
 

@@ -684,12 +684,12 @@ def tree_resize(tree, capacity=max_size_t):
 
 
 @njit
-def tree_predict(tree, X, aggregation):
+def tree_predict(tree, X, aggregation, step):
     # Index of the leaves containing the samples in X (note that X has been binned by
     # the forest)
 
     if aggregation:
-        return tree_predict_aggregate(tree, X)
+        return tree_predict_aggregate(tree, X, step)
     else:
         idx_leaves = tree_apply(tree, X)
         n_samples = X.shape[0]
@@ -742,13 +742,12 @@ def tree_apply_dense(tree, X):
 import numba
 
 @numba.jit(nopython=True, nogil=True, locals={"i": nb_size_t, "idx_current": nb_size_t})
-def tree_predict_aggregate(tree, X):
+def tree_predict_aggregate(tree, X, step):
     n_samples = X.shape[0]
     n_classes = tree.n_classes
     nodes = tree.nodes
     y_pred = tree.y_pred
     out = np.zeros((n_samples, n_classes), dtype=np_float32)
-    step = 1.0
 
     for i in range(n_samples):
         # print(i)

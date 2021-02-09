@@ -1,12 +1,6 @@
 """
 
 """
-
-# Authors: Gilles Louppe <g.louppe@gmail.com>
-#          Brian Holt <bdholt1@gmail.com>
-#          Joly Arnaud <arnaud.v.joly@gmail.com>
-#          Fares Hedayati <fares.hedayati@gmail.com>
-#
 # License: BSD 3 clause
 
 
@@ -27,16 +21,6 @@ from sklearn.ensemble._base import _partition_estimators
 
 from sklearn.base import ClassifierMixin, RegressorMixin, MultiOutputMixin
 
-# from sklearn.metrics import r2_score
-# from sklearn.preprocessing import OneHotEncoder
-# from ..tree import (
-#     DecisionTreeClassifier,
-#     DecisionTreeRegressor,
-#     ExtraTreeClassifier,
-#     ExtraTreeRegressor,
-# )
-
-# from ..tree._tree import DTYPE, DOUBLE
 from sklearn.utils import check_random_state, check_array, compute_sample_weight
 
 from sklearn.base import BaseEstimator, ClassifierMixin
@@ -160,82 +144,6 @@ def _parallel_build_trees(tree, X, y, sample_weight, tree_idx, n_trees, verbose=
                                                               tree.n_nodes_, toc-tic))
 
     return tree
-
-
-# class BaseForest(MultiOutputMixin, BaseEnsemble, metaclass=ABCMeta):
-#     """
-#     Base class for forests of trees.
-#
-#     Warning: This class should not be used directly. Use derived classes
-#     instead.
-#     """
-#
-#     @abstractmethod
-#     def __init__(
-#         self,
-#         base_estimator,
-#         n_estimators=100,
-#         *,
-#         estimator_params=tuple(),
-#         bootstrap=False,
-#         oob_score=False,
-#         n_jobs=None,
-#         random_state=None,
-#         verbose=0,
-#         warm_start=False,
-#         class_weight=None,
-#         max_samples=None
-#     ):
-#         super().__init__(
-#             base_estimator=base_estimator,
-#             n_estimators=n_estimators,
-#             estimator_params=estimator_params,
-#         )
-#
-#         self.bootstrap = bootstrap
-#         self.oob_score = oob_score
-#         self.n_jobs = n_jobs
-#         self.random_state = random_state
-#         self.verbose = verbose
-#         self.warm_start = warm_start
-#         self.class_weight = class_weight
-#         self.max_samples = max_samples
-
-
-# @property
-# def feature_importances_(self):
-#     """
-#     The impurity-based feature importances.
-#
-#     The higher, the more important the feature.
-#     The importance of a feature is computed as the (normalized)
-#     total reduction of the criterion brought by that feature.  It is also
-#     known as the Gini importance.
-#
-#     Warning: impurity-based feature importances can be misleading for
-#     high cardinality features (many unique values). See
-#     :func:`sklearn.inspection.permutation_importance` as an alternative.
-#
-#     Returns
-#     -------
-#     feature_importances_ : ndarray of shape (n_features,)
-#         The values of this array sum to 1, unless all trees are single node
-#         trees consisting of only the root node, in which case it will be an
-#         array of zeros.
-#     """
-#     check_is_fitted(self)
-#
-#     all_importances = Parallel(n_jobs=self.n_jobs,
-#                                **_joblib_parallel_args(prefer='threads'))(
-#         delayed(getattr)(tree, 'feature_importances_')
-#         for tree in self.estimators_ if tree.tree_.node_count > 1)
-#
-#     if not all_importances:
-#         return np.zeros(self.n_features_, dtype=np.float64)
-#
-#     all_importances = np.mean(all_importances,
-#                               axis=0, dtype=np.float64)
-#     return all_importances / np.sum(all_importances)
 
 
 def _accumulate_prediction(predict, X, out, lock):
@@ -468,9 +376,9 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         class_weight=None,
     ):
         self._fitted = False
-        self._n_features = None
-        # TODO: only a single output for now...
-        self.n_outputs_ = 1
+        self._n_features_ = None
+        self._n_features_ = None
+        self._n_outputs_ = 1
 
         self.n_estimators = n_estimators
         self.criterion = criterion
@@ -727,293 +635,12 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         )
 
         self.trees = trees
-
-        # print("len(self.trees): ", len(self.trees))
-
-
-        # tree, X, y, sample_weight, tree_idx, n_trees, verbose=0
-
-        # Collect newly grown trees
-        # self.estimators_.extend(trees)
-
-        # if self.oob_score:
-        #     self._set_oob_score(X, y)
-
-        # Decapsulate classes_ attributes
-        # if hasattr(self, "classes_") and self.n_outputs_ == 1:
-        # if hasattr(self, "classes_"):
-        #     self.n_classes_ = self.n_classes_[0]
-        #     self.classes_ = self.classes_[0]
+        self._fitted = True
 
         return self
 
-        # # First time calling fit, or no warm start
-        # if not (self._is_fitted() and self.warm_start):
-        #     # Clear random state and score attributes
-        #     self._clear_state()
-        #
-        #     # initialize raw_predictions: those are the accumulated values
-        #     # predicted by the trees for the training data. raw_predictions has
-        #     # shape (n_trees_per_iteration, n_samples) where
-        #     # n_trees_per_iterations is n_classes in multiclass classification,
-        #     # else 1.
-        #     self._baseline_prediction = self._loss.get_baseline_prediction(
-        #         y_train, sample_weight_train, self.n_trees_per_iteration_
-        #     )
-        #     raw_predictions = np.zeros(
-        #         shape=(self.n_trees_per_iteration_, n_samples),
-        #         dtype=self._baseline_prediction.dtype,
-        #     )
-        #     raw_predictions += self._baseline_prediction
-        #
-        #     # predictors is a matrix (list of lists) of TreePredictor objects
-        #     # with shape (n_iter_, n_trees_per_iteration)
-        #     self._predictors = predictors = []
-        #
-        #     # Initialize structures and attributes related to early stopping
-        #     self._scorer = None  # set if scoring != loss
-        #     raw_predictions_val = None  # set if scoring == loss and use val
-        #     self.train_score_ = []
-        #     self.validation_score_ = []
-        #
-        #     if self.do_early_stopping_:
-        #         # populate train_score and validation_score with the
-        #         # predictions of the initial model (before the first tree)
-        #
-        #         if self.scoring == "loss":
-        #             # we're going to compute scoring w.r.t the loss. As losses
-        #             # take raw predictions as input (unlike the scorers), we
-        #             # can optimize a bit and avoid repeating computing the
-        #             # predictions of the previous trees. We'll re-use
-        #             # raw_predictions (as it's needed for training anyway) for
-        #             # evaluating the training loss, and create
-        #             # raw_predictions_val for storing the raw predictions of
-        #             # the validation data.
-        #
-        #             if self._use_validation_data:
-        #                 raw_predictions_val = np.zeros(
-        #                     shape=(self.n_trees_per_iteration_, X_binned_val.shape[0]),
-        #                     dtype=self._baseline_prediction.dtype,
-        #                 )
-        #
-        #                 raw_predictions_val += self._baseline_prediction
-        #
-        #             self._check_early_stopping_loss(
-        #                 raw_predictions,
-        #                 y_train,
-        #                 sample_weight_train,
-        #                 raw_predictions_val,
-        #                 y_val,
-        #                 sample_weight_val,
-        #             )
-        #         else:
-        #             self._scorer = check_scoring(self, self.scoring)
-        #             # _scorer is a callable with signature (est, X, y) and
-        #             # calls est.predict() or est.predict_proba() depending on
-        #             # its nature.
-        #             # Unfortunately, each call to _scorer() will compute
-        #             # the predictions of all the trees. So we use a subset of
-        #             # the training set to compute train scores.
-        #
-        #             # Compute the subsample set
-        #             (
-        #                 X_binned_small_train,
-        #                 y_small_train,
-        #                 sample_weight_small_train,
-        #             ) = self._get_small_trainset(
-        #                 X_binned_train, y_train, sample_weight_train, self._random_seed
-        #             )
-        #
-        #             self._check_early_stopping_scorer(
-        #                 X_binned_small_train,
-        #                 y_small_train,
-        #                 sample_weight_small_train,
-        #                 X_binned_val,
-        #                 y_val,
-        #                 sample_weight_val,
-        #             )
-        #     begin_at_stage = 0
-        #
-        # # warm start: this is not the first time fit was called
-        # else:
-        #     # Check that the maximum number of iterations is not smaller
-        #     # than the number of iterations from the previous fit
-        #     if self.max_iter < self.n_iter_:
-        #         raise ValueError(
-        #             "max_iter=%d must be larger than or equal to "
-        #             "n_iter_=%d when warm_start==True" % (self.max_iter, self.n_iter_)
-        #         )
-        #
-        #     # Convert array attributes to lists
-        #     self.train_score_ = self.train_score_.tolist()
-        #     self.validation_score_ = self.validation_score_.tolist()
-        #
-        #     # Compute raw predictions
-        #     raw_predictions = self._raw_predict(X_binned_train)
-        #     if self.do_early_stopping_ and self._use_validation_data:
-        #         raw_predictions_val = self._raw_predict(X_binned_val)
-        #     else:
-        #         raw_predictions_val = None
-        #
-        #     if self.do_early_stopping_ and self.scoring != "loss":
-        #         # Compute the subsample set
-        #         (
-        #             X_binned_small_train,
-        #             y_small_train,
-        #             sample_weight_small_train,
-        #         ) = self._get_small_trainset(
-        #             X_binned_train, y_train, sample_weight_train, self._random_seed
-        #         )
-        #
-        #     # Get the predictors from the previous fit
-        #     predictors = self._predictors
-        #
-        #     begin_at_stage = self.n_iter_
-        #
-        # # initialize gradients and hessians (empty arrays).
-        # # shape = (n_trees_per_iteration, n_samples).
-        # gradients, hessians = self._loss.init_gradients_and_hessians(
-        #     n_samples=n_samples,
-        #     prediction_dim=self.n_trees_per_iteration_,
-        #     sample_weight=sample_weight_train,
-        # )
-        #
-        # for iteration in range(begin_at_stage, self.max_iter):
-        #
-        #     if self.verbose:
-        #         iteration_start_time = time()
-        #         print(
-        #             "[{}/{}] ".format(iteration + 1, self.max_iter), end="", flush=True
-        #         )
-        #
-        #     # Update gradients and hessians, inplace
-        #     self._loss.update_gradients_and_hessians(
-        #         gradients, hessians, y_train, raw_predictions, sample_weight_train
-        #     )
-        #
-        #     # Append a list since there may be more than 1 predictor per iter
-        #     predictors.append([])
-        #
-        #     # Build `n_trees_per_iteration` trees.
-        #     for k in range(self.n_trees_per_iteration_):
-        #         grower = TreeGrower(
-        #             X_binned_train,
-        #             gradients[k, :],
-        #             hessians[k, :],
-        #             n_bins=n_bins,
-        #             n_bins_non_missing=self._bin_mapper.n_bins_non_missing_,
-        #             has_missing_values=has_missing_values,
-        #             is_categorical=self.is_categorical_,
-        #             monotonic_cst=self.monotonic_cst,
-        #             max_leaf_nodes=self.max_leaf_nodes,
-        #             max_depth=self.max_depth,
-        #             min_samples_leaf=self.min_samples_leaf,
-        #             l2_regularization=self.l2_regularization,
-        #             shrinkage=self.learning_rate,
-        #         )
-        #         grower.grow()
-        #
-        #         acc_apply_split_time += grower.total_apply_split_time
-        #         acc_find_split_time += grower.total_find_split_time
-        #         acc_compute_hist_time += grower.total_compute_hist_time
-        #
-        #         if self._loss.need_update_leaves_values:
-        #             self._loss.update_leaves_values(
-        #                 grower, y_train, raw_predictions[k, :], sample_weight_train
-        #             )
-        #
-        #         predictor = grower.make_predictor(
-        #             binning_thresholds=self._bin_mapper.bin_thresholds_
-        #         )
-        #         predictors[-1].append(predictor)
-        #
-        #         # Update raw_predictions with the predictions of the newly
-        #         # created tree.
-        #         tic_pred = time()
-        #         _update_raw_predictions(raw_predictions[k, :], grower)
-        #         toc_pred = time()
-        #         acc_prediction_time += toc_pred - tic_pred
-        #
-        #     should_early_stop = False
-        #     if self.do_early_stopping_:
-        #         if self.scoring == "loss":
-        #             # Update raw_predictions_val with the newest tree(s)
-        #             if self._use_validation_data:
-        #                 for k, pred in enumerate(self._predictors[-1]):
-        #                     raw_predictions_val[k, :] += pred.predict_binned(
-        #                         X_binned_val, self._bin_mapper.missing_values_bin_idx_
-        #                     )
-        #
-        #             should_early_stop = self._check_early_stopping_loss(
-        #                 raw_predictions,
-        #                 y_train,
-        #                 sample_weight_train,
-        #                 raw_predictions_val,
-        #                 y_val,
-        #                 sample_weight_val,
-        #             )
-        #
-        #         else:
-        #             should_early_stop = self._check_early_stopping_scorer(
-        #                 X_binned_small_train,
-        #                 y_small_train,
-        #                 sample_weight_small_train,
-        #                 X_binned_val,
-        #                 y_val,
-        #                 sample_weight_val,
-        #             )
-        #
-        #     if self.verbose:
-        #         self._print_iteration_stats(iteration_start_time)
-        #
-        #     # maybe we could also early stop if all the trees are stumps?
-        #     if should_early_stop:
-        #         break
-        #
-        # if self.verbose:
-        #     duration = time() - fit_start_time
-        #     n_total_leaves = sum(
-        #         predictor.get_n_leaf_nodes()
-        #         for predictors_at_ith_iteration in self._predictors
-        #         for predictor in predictors_at_ith_iteration
-        #     )
-        #     n_predictors = sum(
-        #         len(predictors_at_ith_iteration)
-        #         for predictors_at_ith_iteration in self._predictors
-        #     )
-        #     print(
-        #         "Fit {} trees in {:.3f} s, ({} total leaves)".format(
-        #             n_predictors, duration, n_total_leaves
-        #         )
-        #     )
-        #     print(
-        #         "{:<32} {:.3f}s".format(
-        #             "Time spent computing histograms:", acc_compute_hist_time
-        #         )
-        #     )
-        #     print(
-        #         "{:<32} {:.3f}s".format(
-        #             "Time spent finding best splits:", acc_find_split_time
-        #         )
-        #     )
-        #     print(
-        #         "{:<32} {:.3f}s".format(
-        #             "Time spent applying splits:", acc_apply_split_time
-        #         )
-        #     )
-        #     print(
-        #         "{:<32} {:.3f}s".format("Time spent predicting:", acc_prediction_time)
-        #     )
-        #
-        # self.train_score_ = np.asarray(self.train_score_)
-        # self.validation_score_ = np.asarray(self.validation_score_)
-        # del self._in_fit  # hard delete so we're sure it can't be used anymore
-        # return self
-
-
     def get_nodes(self, tree_idx):
         return self.trees[tree_idx].get_nodes()
-
 
     def _validate_y_class_weight(self, y):
         # TODO: c'est un copier / coller de scikit. Simplifier au cas classif binaire
@@ -1430,12 +1057,15 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         return self.trees[0]._validate_X_predict(X, check_input=True)
 
     @property
-    def n_features(self):
-        return self._n_features
+    def n_features_(self):
+        if self._fitted:
+            return self._n_features_
+        else:
+            raise ValueError("You must call fit before asking for n_features_")
 
-    @n_features.setter
-    def n_features(self, val):
-        raise ValueError("`n_features` is a readonly attribute")
+    @n_features_.setter
+    def n_features_(self, val):
+        raise ValueError("n_features_ is a readonly attribute")
 
     @property
     def n_estimators(self):
@@ -1444,12 +1074,12 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
     @n_estimators.setter
     def n_estimators(self, val):
         if self._fitted:
-            raise ValueError("You cannot modify `n_estimators` after calling `fit`")
+            raise ValueError("You cannot change n_estimators after calling fit")
         else:
-            if not isinstance(val, int):
-                raise ValueError("`n_estimators` must be of type `int`")
-            elif val < 1:
-                raise ValueError("`n_estimators` must be >= 1")
+            if not isinstance(val, numbers.Integral):
+                raise ValueError("n_estimators must an integer number")
+            elif val < -1 or val == 0:
+                raise ValueError("n_estimators must be >= 1 or =-1")
             else:
                 self._n_estimators = val
 
@@ -1459,15 +1089,12 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
 
     @n_jobs.setter
     def n_jobs(self, val):
-        if self._fitted:
-            raise ValueError("You cannot modify `n_jobs` after calling `fit`")
+        if not isinstance(val, numbers.Integral):
+            raise ValueError("n_jobs must be an integer number")
+        elif val < -1:
+            raise ValueError("n_jobs must be >= -1")
         else:
-            if not isinstance(val, int):
-                raise ValueError("`n_jobs` must be of type `int`")
-            elif val < 1:
-                raise ValueError("`n_jobs` must be >= 1")
-            else:
-                self._n_jobs = val
+            self._n_jobs = int(val)
 
     @property
     def step(self):
@@ -1475,29 +1102,23 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
 
     @step.setter
     def step(self, val):
-        if self._fitted:
-            raise ValueError("You cannot modify `step` after calling `fit`")
+        if not isinstance(val, numbers.Real):
+            raise ValueError("step must be a real number")
+        elif val <= 0:
+            raise ValueError("step must be positive")
         else:
-            if not isinstance(val, float):
-                raise ValueError("`step` must be of type `float`")
-            elif val <= 0:
-                raise ValueError("`step` must be > 0")
-            else:
-                self._step = val
+            self._step = float(val)
 
     @property
-    def use_aggregation(self):
-        return self._use_aggregation
+    def aggregation(self):
+        return self._aggregation
 
-    @use_aggregation.setter
-    def use_aggregation(self, val):
-        if self._fitted:
-            raise ValueError("You cannot modify `use_aggregation` after calling `fit`")
+    @aggregation.setter
+    def aggregation(self, val):
+        if not isinstance(val, bool):
+            raise ValueError("aggregation must be boolean")
         else:
-            if not isinstance(val, bool):
-                raise ValueError("`use_aggregation` must be of type `bool`")
-            else:
-                self._use_aggregation = val
+            self._aggregation = val
 
     @property
     def verbose(self):
@@ -1505,13 +1126,10 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
 
     @verbose.setter
     def verbose(self, val):
-        if self._fitted:
-            raise ValueError("You cannot modify `verbose` after calling `fit`")
+        if not isinstance(val, bool):
+            raise ValueError("`verbose` must be of type `bool`")
         else:
-            if not isinstance(val, bool):
-                raise ValueError("`verbose` must be of type `bool`")
-            else:
-                self._verbose = val
+            self._verbose = val
 
     @property
     def loss(self):

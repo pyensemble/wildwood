@@ -380,13 +380,14 @@ def grow(tree, tree_context, node_context):
     #
     # print(type(node_count))
 
+    # TODO: mettre ca dans une fonction a part...
     if aggregation:
         for node_idx in range(node_count - 1, -1, -1):
-            print("node_idx: ", print(node_idx))
+            # print("node_idx: ", print(node_idx))
             node = tree.nodes[node_idx]
-            print("node_idx:", node_idx)
-            print("node_id:", node["node_id"])
-            print("is_leaf: ", node["is_leaf"])
+            # print("node_idx:", node_idx)
+            # print("node_id:", node["node_id"])
+            # print("is_leaf: ", node["is_leaf"])
 
             if node["is_leaf"]:
                 # If the node is a leaf, the logarithm of its tree weight is simply step *

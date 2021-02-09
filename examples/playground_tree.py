@@ -68,17 +68,18 @@ st.title("`WildWood` playground")
 st.sidebar.title("Parameters")
 st.sidebar.markdown(
     """You can tune below some 
-hyperparameters of the AMFClassifier"""
+hyperparameters"""
 )
-use_aggregation = st.sidebar.checkbox("use_aggregation", value=True)
+aggregation = st.sidebar.checkbox("aggregation", value=True)
+dirichlet = st.sidebar.selectbox(
+    "dirichlet", [1e-8, 0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 100], index=3
+)
+step = st.sidebar.selectbox("step", [1e-2, 1e-1, 0.5, 1.0, 2.0, 3.0, 5.0, 10.], index=3)
+
 # split_pure = st.sidebar.checkbox("split_pure", value=True)
 
 tree_idx = st.sidebar.selectbox("Number of the tree", range(n_estimators), index=0)
 
-# step = st.sidebar.selectbox("step", [1.0, 0.1, 2.0, 3.0], index=0)
-dirichlet = st.sidebar.selectbox(
-    "dirichlet", [1e-8, 0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 100], index=3
-)
 
 
 # @st.cache
@@ -165,7 +166,7 @@ def fit_forest(X_train, y_train, n_estimators=10, dirichlet=0.5, step=1.0):
     return clf
 
 
-clf = fit_forest(X_train, y_train, n_estimators, dirichlet)
+clf = fit_forest(X_train, y_train, n_estimators, dirichlet, step)
 
 
 def get_tree(clf, tree_idx):

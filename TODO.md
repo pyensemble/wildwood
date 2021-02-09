@@ -12,6 +12,10 @@
 
 - Options dirichlet, step, aggregation qui doivent marcher dans la foret
 
+- Y'a un bug quand step > 1.0 ? Bizarre ? overflow ou autre chose ?
+
+- Il se passe quoi si on change un de ces parametres apres le fit ?
+
 - Verifier tout ca dans streamlit
 
 - Tout doit marcher en python ET numba... 
