@@ -1,47 +1,198 @@
+# Authors: Stephane Gaiffas <stephane.gaiffas@gmail.com>
+# License: BSD 3 clause
+
+"""
+This module contains some tools to grow a tree: mainly a Records dataclass and a grow
+function.
+Records is a last-in first-out stack of Record containing partial
+information about nodes that will be split or transformed in leaves.
+The grow function is the main entry point that grows the decision tree and performs
+aggregation.
 """
 
-C'est un C/C depuis pygbm
-
-This module contains the TreeGrower class.
-
-TreeGrowee builds a regression tree fitting a Newton-Raphson step, based on
-the gradients and hessians of the training data.
-"""
-from heapq import heappush, heappop
 import numpy as np
-from time import time
+from numba import jit, njit, from_dtype, void, boolean, intp, uintp, float32
+from numba.experimental import jitclass
 
 from ._node import NodeContext, compute_node_context
 
 from ._splitting import (
     find_node_split,
     split_indices,
-    # split_indices,
-    # find_node_split,
-    # find_node_split_subtraction,
 )
 
 
 from ._tree import (
-    Records,
-    # Tree,
     add_node_tree,
     tree_resize,
-    push_node_record,
-    pop_node_record,
-    has_records,
-    print_tree,
-    print_records,
-    get_records,
-    get_nodes,
     TREE_UNDEFINED,
 )
-from ._utils import njit, infinity, nb_size_t, nb_float32, log_sum_2_exp, nb_ssize_t
-# from ._tree import TREE_LEAF
+
+from ._utils import resize, log_sum_2_exp, get_type
+
+INITIAL_STACK_SIZE = uintp(10)
 
 
-INITIAL_STACK_SIZE = nb_size_t(10)
+record_dtype = np.dtype(
+    [
+        ("parent", np.uintp),
+        ("depth", np.uintp),
+        ("is_left", np.bool),
+        ("impurity", np.float32),
+        ("start_train", np.uintp),
+        ("end_train", np.uintp),
+        ("start_valid", np.uintp),
+        ("end_valid", np.uintp),
+    ]
+)
 
+record_type = from_dtype(record_dtype)
+
+
+records_type = [
+    ("capacity", uintp),
+    ("top", uintp),
+    ("stack", record_type[::1]),
+]
+
+
+@jitclass(records_type)
+class Records(object):
+    """A simple LIFO (last in, first out) stack containing partial information about
+    the nodes to be later split or transformed into leaves.
+
+    Attributes
+    ----------
+    capacity : int
+        The number of elements the stack can hold. If more is necessary then
+        self.stack is resized
+
+    top : int
+        The number of elements currently on the stack
+
+    stack : ndarray
+        An array of shape (capacity,) and record_dtype dtype containing the
+        current data in the stack
+    """
+
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.top = uintp(0)
+        self.stack = np.empty(capacity, dtype=record_dtype)
+
+
+RecordsType = get_type(Records)
+
+
+@jit(
+    void(RecordsType, uintp, uintp, boolean, float32, uintp, uintp, uintp, uintp),
+    nopython=True,
+    nogil=True,
+    boundscheck=False,
+    locals={"top": uintp, "stack": record_type[::1], "stack_top": record_type},
+)
+def push_record(
+    records,
+    parent,
+    depth,
+    is_left,
+    impurity,
+    start_train,
+    end_train,
+    start_valid,
+    end_valid,
+):
+    top = records.top
+    stack = records.stack
+    # Resize the stack if capacity is not enough
+    if top >= records.capacity:
+        records.capacity = uintp(2 * records.capacity)
+        records.stack = resize(stack, records.capacity)
+
+    stack_top = records.stack[top]
+    stack_top["parent"] = parent
+    stack_top["depth"] = depth
+    stack_top["is_left"] = is_left
+    stack_top["impurity"] = impurity
+    stack_top["start_train"] = start_train
+    stack_top["end_train"] = end_train
+    stack_top["start_valid"] = start_valid
+    stack_top["end_valid"] = end_valid
+    records.top += 1
+
+
+# TODO: ICI ICI ICI ICI attention on dirait que cette fonction plantes !!!!
+@jit(boolean(RecordsType), nopython=True, nogil=True, boundscheck=False)
+def has_records(records):
+    # print("records.top: ", records.top)
+    return records.top <= 0
+
+
+@njit
+def pop_node_record(records):
+    # print("================ Begin pop_node_record(records) ================")
+    top = records.top
+    # print("top: ", top)
+    stack = records.stack
+    # print("top: ", top)
+    # print("stack_: ", stack_)
+    # print("top - 1", top-1)
+    # print("np_size_t(top - 1):", np_size_t(top - 1))
+    stack_record = stack[uintp(top - 1)]
+    # print(stack_record)
+    records.top = uintp(top - 1)
+    # print("stack.top: ", stack.top)
+    # print("pop_node_record(records):")
+    # print(stack_record)
+    # print("================ End   pop_node_record(records) ================")
+
+    return (
+        stack_record["start_train"],
+        stack_record["end_train"],
+        stack_record["start_valid"],
+        stack_record["end_valid"],
+        stack_record["depth"],
+        stack_record["parent"],
+        stack_record["is_left"],
+        stack_record["impurity"],
+        # stack_record["n_constant_features"]
+    )
+
+
+# @njit
+# def print_records(records):
+#     # s = "Records("
+#     # s += "capacity={capacity}".format(capacity=records.capacity)
+#     # s += ", top={top}".format(top=records.top)
+#     # s += ")"
+#     # print(s)
+#     # print("Records")
+#     print("****************************************************************")
+#     print("| Records(capacity=", records.capacity, ", top=", records.top, ")")
+#     top = 0
+#     for i in range(records.top):
+#         print("|", records.stack[i])
+#     print("****************************************************************")
+#     # for record in records.stack:
+#     #     print(record)
+#
+#
+# def get_records(records):
+#     import pandas as pd
+#
+#     stack = records.stack
+#     columns = [col_name for col_name, _ in record_type]
+#     # columns = ["left_child"]
+#     return pd.DataFrame.from_records(
+#         (
+#             tuple(node[col] for col in columns)
+#             for i, node in enumerate(stack)
+#             if i < records.top
+#         ),
+#         columns=columns,
+#     )
+#
+#
 
 
 @njit
@@ -87,16 +238,16 @@ def grow(tree, tree_context, node_context):
     # print(records)
 
     # Let us first define all the attributes of root
-    start_train = nb_size_t(0)
+    start_train = uintp(0)
 
-    end_train = nb_size_t(n_samples_train)
-    start_valid = nb_size_t(0)
-    end_valid = nb_size_t(n_samples_valid)
-    depth = nb_size_t(0)
+    end_train = uintp(n_samples_train)
+    start_valid = uintp(0)
+    end_valid = uintp(n_samples_valid)
+    depth = uintp(0)
     # root as no parent
     parent = TREE_UNDEFINED
     is_left = False
-    impurity = infinity
+    impurity = np.inf
     n_constant_features = 0
 
     # print("start_train:", start_train)
@@ -104,17 +255,17 @@ def grow(tree, tree_context, node_context):
 
     # Add the root node into the stack
     # print("Pushing root in the stack")
-    push_node_record(
+
+    push_record(
         records,
+        parent,
+        depth,
+        is_left,
+        impurity,
         start_train,
         end_train,
         start_valid,
         end_valid,
-        depth,
-        parent,
-        is_left,
-        impurity,
-        n_constant_features,
     )
     # print("Done pushing root in the stack")
 
@@ -142,7 +293,7 @@ def grow(tree, tree_context, node_context):
             parent,
             is_left,
             impurity,
-            n_constant_features,
+            # n_constant_features,
         ) = pop_node_record(records)
 
         # node_record = pop_node_record(records)
@@ -329,31 +480,28 @@ def grow(tree, tree_context, node_context):
             )
 
             # Then, we can add both childs records: add the left child
-            push_node_record(
+            push_record(
                 records,
-                start_train,  # strain_train from the node
-                pos_train,  # TODO
-                start_valid,  # TODO
-                pos_valid,  # TODO
-                depth + 1,  # depth is increased by one
                 node_id,  # The parent is the previous node_id
+                depth + 1,  # depth is increased by one
                 True,  # is_left=True
-                split.impurity_left,  # Impurity of childs was saved in the split
-                n_constant_features,  # TODO: for now we don't care about that
+                split.impurity_left,  # Impurity of childs are saved in the split
+                start_train,  # start_train from the node
+                pos_train,  # end_train is at split position
+                start_valid,
+                pos_valid,
             )
 
-            # Add the right child
-            push_node_record(
+            push_record(
                 records,
-                pos_train,  # TODO
-                end_train,  # TODO
-                pos_valid,  # TODO
-                end_valid,  # TODO
-                depth + 1,  # depth is increased by one
                 node_id,  # The parent is the previous node_id
+                depth + 1,  # depth is increased by one
                 False,  # is_left=False
-                split.impurity_right,  # Impurity of childs was saved in the split
-                n_constant_features,  # TODO: for now we don't care about that
+                split.impurity_right,  # Impurity of childs are saved in the split
+                pos_train,  # strain_train is at split position
+                end_train,  # end_train is at split position
+                pos_valid,
+                end_valid,
             )
 
         # TODO: on nse servira de ca plus tard
@@ -366,7 +514,7 @@ def grow(tree, tree_context, node_context):
 
     aggregation = tree_context.aggregation
 
-    step = nb_float32(1.0)
+    step = float32(1.0)
     # Since the tree is grown in a depth-first fashion, we know that if we iterate
     # through the nodes in reverse order, we'll always iterate over childs before
     # iteration over parents.
@@ -396,8 +544,8 @@ def grow(tree, tree_context, node_context):
             else:
                 # If the node is not a leaf, then we apply context tree weighting
                 weight = step * node["loss_valid"]
-                left_child = nb_ssize_t(node["left_child"])
-                right_child = nb_ssize_t(node["right_child"])
+                left_child = intp(node["left_child"])
+                right_child = intp(node["right_child"])
                 # print("left_child: ", left_child, ", right_child: ", right_child)
                 log_weight_tree_left = tree.nodes[left_child]["log_weight_tree"]
                 log_weight_tree_right = tree.nodes[right_child]["log_weight_tree"]

@@ -40,7 +40,7 @@ from sklearn.utils.validation import _deprecate_positional_args
 from numba import _helperlib
 
 
-from ._grower import grow
+from ._grow import grow
 
 # from ._criterion import Criterion
 # from ._splitter import BestSplitter
