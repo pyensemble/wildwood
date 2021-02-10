@@ -138,3 +138,24 @@ def log_sum_2_exp(a, b):
         return a + log((1 + exp(b - a)) / 2)
     else:
         return b + log((1 + exp(a - b)) / 2)
+
+
+def get_type(class_):
+    """Gives the numba type of an object is numba.jit decorators are enabled and None
+    otherwise. This helps to get correct coverage of the code
+
+    Parameters
+    ----------
+    class_ : `object`
+        A class
+
+    Returns
+    -------
+    output : `object`
+        A numba type of None
+    """
+    class_type = getattr(class_, "class_type", None)
+    if class_type is None:
+        return class_type
+    else:
+        return class_type.instance_type

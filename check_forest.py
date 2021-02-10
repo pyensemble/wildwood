@@ -1,5 +1,3 @@
-
-
 from time import time
 import logging
 import numpy as np
@@ -8,6 +6,7 @@ from matplotlib.colors import ListedColormap
 
 from sklearn.datasets import make_circles, make_moons
 from sklearn.model_selection import train_test_split
+
 # from sklearn.tree import DecisionTreeClassifier as SkDecisionTreeClassifier
 # from sklearn.tree import ExtraTreeClassifier as SkExtraTreeClassifier
 
@@ -56,8 +55,14 @@ datasets = [
     ),
 ]
 
-clf_kwargs = {"n_estimators": 10, "min_samples_split": 2, "random_state":
-    random_state, "n_jobs": 1, "dirichlet": 0.5}
+clf_kwargs = {
+    "n_estimators": 10,
+    "min_samples_split": 2,
+    "random_state": random_state,
+    "n_jobs": 1,
+    "dirichlet": 0.05,
+    "step": 0.1,
+}
 
 
 # classifiers = [
@@ -190,6 +195,8 @@ def plot_decision_classification(classifiers, datasets):
             i += 1
 
     plt.tight_layout()
+
+
 #
 #
 plot_decision_classification(classifiers, datasets)

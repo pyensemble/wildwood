@@ -12,7 +12,7 @@ from numba.types import Tuple
 
 @jit(float32(float32, float32, float32, float32), nopython=True, nogil=True)
 def information_gain_proxy(
-    impurity_left, impurity_right, n_samples_left, n_samples_right,
+    impurity_left, impurity_right, w_samples_left, w_samples_right,
 ):
     """Computes a proxy of the information gain (improvement in impurity) using the
     equation
@@ -34,10 +34,10 @@ def information_gain_proxy(
     impurity_right : float
         Impurity of the right node
 
-    n_samples_left : float
+    w_samples_left : float
         Weighted number of samples in the left node
 
-    n_samples_right : float
+    w_samples_right : float
         Weighted number of samples in the roght node
 
     Returns
@@ -46,7 +46,7 @@ def information_gain_proxy(
         Proxy of the information gain after splitting the parent into left
         and child nodes
     """
-    return -n_samples_left * impurity_left - n_samples_right * impurity_right
+    return -w_samples_left * impurity_left - w_samples_right * impurity_right
 
 
 @jit(
@@ -55,10 +55,10 @@ def information_gain_proxy(
     nogil=True,
 )
 def information_gain(
-    n_samples,
-    n_samples_parent,
-    n_samples_left,
-    n_samples_right,
+    w_samples,
+    w_samples_parent,
+    w_samples_left,
+    w_samples_right,
     impurity_parent,
     impurity_left,
     impurity_right,
@@ -75,16 +75,16 @@ def information_gain(
 
     Parameters
     ----------
-    n_samples : float
+    w_samples : float
         Total weighted number of samples
 
-    n_samples_parent : float
+    w_samples_parent : float
         Weighted number of samples in parent node
 
-    n_samples_left : float
+    w_samples_left : float
         Weighted number of samples in left child node
 
-    n_samples_right : float
+    w_samples_right : float
         Weighted number of samples in right child node
 
     impurity_parent : float
@@ -102,10 +102,10 @@ def information_gain(
         Information gain obtained after splitting the parent into left and and
         right child nodes
     """
-    return (n_samples_parent / n_samples) * (
+    return (w_samples_parent / w_samples) * (
         impurity_parent
-        - (n_samples_right / n_samples_parent * impurity_right)
-        - (n_samples_left / n_samples_parent * impurity_left)
+        - (w_samples_right / w_samples_parent * impurity_right)
+        - (w_samples_left / w_samples_parent * impurity_left)
     )
 
 
@@ -113,9 +113,9 @@ def information_gain(
     float32(uint32, float32, float32[::1]),
     nopython=True,
     nogil=True,
-    locals={"y_sum_sq": float32, "n_samples_sq": float32},
+    locals={"y_sum_sq": float32, "w_samples_sq": float32},
 )
-def gini_node(n_classes, n_samples, y_sum):
+def gini_node(n_classes, w_samples, y_sum):
     """Computes the gini impurity criterion in a node.
 
     Parameters
@@ -123,7 +123,7 @@ def gini_node(n_classes, n_samples, y_sum):
     n_classes : int
         Number of label classes
 
-    n_samples : float
+    w_samples : float
         Weighted number of samples in the node
 
     y_sum : ndarray
@@ -136,10 +136,10 @@ def gini_node(n_classes, n_samples, y_sum):
         Gini impurity criterion in the node
     """
     y_sum_sq = 0.0
-    n_samples_sq = n_samples * n_samples
+    w_samples_sq = w_samples * w_samples
     for k in range(n_classes):
         y_sum_sq += y_sum[k] * y_sum[k]
-    return 1.0 - y_sum_sq / n_samples_sq
+    return 1.0 - y_sum_sq / w_samples_sq
 
 
 @jit(
@@ -149,13 +149,13 @@ def gini_node(n_classes, n_samples, y_sum):
     locals={
         "y_sum_left_sq": float32,
         "y_sum_right_sq": float32,
-        "n_samples_left_sq": float32,
-        "n_samples_right_sq": float32,
+        "w_samples_left_sq": float32,
+        "w_samples_right_sq": float32,
         "gini_left": float32,
         "gini_right": float32,
     },
 )
-def gini_childs(n_classes, n_samples_left, n_samples_right, y_sum_left, y_sum_right):
+def gini_childs(n_classes, w_samples_left, w_samples_right, y_sum_left, y_sum_right):
     """Computes the gini impurity criterion in both left and right child nodes of a
     parent node.
 
@@ -164,10 +164,10 @@ def gini_childs(n_classes, n_samples_left, n_samples_right, y_sum_left, y_sum_ri
     n_classes : int
         Number of label classes
 
-    n_samples_left : float
+    w_samples_left : float
         Weighted number of samples in the left child node
 
-    n_samples_right : float
+    w_samples_right : float
         Weighted number of samples in the right child node
 
     y_sum_left : ndarray
@@ -186,12 +186,12 @@ def gini_childs(n_classes, n_samples_left, n_samples_right, y_sum_left, y_sum_ri
     """
     y_sum_left_sq = 0.0
     y_sum_right_sq = 0.0
-    n_samples_left_sq = n_samples_left * n_samples_left
-    n_samples_right_sq = n_samples_right * n_samples_right
+    w_samples_left_sq = w_samples_left * w_samples_left
+    w_samples_right_sq = w_samples_right * w_samples_right
     for k in range(n_classes):
         y_sum_left_sq += y_sum_left[k] * y_sum_left[k]
         y_sum_right_sq += y_sum_right[k] * y_sum_right[k]
 
-    gini_left = 1.0 - y_sum_left_sq / n_samples_left_sq
-    gini_right = 1.0 - y_sum_right_sq / n_samples_right_sq
+    gini_left = 1.0 - y_sum_left_sq / w_samples_left_sq
+    gini_right = 1.0 - y_sum_right_sq / w_samples_right_sq
     return gini_left, gini_right

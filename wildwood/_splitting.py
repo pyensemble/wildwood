@@ -24,6 +24,8 @@ from ._utils import (
 
 from ._impurity import gini_childs, information_gain_proxy, information_gain
 
+from ._utils import get_type
+
 
 # TODO: mettre aussi weighted_samples_left
 
@@ -204,206 +206,7 @@ class TreeContext:
         self.right_buffer = np.empty(n_samples, dtype=np_size_t)
 
 
-# TODO: a mettre dans _node
-# A local context which contains information for the split and local node data
-spec_node_context = [
-    # Set of candidate features for splitting
-    ("features", nb_size_t[::1]),
-    # ("min_samples_leaf", uint32),
-    # ("min_gain_to_split", float32),
-    # Weighted number of training samples in each bin for each feature in the node
-    ("w_samples_train_in_bins", nb_float32[:, ::1]),
-    # Weighted number of validation samples in each bin for each feature in the node
-    ("w_samples_valid_in_bins", nb_float32[:, ::1]),
-    # Histogram data, number of training samples in each bin for each feature and
-    # each label class in the node
-    ("y_sum", nb_float32[:, :, ::1]),
-    # Sum of the label for each class
-    ("y_pred", nb_float32[::1]),
-    # Validation loss of the node
-    ("loss_valid", nb_float32),
-    # Total number of samples in the node
-    ("n_samples", nb_size_t),
-    # Number of training samples in the node
-    ("n_samples_train", nb_size_t),
-    # Number of validation samples in the node
-    ("n_samples_valid", nb_size_t),
-    # Weighted number of training samples in the node
-    ("w_samples_train", nb_float32),
-    # Weighted number of validation samples in the node
-    ("w_samples_valid", nb_float32),
-    # context.partition_train[start_train:end_train] contains the training sample
-    # indices in the node
-    ("start_train", nb_size_t),
-    ("end_train", nb_size_t),
-    # context.partition_valid[start_valid:end_valid] contains the validation sample
-    # indices in the node
-    ("start_valid", nb_size_t),
-    ("end_valid", nb_size_t),
-]
 
-
-# TODO: fonction a mettre dans _node
-@jitclass(spec_node_context)
-class NodeContext:
-    def __init__(
-        self,
-        context,
-        # TODO: features a tirer au hasard plus tard
-        # features
-    ):
-        max_features = context.max_features
-        max_bins = context.max_bins
-        n_classes = context.n_classes
-        n_features = context.n_features
-
-        # print("In NodeContext constructor")
-        # print(max_features, max_bins, n_classes, n_features)
-
-        self.features = np.arange(0, n_features, dtype=np_size_t)
-
-        # print("(max_features, max_bins): ", (max_features, max_bins))
-
-        w_samples_train_in_bins = np.empty(
-            (max_features, max_bins - 1), dtype=np_float32
-        )
-        # print(w_samples_train_in_bins)
-        self.w_samples_train_in_bins = w_samples_train_in_bins
-
-        # print("Out of NodeContext constructor")
-
-        self.w_samples_valid_in_bins = np.empty(
-            (max_features, max_bins), dtype=np_float32
-        )
-        self.y_sum = np.empty((max_features, max_bins, n_classes), dtype=np_float32)
-        self.y_pred = np.empty(n_classes, dtype=np_float32)
-
-
-# init_node_context ou update_node_context ?
-
-
-# TODO: fonction a mettre dans _node
-@njit
-def init_node_context(
-    tree_context, node_context, start_train, end_train, start_valid, end_valid
-):
-    """
-    Initialize the node_context with the given node_record
-
-    Parameters
-    ----------
-    node_context
-    node_record
-
-    Returns
-    -------
-
-    """
-    # TODO: initialize node_context.features with Fisher-Yates ?
-    # start_train = node_record["start_train"]
-    # end_train = node_record["end_train"]
-    # start_valid = node_record["start_valid"]
-    # end_valid = node_record["end_valid"]
-
-    # print("================ Begin init_node_context ================")
-    w_samples_train_in_bins = node_context.w_samples_train_in_bins
-    w_samples_train_in_bins[:] = nb_float32(0.0)
-    w_samples_valid_in_bins = node_context.w_samples_valid_in_bins
-    w_samples_valid_in_bins[:] = nb_float32(0.0)
-    y_sum = node_context.y_sum
-    y_sum[:] = 0
-    y_pred = node_context.y_pred
-    y_pred[:] = 0
-
-    # Get tree context information
-    X = tree_context.X
-    y = tree_context.y
-    sample_weights = tree_context.sample_weights
-    partition_train = tree_context.partition_train
-    partition_valid = tree_context.partition_valid
-    features = node_context.features
-
-    n_classes = tree_context.n_classes
-    dirichlet = tree_context.dirichlet
-
-    # The indices of the training samples contained in the node
-    train_indices = partition_train[start_train:end_train]
-    valid_indices = partition_valid[start_valid:end_valid]
-
-    # For-loop on features and then samples (X is F-major) for cache hits
-    # TODO: unrolling this for loop could be faster
-
-    w_samples_train = nb_float32(0.0)
-    w_samples_valid = nb_float32(0.0)
-
-    # A counter for the features since return arrays are contiguous
-    f = nb_size_t(0)
-    loss_valid = 0.0
-
-    for feature in features:
-        # Compute statistics about training samples
-        for sample in train_indices:
-            bin = X[sample, feature]
-            label = nb_size_t(y[sample])
-            sample_weight = sample_weights[sample]
-            if f == 0:
-                w_samples_train += sample_weight
-                # print("label: ", label)
-                # print("y_pred: ", y_pred)
-                y_pred[label] += sample_weight
-            # One more sample in this bin for the current feature
-            # print("f: ", f, ", bin: ", bin)
-            # print("n_samples_in_bins: ", n_samples_in_bins)
-            w_samples_train_in_bins[f, bin] += sample_weight
-            # One more sample in this bin for the current feature with this label
-            y_sum[f, bin, label] += sample_weight
-
-        # Renormalize the predictions using the formula
-        # y_k = (n_k + dirichlet) / (n_samples + dirichlet * n_classes)
-        # where n_k is the number of samples with label class k
-        if f == 0:
-            for k in range(n_classes):
-                y_pred[k] = (y_pred[k] + dirichlet) / (
-                    w_samples_train + dirichlet * n_classes
-                )
-
-
-        # Compute sample counts about validation samples
-        for sample in valid_indices:
-            bin = X[sample, feature]
-            # TODO: refactor w_samples_valid_in_bins
-            # TODO: pour l'aggregation faudra eventuellement utiliser les
-            #  samples_weights ?
-            sample_weight = sample_weights[sample]
-            # print("sample_weight: ", sample_weight)
-            if f == 0:
-                w_samples_valid += sample_weight
-                # Get the label
-                label = nb_size_t(y[sample])
-                loss_valid += -log(y_pred[label])
-                # print("loss_valid:", loss_valid)
-
-                # TODO: inserer ici le calcul de la loss de validation
-                # @njit(float32(get_type(TreeClassifier), uint32, uint32))
-                # def node_classifier_loss(tree, node, idx_sample):
-                #     c = types.uint8(tree.samples.labels[idx_sample])
-                #     sc = node_classifier_score(tree, node, c)
-                #     # TODO: benchmark different logarithms
-                #     return -log(sc)
-
-            w_samples_valid_in_bins[f, bin] += sample_weight
-
-        f += nb_size_t(1)
-
-    # Save everything in the node context
-    node_context.loss_valid = loss_valid
-    node_context.n_samples_train = end_train - start_train
-    node_context.n_samples_valid = end_valid - start_valid
-    node_context.w_samples_train = w_samples_train
-    node_context.w_samples_valid = w_samples_valid
-
-    # print("================ End   init_node_context ================")
-    # print()
 
 
 @njit
@@ -456,6 +259,9 @@ def find_node_split(tree_context, node_context):
     # print("================ End   find_node_split ================")
 
     return best_split
+
+
+TreeContextType = get_type(TreeContext)
 
 
 @njit

@@ -23,22 +23,11 @@ from ._utils import (
     log_sum_2_exp
 )
 
-
-# from ._splitter import (
-#     splitter_init,
-#     splitter_node_reset,
-#     spec_split_record,
-#     # splitter_node_value,
-#     BestSplitter,
-#     best_splitter_node_split,
-#     SplitRecord,
-#     best_splitter_init,
-#     gini_node_impurity,
-#     gini_children_impurity,
-# )
-
 import numba
 
+from ._node import node_type, node_dtype
+
+from ._utils import get_type
 
 # TODO: on a vraiment besoin de tout ca dans un stack_record ?
 
@@ -202,64 +191,6 @@ def get_records(records):
     )
 
 
-# TODO: a mettre dans _node
-# A numpy dtype containing the node information saved in the tree
-spec_node_tree = [
-    ("node_id", nb_size_t),
-    ("parent", nb_ssize_t),
-    ("is_leaf", nb_bool),
-    ("left_child", nb_ssize_t),
-    ("right_child", nb_ssize_t),
-    ("depth", nb_size_t),
-    ("feature", nb_ssize_t),
-    ("threshold", nb_float32),
-    ("bin_threshold", nb_uint8),
-    ("impurity", nb_float32),
-    ("n_samples_train", nb_size_t),
-    ("n_samples_valid", nb_size_t),
-    ("weighted_n_samples_train", nb_float32),
-    ("weighted_n_samples_valid", nb_float32),
-    # TODO: on ajoute des trucs dont on a pas besoin pour l'entrainement, mais utile
-    #  pour debugger
-    ("start_train", nb_size_t),
-    ("end_train", nb_size_t),
-    ("start_valid", nb_size_t),
-    ("end_valid", nb_size_t),
-    ("is_left", nb_bool),
-    ("loss_valid", nb_float32),
-    # Logarithm of the subtree aggregation weight
-    ("log_weight_tree", nb_float32)
-]
-
-# TODO: a mettre dans _node
-np_node_tree = np.dtype(
-    [
-        ("node_id", np_size_t),
-        ("parent", np_ssize_t),
-        ("is_leaf", np_bool),
-        ("left_child", np_ssize_t),
-        ("right_child", np_ssize_t),
-        ("depth", np_size_t),
-        ("feature", np_ssize_t),
-        ("threshold", np_float32),
-        ("bin_threshold", np_uint8),
-        ("impurity", np_float32),
-        ("n_samples_train", np_size_t),
-        ("n_samples_valid", np_size_t),
-        ("weighted_n_samples_train", np_float32),
-        ("weighted_n_samples_valid", np_float32),
-        ("start_train", np_size_t),
-        ("end_train", np_size_t),
-        ("start_valid", np_size_t),
-        ("end_valid", np_size_t),
-        ("is_left", np_bool),
-        ("loss_valid", np_float32),
-        ("log_weight_tree", np_float32)
-    ]
-)
-
-# TODO: a mettre dans _node
-nb_node_tree = numba.from_dtype(np_node_tree)
 
 
 # @njit
@@ -445,7 +376,7 @@ spec_tree = [
     ("node_count", nb_size_t),
     ("capacity", nb_size_t),
     # This array contains information about the nodes
-    ("nodes", nb_node_tree[::1]),
+    ("nodes", node_type[::1]),
     # This array contains values allowing to compute the prediction of each node
     # Its shape is (n_nodes, n_outputs, max_n_classes)
     # TODO: IMPORTANT a priori ca serait mieux ::1 sur le premier axe mais l'init
@@ -469,9 +400,12 @@ class Tree(object):
         # Both values and nodes arrays have zero on the first axis and are resized
         # later when we know the capacity of the tree
         # The array of nodes contained in the tree
-        self.nodes = np.empty(0, dtype=np_node_tree)
+        self.nodes = np.empty(0, dtype=node_dtype)
         # The array of y sums or counts for each node
         self.y_pred = np.empty((0, self.n_classes), dtype=np_float32)
+
+
+TreeType = get_type(Tree)
 
 
 @njit
@@ -549,8 +483,8 @@ def add_node_tree(
     impurity,
     n_samples_train,
     n_samples_valid,
-    weighted_n_samples_train,
-    weighted_n_samples_valid,
+    w_samples_train,
+    w_samples_valid,
     start_train,
     end_train,
     start_valid,
@@ -584,8 +518,8 @@ def add_node_tree(
     node["impurity"] = impurity
     node["n_samples_train"] = n_samples_train
     node["n_samples_valid"] = n_samples_valid
-    node["weighted_n_samples_train"] = weighted_n_samples_train
-    node["weighted_n_samples_valid"] = weighted_n_samples_valid
+    node["w_samples_train"] = w_samples_train
+    node["w_samples_valid"] = w_samples_valid
 
     node["start_train"] = start_train
     node["end_train"] = end_train

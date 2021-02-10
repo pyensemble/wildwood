@@ -11,10 +11,10 @@ from heapq import heappush, heappop
 import numpy as np
 from time import time
 
+from ._node import NodeContext, compute_node_context
+
 from ._splitting import (
-    NodeContext,
     find_node_split,
-    init_node_context,
     split_indices,
     # split_indices,
     # find_node_split,
@@ -175,7 +175,7 @@ def grow(tree, tree_context, node_context):
         # print("records.top: ", records.top)
 
         # Initialize the node context, this computes the node statistics
-        init_node_context(
+        compute_node_context(
             tree_context, node_context, start_train, end_train, start_valid, end_valid
         )
 
