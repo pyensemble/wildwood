@@ -615,10 +615,17 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         # that case. However, for joblib 0.12+ we respect any
         # parallel_backend contexts set at a higher level,
         # since correctness does not rely on using threads.
+
+        print("self.n_jobs: ", self.n_jobs)
+
+        print("options: ", _joblib_parallel_args(prefer="threads"))
         trees = Parallel(
             n_jobs=self.n_jobs,
-            verbose=self.verbose,
-            **_joblib_parallel_args(prefer="threads"),
+            # verbose=self.verbose,
+            verbose=10,
+            backend="threading",
+            require="sharedmem"
+            # **_joblib_parallel_args(prefer="threads"),
         )(
             delayed(_parallel_build_trees)(
                 # tree, X, y, sample_weight, i, len(trees),

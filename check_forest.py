@@ -34,8 +34,8 @@ np.set_printoptions(precision=2)
 # logging.info("Spent {time} compiling.".format(time=toc - tic))
 
 
-n_samples = 2000
-# n_samples = 2_000_000
+# n_samples = 2000
+n_samples = 2_000_000
 
 # n_samples = 10
 random_state = 42
@@ -56,7 +56,7 @@ datasets = [
 ]
 
 clf_kwargs = {
-    "n_estimators": 10,
+    "n_estimators": 50,
     "min_samples_split": 2,
     "random_state": random_state,
     "n_jobs": 1,

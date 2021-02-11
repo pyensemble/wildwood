@@ -12,6 +12,7 @@ aggregation.
 
 import numpy as np
 from numba import jit, njit, from_dtype, void, boolean, intp, uintp, float32
+from numba.types import Tuple
 from numba.experimental import jitclass
 
 from ._node import NodeContext, compute_node_context
@@ -51,7 +52,7 @@ record_type = from_dtype(record_dtype)
 
 records_type = [
     ("capacity", uintp),
-    ("top", uintp),
+    ("top", intp),
     ("stack", record_type[::1]),
 ]
 
@@ -77,7 +78,7 @@ class Records(object):
 
     def __init__(self, capacity):
         self.capacity = capacity
-        self.top = uintp(0)
+        self.top = 0
         self.stack = np.empty(capacity, dtype=record_dtype)
 
 
@@ -88,8 +89,7 @@ RecordsType = get_type(Records)
     void(RecordsType, uintp, uintp, boolean, float32, uintp, uintp, uintp, uintp),
     nopython=True,
     nogil=True,
-    boundscheck=False,
-    locals={"top": uintp, "stack": record_type[::1], "stack_top": record_type},
+    locals={"stack_top": record_type},
 )
 def push_record(
     records,
@@ -102,14 +102,43 @@ def push_record(
     start_valid,
     end_valid,
 ):
-    top = records.top
-    stack = records.stack
-    # Resize the stack if capacity is not enough
-    if top >= records.capacity:
-        records.capacity = uintp(2 * records.capacity)
-        records.stack = resize(stack, records.capacity)
+    """
 
-    stack_top = records.stack[top]
+    Parameters
+    ----------
+    records : Records
+        A record dataclass containing the record stack of nodes
+
+    parent :
+    depth
+    is_left
+    impurity
+    start_train : int
+        Index of the first training sample in the node. We have that
+        partition_train[start_train:end_train] contains the indexes of the node's
+        training samples
+
+    end_train : int
+        End-index of the slice containing the node's training samples indexes
+
+    start_valid : int
+        Index of the first validation (out-of-the-bag) sample in the node. We have
+        that partition_valid[start_valid:end_valid] contains the indexes of the
+        node's validation samples
+
+    end_valid : int
+        End-index of the slice containing the node's validation samples indexes
+
+    Returns
+    -------
+
+    """
+    # Resize the stack if capacity is not enough
+    if records.top >= records.capacity:
+        records.capacity *= 2
+        records.stack = resize(records.stack, records.capacity)
+
+    stack_top = records.stack[records.top]
     stack_top["parent"] = parent
     stack_top["depth"] = depth
     stack_top["is_left"] = is_left
@@ -121,78 +150,30 @@ def push_record(
     records.top += 1
 
 
-# TODO: ICI ICI ICI ICI attention on dirait que cette fonction plantes !!!!
-@jit(boolean(RecordsType), nopython=True, nogil=True, boundscheck=False)
+@jit(boolean(RecordsType), nopython=True, nogil=True)
 def has_records(records):
-    # print("records.top: ", records.top)
     return records.top <= 0
 
 
-@njit
+@jit(
+    Tuple((uintp, uintp, boolean, float32, uintp, uintp, uintp, uintp))(RecordsType),
+    nopython=True,
+    nogil=True,
+    locals={"stack_top": record_type},
+)
 def pop_node_record(records):
-    # print("================ Begin pop_node_record(records) ================")
-    top = records.top
-    # print("top: ", top)
-    stack = records.stack
-    # print("top: ", top)
-    # print("stack_: ", stack_)
-    # print("top - 1", top-1)
-    # print("np_size_t(top - 1):", np_size_t(top - 1))
-    stack_record = stack[uintp(top - 1)]
-    # print(stack_record)
-    records.top = uintp(top - 1)
-    # print("stack.top: ", stack.top)
-    # print("pop_node_record(records):")
-    # print(stack_record)
-    # print("================ End   pop_node_record(records) ================")
-
+    records.top -= 1
+    stack_top = records.stack[records.top]
     return (
-        stack_record["start_train"],
-        stack_record["end_train"],
-        stack_record["start_valid"],
-        stack_record["end_valid"],
-        stack_record["depth"],
-        stack_record["parent"],
-        stack_record["is_left"],
-        stack_record["impurity"],
-        # stack_record["n_constant_features"]
+        stack_top["parent"],
+        stack_top["depth"],
+        stack_top["is_left"],
+        stack_top["impurity"],
+        stack_top["start_train"],
+        stack_top["end_train"],
+        stack_top["start_valid"],
+        stack_top["end_valid"],
     )
-
-
-# @njit
-# def print_records(records):
-#     # s = "Records("
-#     # s += "capacity={capacity}".format(capacity=records.capacity)
-#     # s += ", top={top}".format(top=records.top)
-#     # s += ")"
-#     # print(s)
-#     # print("Records")
-#     print("****************************************************************")
-#     print("| Records(capacity=", records.capacity, ", top=", records.top, ")")
-#     top = 0
-#     for i in range(records.top):
-#         print("|", records.stack[i])
-#     print("****************************************************************")
-#     # for record in records.stack:
-#     #     print(record)
-#
-#
-# def get_records(records):
-#     import pandas as pd
-#
-#     stack = records.stack
-#     columns = [col_name for col_name, _ in record_type]
-#     # columns = ["left_child"]
-#     return pd.DataFrame.from_records(
-#         (
-#             tuple(node[col] for col in columns)
-#             for i, node in enumerate(stack)
-#             if i < records.top
-#         ),
-#         columns=columns,
-#     )
-#
-#
 
 
 @njit
@@ -285,15 +266,14 @@ def grow(tree, tree_context, node_context):
 
         # Get information about the current node
         (
+            parent,
+            depth,
+            is_left,
+            impurity,
             start_train,
             end_train,
             start_valid,
             end_valid,
-            depth,
-            parent,
-            is_left,
-            impurity,
-            # n_constant_features,
         ) = pop_node_record(records)
 
         # node_record = pop_node_record(records)
