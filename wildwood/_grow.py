@@ -176,7 +176,7 @@ def pop_node_record(records):
     )
 
 
-@njit
+@njit(fastmath=False, nogil=True, cache=False, boundscheck=False)
 def grow(tree, tree_context, node_context):
     # print("**** Inside grow")
 
