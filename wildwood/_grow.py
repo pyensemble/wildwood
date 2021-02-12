@@ -36,7 +36,7 @@ INITIAL_STACK_SIZE = uintp(10)
 
 record_dtype = np.dtype(
     [
-        ("parent", np.uintp),
+        ("parent", np.intp),
         ("depth", np.uintp),
         ("is_left", np.bool),
         ("impurity", np.float32),

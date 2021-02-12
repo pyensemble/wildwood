@@ -59,7 +59,7 @@ clf_kwargs = {
     "n_estimators": 50,
     "min_samples_split": 2,
     "random_state": random_state,
-    "n_jobs": 1,
+    "n_jobs": 16,
     "dirichlet": 0.05,
     "step": 0.1,
 }

@@ -622,10 +622,10 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         trees = Parallel(
             n_jobs=self.n_jobs,
             # verbose=self.verbose,
-            verbose=10,
-            backend="threading",
-            require="sharedmem"
-            # **_joblib_parallel_args(prefer="threads"),
+            # verbose=10,
+            # backend="threading",
+            # require="sharedmem"
+            **_joblib_parallel_args(prefer="threads"),
         )(
             delayed(_parallel_build_trees)(
                 # tree, X, y, sample_weight, i, len(trees),
