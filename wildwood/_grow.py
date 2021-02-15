@@ -102,17 +102,25 @@ def push_record(
     start_valid,
     end_valid,
 ):
-    """
+    """Adds a node record in the records stack with the given node attributes.
 
     Parameters
     ----------
     records : Records
-        A record dataclass containing the record stack of nodes
+        A records dataclass containing the stack of node records
 
-    parent :
-    depth
-    is_left
-    impurity
+    parent : int
+        Index of the parent node
+
+    depth : int
+        Depth of the node in the tree
+
+    is_left : bool
+        True if the node is a left child, False otherwise
+
+    impurity : float
+        Impurity of the node. Used to avoid to split a "pure" node (with impurity=0).
+
     start_train : int
         Index of the first training sample in the node. We have that
         partition_train[start_train:end_train] contains the indexes of the node's
@@ -128,10 +136,6 @@ def push_record(
 
     end_valid : int
         End-index of the slice containing the node's validation samples indexes
-
-    Returns
-    -------
-
     """
     # Resize the stack if capacity is not enough
     if records.top >= records.capacity:
@@ -152,6 +156,18 @@ def push_record(
 
 @jit(boolean(RecordsType), nopython=True, nogil=True)
 def has_records(records):
+    """Tests if the stack of records contain remaining records.
+
+    Parameters
+    ----------
+    records : Records
+        A records dataclass containing the stack of node records
+
+    Returns
+    -------
+    output : bool
+        Returns True if there are remaining records in the stack, False otherwise
+    """
     return records.top <= 0
 
 
@@ -162,6 +178,35 @@ def has_records(records):
     locals={"stack_top": record_type},
 )
 def pop_node_record(records):
+    """Pops (removes and returns) a node record from the stack of records.
+
+    Parameters
+    ----------
+    records : Records
+        A records dataclass containing the stack of node records
+
+    Returns
+    -------
+    output : tuple
+        Outputs a tuple with eight elements containing the attributes of the node
+        removed from the stack. There attributes are as follows:
+
+        - parent : int, Index of the parent node
+        - depth : int, Depth of the node in the tree
+        - is_left : bool, True if the node is a left child, False otherwise
+        - impurity : float, Impurity of the node. Used to avoid to split a "pure"
+          node (with impurity=0).
+        - start_train : int, Index of the first training sample in the node. We have
+          that partition_train[start_train:end_train] contains the indexes of the node's
+          training samples
+        - end_train : int, End-index of the slice containing the node's training
+          samples indexes
+        - start_valid : int, Index of the first validation (out-of-the-bag) sample in
+          the node. We have that partition_valid[start_valid:end_valid] contains the
+          indexes of the node's validation samples
+        - end_valid : int, End-index of the slice containing the node's validation
+          samples indexes
+    """
     records.top -= 1
     stack_top = records.stack[records.top]
     return (

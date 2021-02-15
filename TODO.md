@@ -9,9 +9,7 @@
 
 # TODO
 
-- Pour une raison que je ne comprends pas le calcul ne se fait plus en parallèle ???
-
-- Work on the _node.py module
+- Finish to clean the _grow.py module
 
 - Y'a un bug quand step > 1.0 ? Bizarre ? overflow ou autre chose ?
 
