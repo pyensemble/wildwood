@@ -452,7 +452,8 @@ def grow(tree, tree_context, node_context):
 
     aggregation = tree_context.aggregation
 
-    step = float32(1.0)
+    step = 1.0
+
     # Since the tree is grown in a depth-first fashion, we know that if we iterate
     # through the nodes in reverse order, we'll always iterate over childs before
     # iteration over parents.
@@ -461,7 +462,9 @@ def grow(tree, tree_context, node_context):
     # for node_idx in range():
     # for node in tree.nodes[::-1]:
 
-    node_count = int(tree.node_count)
+    # node_count = int(tree.node_count)
+
+    node_count = tree.node_count
     # print("node_count: ", node_count)
     #
     # print(type(node_count))
