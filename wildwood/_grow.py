@@ -11,7 +11,7 @@ aggregation.
 """
 
 import numpy as np
-from numba import jit, from_dtype, void, boolean, intp, uintp, float32
+from numba import jit, from_dtype, void, boolean, uint8, intp, uintp, float32
 from numba.types import Tuple
 from numba.experimental import jitclass
 
@@ -225,28 +225,60 @@ def pop_node_record(records):
 #  3. Put docstring
 
 
-@jit(fastmath=False, nopython=True, nogil=True)
+@jit(
+    fastmath=False,
+    nopython=True,
+    nogil=True,
+    locals={
+        "init_capacity": uintp,
+        # "n_samples_train": uintp,
+        # "n_samples_valid": uintp,
+        "records": RecordsType,
+        "parent": intp,
+        "depth": uintp,
+        "is_left": boolean,
+        "impurity": float32,
+        "start_train": uintp,
+        "end_train": uintp,
+        "start_valid": uintp,
+        "end_valid": uintp,
+        "min_samples_split": uintp,
+        "min_impurity_split": float32,
+        "is_leaf": boolean,
+        # split
+        "bin": uint8,
+        "feature": uintp,
+        "found_split": boolean,
+        "threshold": float32,
+        "weighted_n_samples_valid": float32,
+        "pos_train": uintp,
+        "pos_valid": uintp,
+        "aggregation": boolean,
+        "step": float32,
+        "node_count": intp,
+        "node_idx": intp
+    },
+)
 def grow(tree, tree_context, node_context):
+    # Initialize the tree capacity
     init_capacity = 2047
     tree_resize(tree, init_capacity)
 
-    n_samples_train = tree_context.n_samples_train
-    n_samples_valid = tree_context.n_samples_valid
+    # n_samples_train =
+    # n_samples_valid =
 
     # Create the stack of node records
     records = Records(INITIAL_STACK_SIZE)
 
     # Let us first define all the attributes of root
-    start_train = uintp(0)
-
-    end_train = uintp(n_samples_train)
-    start_valid = uintp(0)
-    end_valid = uintp(n_samples_valid)
-    depth = uintp(0)
-    # root as no parent
     parent = TREE_UNDEFINED
+    depth = 0
     is_left = False
     impurity = np.inf
+    start_train = 0
+    end_train = tree_context.n_samples_train
+    start_valid = 0
+    end_valid = tree_context.n_samples_valid
 
     push_record(
         records,
