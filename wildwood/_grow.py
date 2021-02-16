@@ -263,10 +263,6 @@ def grow(tree, tree_context, node_context):
     # Initialize the tree capacity
     init_capacity = 2047
     tree_resize(tree, init_capacity)
-
-    # n_samples_train =
-    # n_samples_valid =
-
     # Create the stack of node records
     records = Records(INITIAL_STACK_SIZE)
 
@@ -336,8 +332,6 @@ def grow(tree, tree_context, node_context):
             feature = 0
             found_split = False
             # TODO: pourquoi on mettrai impurity = infini ici ?
-            # impurity = -infinity
-            # Faudrait que split soit defini dans tous les cas...
         else:
             split = find_node_split(tree_context, node_context)
             bin = split.bin
@@ -451,36 +445,21 @@ def grow(tree, tree_context, node_context):
     # We finished to grow the tree. Now, we can compute the tree's aggregation weights.
 
     aggregation = tree_context.aggregation
-
+    # step = tree_context.step
     step = 1.0
 
     # Since the tree is grown in a depth-first fashion, we know that if we iterate
     # through the nodes in reverse order, we'll always iterate over childs before
     # iteration over parents.
-
-    # tree.node_count
-    # for node_idx in range():
-    # for node in tree.nodes[::-1]:
-
-    # node_count = int(tree.node_count)
-
     node_count = tree.node_count
-    # print("node_count: ", node_count)
-    #
-    # print(type(node_count))
 
     # TODO: mettre ca dans une fonction a part...
     if aggregation:
         for node_idx in range(node_count - 1, -1, -1):
-            # print("node_idx: ", print(node_idx))
             node = tree.nodes[node_idx]
-            # print("node_idx:", node_idx)
-            # print("node_id:", node["node_id"])
-            # print("is_leaf: ", node["is_leaf"])
-
             if node["is_leaf"]:
-                # If the node is a leaf, the logarithm of its tree weight is simply step *
-                # loss
+                # If the node is a leaf, the logarithm of its tree weight is simply
+                  # step * loss
                 node["log_weight_tree"] = step * node["loss_valid"]
             else:
                 # If the node is not a leaf, then we apply context tree weighting

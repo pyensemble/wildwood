@@ -61,7 +61,7 @@ clf_kwargs = {
     "random_state": random_state,
     "n_jobs": 16,
     "dirichlet": 0.05,
-    "step": 0.1,
+    "step": 1.0,
 }
 
 
