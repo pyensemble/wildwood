@@ -1,3 +1,11 @@
+# Authors: Stephane Gaiffas <stephane.gaiffas@gmail.com>
+# License: BSD 3 clause
+
+"""
+This module contains all functions and dataclasses required to find the best split in
+a node.
+"""
+
 import numpy as np
 from math import log
 
@@ -54,9 +62,7 @@ class SplitInfo(object):
     """Pure data class to store information about a potential split.
     """
 
-    def __init__(
-        self, n_classes,
-    ):
+    def __init__(self, n_classes):
         self.found_split = False
         self.gain_proxy = -infinity
         self.feature = nb_size_t(0)
@@ -178,7 +184,7 @@ class TreeContext:
         max_features,
         aggregation,
         dirichlet,
-        step
+        step,
     ):
         self.X = X
         self.y = y
@@ -204,9 +210,6 @@ class TreeContext:
         # Two buffers used in the split_indices function
         self.left_buffer = np.empty(n_samples, dtype=np_size_t)
         self.right_buffer = np.empty(n_samples, dtype=np_size_t)
-
-
-
 
 
 @njit

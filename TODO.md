@@ -9,7 +9,13 @@
 
 # TODO
 
+- La loss de validation n'est pas divisee par le nombre de samples...
+
 - Finish to clean the _grow.py module
+
+- Faut prendre un parametre Dirichlet beaucoup plus petit que dans le cas en ligne ?!?
+
+- dans check_forest reprendre la fonction de plot de playground_forest
 
 - Y'a un bug quand step > 1.0 ? Bizarre ? overflow ou autre chose ?
 

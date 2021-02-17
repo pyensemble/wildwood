@@ -15,7 +15,7 @@ from numba import jit, from_dtype, void, boolean, uint8, intp, uintp, float32
 from numba.types import Tuple
 from numba.experimental import jitclass
 
-from ._node import NodeContext, compute_node_context
+from ._node import NodeContext, compute_node_context, node_type
 
 from ._splitting import (
     find_node_split,
@@ -25,7 +25,7 @@ from ._splitting import (
 
 from ._tree import (
     add_node_tree,
-    tree_resize,
+    resize_tree,
     TREE_UNDEFINED,
 )
 
@@ -256,13 +256,19 @@ def pop_node_record(records):
         "aggregation": boolean,
         "step": float32,
         "node_count": intp,
-        "node_idx": intp
+        "node_idx": intp,
+        "node": node_type,
+        "weight": float32,
+        "left_child": intp,
+        "right_child": intp,
+        "log_weight_tree_left": float32,
+        "log_weight_tree_right": float32,
     },
 )
 def grow(tree, tree_context, node_context):
     # Initialize the tree capacity
     init_capacity = 2047
-    tree_resize(tree, init_capacity)
+    resize_tree(tree, init_capacity)
     # Create the stack of node records
     records = Records(INITIAL_STACK_SIZE)
 
@@ -443,10 +449,8 @@ def grow(tree, tree_context, node_context):
             )
 
     # We finished to grow the tree. Now, we can compute the tree's aggregation weights.
-
     aggregation = tree_context.aggregation
-    # step = tree_context.step
-    step = 1.0
+    step = tree_context.step
 
     # Since the tree is grown in a depth-first fashion, we know that if we iterate
     # through the nodes in reverse order, we'll always iterate over childs before
@@ -459,7 +463,7 @@ def grow(tree, tree_context, node_context):
             node = tree.nodes[node_idx]
             if node["is_leaf"]:
                 # If the node is a leaf, the logarithm of its tree weight is simply
-                  # step * loss
+                #   step * loss
                 node["log_weight_tree"] = step * node["loss_valid"]
             else:
                 # If the node is not a leaf, then we apply context tree weighting

@@ -51,7 +51,7 @@ datasets = [
     # ),
     (
         "moons",
-        make_moons(n_samples=n_samples, noise=0.3, random_state=data_random_state),
+        make_moons(n_samples=n_samples, noise=0.2, random_state=data_random_state),
     ),
 ]
 
@@ -60,7 +60,7 @@ clf_kwargs = {
     "min_samples_split": 2,
     "random_state": random_state,
     "n_jobs": 16,
-    "dirichlet": 0.05,
+    "dirichlet": 0.5,
     "step": 1.0,
 }
 

@@ -23,47 +23,74 @@ from numba import from_dtype
 import numpy as np
 from wildwood._utils import np_float32, np_size_t, nb_float32, nb_size_t
 
-
-np_record = np.dtype([("a", np_float32), ("b", np_size_t)])
-
-
-nb_record = from_dtype(np_record)
+import numpy as np
+from numba import uintp, jit, void, optional
 
 
-spec_record = [
-    ("a", nb_float32),
-    ("b", nb_size_t)
-]
+# print("np.iinfo(np.uintp).max:", np.iinfo(np.uintp).max)
+# print("uintp.maxval: ", uintp.maxval)
 
 
-@jitclass(spec_record)
-class Record(object):
-
-    def __init__(self, a, b):
-        self.a = a
-        self.b = b
-
-
-@njit
-def set_record(records, idx, a, b):
-    record = records[idx]
-    record["a"] = a
-    record["b"] = b
+@jit(signature=["void(uintp)", "void(uintp, optional(uintp))"], nopython=True,
+     nogil=True)
+# @njit
+def f(x, y=None):
+    if y is None:
+        print("y is None")
+    else:
+        print("y is not None")
+        print(x + y)
 
 
-@njit
-def get_record(records, idx):
-    record = records[idx]
-    return record["a"], record["b"]
-
-
-@njit
+@jit(nopython=True, nogil=True)
 def main():
-    records = np.empty((10,), dtype=np_record)
-    set_record(records, 0, 3.14, 17)
-    record = get_record(records, 0)
-    print(record)
+    f(3)
+    f(3, 1)
+    f(1, None)
 
+
+main()
+
+# np_record = np.dtype([("a", np_float32), ("b", np_size_t)])
+#
+#
+# nb_record = from_dtype(np_record)
+#
+#
+# spec_record = [
+#     ("a", nb_float32),
+#     ("b", nb_size_t)
+# ]
+#
+#
+# @jitclass(spec_record)
+# class Record(object):
+#
+#     def __init__(self, a, b):
+#         self.a = a
+#         self.b = b
+#
+#
+# @njit
+# def set_record(records, idx, a, b):
+#     record = records[idx]
+#     record["a"] = a
+#     record["b"] = b
+#
+#
+# @njit
+# def get_record(records, idx):
+#     record = records[idx]
+#     return record["a"], record["b"]
+#
+#
+# @njit
+# def main():
+#     records = np.empty((10,), dtype=np_record)
+#     set_record(records, 0, 3.14, 17)
+#     record = get_record(records, 0)
+#     print(record)
+#
 
 # main()
 
@@ -72,15 +99,15 @@ from numba import float32
 
 
 
-import numba
-
-@numba.jit(nopython=True, nogil=True, fastmath=True, locals={"x": numba.float32})
-def main2():
-    x = np.nan
-    print(x)
-    print(np.isnan(x))
-
-main2()
+# import numba
+#
+# @numba.jit(nopython=True, nogil=True, fastmath=True, locals={"x": numba.float32})
+# def main2():
+#     x = np.nan
+#     print(x)
+#     print(np.isnan(x))
+#
+# main2()
 
 
 

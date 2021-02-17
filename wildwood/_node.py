@@ -365,8 +365,9 @@ def compute_node_context(
         f += 1
 
     # Save remaining things in the node context
-    node_context.loss_valid = loss_valid
     node_context.n_samples_train = end_train - start_train
     node_context.n_samples_valid = end_valid - start_valid
+    # Don't forget to normalize the validation loss
+    node_context.loss_valid = loss_valid / node_context.n_samples_valid
     node_context.w_samples_train = w_samples_train
     node_context.w_samples_valid = w_samples_valid

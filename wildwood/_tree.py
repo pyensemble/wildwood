@@ -1,203 +1,34 @@
+# Authors: Stephane Gaiffas <stephane.gaiffas@gmail.com>
+# License: BSD 3 clause
+
 """
-This contains all the data structures for holding tree data
+This contains all the data structures for holding tree data.
 """
+
 from math import exp
 import numpy as np
-from ._utils import (
-    np_bool,
-    np_uint8,
-    np_size_t,
-    np_ssize_t,
-    nb_bool,
-    nb_size_t,
-    nb_ssize_t,
-    nb_uint8,
-    np_float32,
-    nb_float32,
-    max_size_t,
+
+from numba import (
     from_dtype,
     njit,
-    jitclass,
-    resize,
-    resize2d,
-    log_sum_2_exp
+    jit,
+    boolean,
+    uint8,
+    intp,
+    uintp,
+    float32,
+    void,
+    optional,
+    generated_jit,
 )
+from numba.experimental import jitclass
 
-import numba
+from ._utils import max_size_t, get_type, resize, resize2d, log_sum_2_exp
 
 from ._node import node_type, node_dtype
 
-from ._utils import get_type
 
 # TODO: on a vraiment besoin de tout ca dans un stack_record ?
-
-
-
-
-# @njit
-# def set_node_tree(nodes, idx, node):
-#     """
-#     Set a node in an array of nodes at index idx
-#
-#     Parameters
-#     ----------
-#     nodes : array of np_node
-#         Array containing the nodes in the tree.
-#
-#     idx : intp
-#         Destination index of the node.
-#
-#     node : NodeTree
-#         The node to be inserted.
-#     """
-#     node_dtype = nodes[idx]
-#     if idx != node.node_id:
-#         raise ValueError("idx != node.node_id")
-#
-#     node_dtype["node_id"] = node.node_id
-#     node_dtype["parent"] = node.parent
-#     node_dtype["left_child"] = node.left_child
-#     node_dtype["right_child"] = node.right_child
-#     node_dtype["depth"] = node.depth
-#     node_dtype["feature"] = node.feature
-#     node_dtype["threshold"] = node.threshold
-#     node_dtype["bin_threshold"] = node.bin_threshold
-#     node_dtype["impurity"] = node.impurity
-#     node_dtype["n_samples_train"] = node.n_samples_train
-#     node_dtype["n_samples_valid"] = node.n_samples_valid
-#     node_dtype["weighted_n_samples_train"] = node.weighted_n_samples_train
-#     node_dtype["weighted_n_samples_valid"] = node.weighted_n_samples_valid
-#     node_dtype["start_train"] = node.start_train
-#     node_dtype["end_train"] = node.end_train
-#     node_dtype["start_valid"] = node.start_valid
-#     node_dtype["end_valid"] = node.end_valid
-#     node_dtype["is_left"] = node.is_left
-#     node_dtype["loss_valid"] = node.loss_valid
-#     node_dtype["log_weight_tree"] = node.log_weight_tree
-
-# @njit
-# def get_node_tree(nodes, idx):
-#     """
-#     Get node at index idx
-#
-#     Parameters
-#     ----------
-#     nodes : array of np_node
-#         Array containing the nodes in the tree.
-#
-#     idx : intp
-#         Index of the node to retrieve.
-#
-#     Returns
-#     -------
-#     output : NodeTree
-#         Retrieved node
-#     """
-#     # It's a jitclass object
-#     node = nodes[idx]
-#     return NodeTree(
-#         node["node_id"],
-#         node["parent"],
-#         node["left_child"],
-#         node["right_child"],
-#         node["depth"],
-#         node["feature"],
-#         node["threshold"],
-#         node["bin_threshold"],
-#         node["impurity"],
-#         node["n_samples"],
-#         node["weighted_n_samples"],
-#         node["start_train"],
-#         node["end_train"],
-#         node["start_valid"],
-#         node["end_valid"],
-#         node["is_left"],
-#     )
-
-#
-# # TODO: On a pas vraiment besoin de NodeTree en fait non ?
-# @jitclass(spec_node_tree)
-# class NodeTree(object):
-#     def __init__(
-#         self,
-#         node_id,
-#         parent,
-#         left_child,
-#         right_child,
-#         depth,
-#         feature,
-#         threshold,
-#         bin_threshold,
-#         impurity,
-#         n_samples_train,
-#         n_samples_valid,
-#         weighted_n_samples_train,
-#         weighted_n_samples_valid,
-#         start_train,
-#         end_train,
-#         start_valid,
-#         end_valid,
-#         is_left,
-#         loss_valid,
-#         log_weight_tree
-#     ):
-#         self.node_id = node_id
-#         self.parent = parent
-#         self.left_child = left_child
-#         self.right_child = right_child
-#         self.depth = depth
-#         self.feature = feature
-#         self.threshold = threshold
-#         self.bin_threshold = bin_threshold
-#         self.impurity = impurity
-#         self.n_samples_train = n_samples_train
-#         self.n_samples_valid = n_samples_valid
-#         self.weighted_n_samples_train = weighted_n_samples_train
-#         self.weighted_n_samples_valid = weighted_n_samples_valid
-#
-#         self.start_train = start_train
-#         self.end_train = end_train
-#         self.start_valid = start_valid
-#         self.end_valid = end_valid
-#         self.is_left = is_left
-#         self.loss_valid = loss_valid
-#         self.log_weight_tree = log_weight_tree
-
-
-@njit
-def print_node_tree(node):
-    node_id = node["node_id"]
-    parent = node["parent"]
-    left_child = node["left_child"]
-    right_child = node["right_child"]
-    depth = node["depth"]
-    feature = node["feature"]
-    threshold = node["threshold"]
-    bin_threshold = node["bin_threshold"]
-    impurity = node["impurity"]
-
-    n_samples_train = node["n_samples_train"]
-    n_samples_valid = node["n_samples_valid"]
-    weighted_n_samples_train = node["weighted_n_samples_train"]
-    weighted_n_samples_valid = node["weighted_n_samples_valid"]
-
-    s = "Node("
-    s += "node_id: {node_id}".format(node_id=node_id)
-    s += ", parent: {parent}".format(parent=parent)
-    s += ", left_child: {left_child}".format(left_child=left_child)
-    s += ", right_child: {right_child}".format(right_child=right_child)
-    s += ", depth: {depth}".format(depth=depth)
-    s += ", feature: {feature}:".format(feature=feature)
-    s += ", bin_threshold: {bin_threshold}".format(bin_threshold=bin_threshold)
-    s += ", n_samples_train: {n_samples_train}".format(n_samples_train=n_samples_train)
-    s += ", n_samples_valid: {n_samples_valid}".format(n_samples_valid=n_samples_valid)
-    s += ", weighted_n_samples_train: {weighted_n_samples_train}".format(
-        weighted_n_samples_train=weighted_n_samples_train
-    )
-    # s += ", weighted_n_samples_valid: {weighted_n_samples_valid}:".format(
-    #     weighted_n_samples_valid=weighted_n_samples_valid
-    # )
-    print(s)
 
 
 IS_FIRST = 1
@@ -205,68 +36,66 @@ IS_NOT_FIRST = 0
 IS_LEFT = 1
 IS_NOT_LEFT = 0
 
-TREE_LEAF = nb_ssize_t(-1)
-TREE_UNDEFINED = nb_ssize_t(-2)
+TREE_LEAF = intp(-1)
+TREE_UNDEFINED = intp(-2)
 
 # TODO: replace n_classes by pred_size ?
 
-spec_tree = [
-    ("n_features", nb_size_t),
-    ("n_classes", nb_size_t),
-    ("max_depth", nb_size_t),
-    ("node_count", nb_size_t),
-    ("capacity", nb_size_t),
-    # This array contains information about the nodes
+tree_type = [
+    # Number of features
+    ("n_features", uintp),
+    # Number of classes
+    ("n_classes", uintp),
+    # Maximum depth allowed in the tree
+    ("max_depth", uintp),
+    # Number of nodes in the tree
+    ("node_count", uintp),
+    # ???
+    ("capacity", uintp),
+    # A numpy array containing the nodes data
     ("nodes", node_type[::1]),
     # This array contains values allowing to compute the prediction of each node
     # Its shape is (n_nodes, n_outputs, max_n_classes)
     # TODO: IMPORTANT a priori ca serait mieux ::1 sur le premier axe mais l'init
     #  avec shape (0, ., .) foire dans ce cas avec numba
-    ("y_pred", nb_float32[:, ::1]),
-    # TODO: renommer en ("y_sum_bins", nb_float32[:, ::1])) ?
+    ("y_pred", float32[:, ::1]),
 ]
 
 
 # TODO: pas sur que ca soit utile en fait values avec cette strategie histogramme ?
 
 
-@jitclass(spec_tree)
+@jitclass(tree_type)
 class Tree(object):
     def __init__(self, n_features, n_classes):
         self.n_features = n_features
         self.n_classes = n_classes
-        self.max_depth = nb_size_t(0)
-        self.node_count = nb_size_t(0)
-        self.capacity = nb_size_t(0)
+        self.max_depth = 0
+        self.node_count = 0
+        self.capacity = 0
         # Both values and nodes arrays have zero on the first axis and are resized
         # later when we know the capacity of the tree
         # The array of nodes contained in the tree
         self.nodes = np.empty(0, dtype=node_dtype)
         # The array of y sums or counts for each node
-        self.y_pred = np.empty((0, self.n_classes), dtype=np_float32)
+        self.y_pred = np.empty((0, self.n_classes), dtype=float32)
 
 
 TreeType = get_type(Tree)
 
 
-@njit
-def print_nodes(tree):
-    for node in tree.nodes:
-        print_node_tree(node)
-
-
-@njit
-def print_tree(tree):
-    s = "-" * 64 + "\n"
-    s += "Tree("
-    s += "n_features={n_features}".format(n_features=tree.n_features)
-    s += ", n_classes={n_classes}".format(n_classes=tree.n_classes)
-    s += ", capacity={capacity}".format(capacity=tree.capacity)
-    s += ", node_count={node_count}".format(node_count=tree.node_count)
-    s += ")"
-    print(s)
-    if tree.node_count > 0:
-        print_nodes(tree)
+# @njit
+# def print_tree(tree):
+#     s = "-" * 64 + "\n"
+#     s += "Tree("
+#     s += "n_features={n_features}".format(n_features=tree.n_features)
+#     s += ", n_classes={n_classes}".format(n_classes=tree.n_classes)
+#     s += ", capacity={capacity}".format(capacity=tree.capacity)
+#     s += ", node_count={node_count}".format(node_count=tree.node_count)
+#     s += ")"
+#     print(s)
+#     if tree.node_count > 0:
+#         print_nodes(tree)
 
 
 def get_nodes(tree):
@@ -295,7 +124,7 @@ def get_nodes(tree):
         "end_valid",
         "is_left",
         "loss_valid",
-        "log_weight_tree"
+        "log_weight_tree",
     ]
 
     # columns = [col_name for col_name, _ in np_node_tree]
@@ -311,7 +140,30 @@ def get_nodes(tree):
     )
 
 
-@njit
+@jit(
+    # uintp(
+    #     TreeType,
+    #     intp,
+    #     uintp,
+    #     boolean,
+    #     boolean,
+    #     uintp,
+    #     float32,
+    #     uint8,
+    #     float32,
+    #     uintp,
+    #     uintp,
+    #     float32,
+    #     float32,
+    #     uintp,
+    #     uintp,
+    #     uintp,
+    #     uintp,
+    #     float32,
+    # ),
+    nopython=True,
+    nogil=True,
+)
 def add_node_tree(
     tree,
     parent,
@@ -330,28 +182,42 @@ def add_node_tree(
     end_train,
     start_valid,
     end_valid,
-    loss_valid
+    loss_valid,
 ):
-    # print("================ Begin add_node_tree ================")
+    """
 
+    Parameters
+    ----------
+    tree
+    parent
+    depth
+    is_left
+    is_leaf
+    feature
+    threshold
+    bin_threshold
+    impurity
+    n_samples_train
+    n_samples_valid
+    w_samples_train
+    w_samples_valid
+    start_train
+    end_train
+    start_valid
+    end_valid
+    loss_valid
+
+    Returns
+    -------
+
+    """
     # New node index is given by the current number of nodes in the tree
     node_idx = tree.node_count
-
-    # print("In add_node_tree")
-    # print("node_idx >= tree.capacity:", node_idx, tree.capacity)
-
     if node_idx >= tree.capacity:
-
-        # print("node_idx >= tree.capacity:", node_idx, tree.capacity)
-        # print("In tree_add_node calling tree_resize with no capacity")
-        # tree_add_node
-        tree_resize(tree)
+        resize_tree(tree, None)
 
     nodes = tree.nodes
-    # print("Adding node in tree node_idx:", node_idx)
-    # print("is_leaf:", is_leaf)
     node = nodes[node_idx]
-
     node["node_id"] = node_idx
     node["parent"] = parent
     node["depth"] = depth
@@ -361,13 +227,11 @@ def add_node_tree(
     node["n_samples_valid"] = n_samples_valid
     node["w_samples_train"] = w_samples_train
     node["w_samples_valid"] = w_samples_valid
-
     node["start_train"] = start_train
     node["end_train"] = end_train
     node["start_valid"] = start_valid
     node["end_valid"] = end_valid
     node["loss_valid"] = loss_valid
-
     node["log_weight_tree"] = np.nan
 
     if parent != TREE_UNDEFINED:
@@ -387,67 +251,58 @@ def add_node_tree(
         node["threshold"] = threshold
         node["bin_threshold"] = bin_threshold
 
-    tree.node_count += nb_size_t(1)
-    # print("================ End   add_node_tree ================")
+    tree.node_count += uintp(1)
 
     return node_idx
 
 
-@njit
-def tree_resize(tree, capacity=max_size_t):
-    # print("================ Begin tree_resize ================")
+@jit(void(TreeType, uintp), nopython=True, nogil=True)
+def resize_tree_(tree, capacity):
+    """Resizes and updates the tree to have the required capacity. This functions
+    resizes the tree no matter what (no test is performed here).
 
-    # TODO: When does this happen ?
-    # if capacity == tree.capacity and tree.nodes != NULL:
-    # print("----------------")
-    # print("In tree.resize with")
-    # print("capacity: ", capacity)
-    # print("tree.capacity: ", tree.capacity)
-    # print("tree.nodes.size: ", tree.nodes.size)
+    Parameters
+    ----------
+    tree : TreeType
+        The tree
 
-    # TODO: attention grosse difference ici
-    # if capacity == tree.capacity and tree.nodes.size > 0:
-    if capacity <= tree.capacity and tree.nodes.size > 0:
-        return 0
-
-    if capacity == max_size_t:
-        if tree.capacity == nb_size_t(0):
-            capacity = nb_size_t(3)  # default initial value
-        else:
-            capacity = nb_size_t(2 * tree.capacity)
-
-    # print("new capacity: ", capacity)
-
-    # print("resizing nodes...")
-
-    # print("capacity:", capacity)
-
+    capacity : int
+        The new desired capacity (maximum number of nodes it can contain) of the tree.
+    """
     tree.nodes = resize(tree.nodes, capacity)
-
-    # new = np.empty(capacity, np_node_record)
-    # return
-
-    # print("Done resizing nodes...")
-
-    # print("resizing y_pred...")
     tree.y_pred = resize2d(tree.y_pred, capacity, zeros=True)
-    # print("Done resizing y_pred...")
-
-    # value memory is initialised to 0 to enable classifier argmax
-    # if capacity > tree.capacity:
-    #     memset( < void * > (tree.value + tree.capacity * tree.value_stride), 0,
-    #     (capacity - tree.capacity) * tree.value_stride *
-    #     sizeof(double))
-
-    # if capacity smaller than node_count, adjust the counter
-    if capacity < tree.node_count:
-        tree.node_count = capacity
-
     tree.capacity = capacity
 
-    # print("================ End   tree_resize ================")
 
-    return 0
+@jit(void(TreeType, optional(uintp)), nopython=True, nogil=True)
+def resize_tree(tree, capacity=None):
+    """Resizes and updates the tree to have the required capacity. By default,
+    it doubles the current capacity of the tree if no capacity is specified.
+
+    Parameters
+    ----------
+    tree : TreeType
+        The tree
+
+    capacity : int or None
+        The new desired capacity (maximum number of nodes it can contain) of the tree.
+        If None, then it doubles the capacity of the tree.
+    """
+    if capacity is None:
+        if tree.capacity == 0:
+            # If no capacity is specified and there is no node in the tree yet,
+            # we set it to 3
+            resize_tree_(tree, 3)
+        else:
+            # If no capacity is specified we double the current capacity
+            resize_tree_(tree, 2 * tree.capacity)
+    else:
+        if capacity <= tree.capacity and tree.nodes.size > 0:
+            # If the capacity of the tree is already large enough, we no nothing
+            return
+        else:
+            # Otherwise, we resize using the specified capacity
+            resize_tree_(tree, capacity)
 
 
 # TODO: tous les trucs de prediction faut les faire a part comme dans pygbm,
@@ -469,7 +324,7 @@ def tree_predict(tree, X, aggregation, step):
         idx_leaves = tree_apply(tree, X)
         n_samples = X.shape[0]
         # TODO: only binary classification right ?
-        out = np.empty((n_samples, 2), dtype=np_float32)
+        out = np.empty((n_samples, 2), dtype=float32)
         # Predictions given by each leaf node of the tree
         y_pred = tree.y_pred
         i = 0
@@ -491,7 +346,7 @@ def tree_apply(tree, X):
 def tree_apply_dense(tree, X):
     # TODO: X is assumed to be binned here
     n_samples = X.shape[0]
-    out = np.zeros((n_samples,), dtype=np_size_t)
+    out = np.zeros((n_samples,), dtype=uintp)
     nodes = tree.nodes
 
     for i in range(n_samples):
@@ -508,21 +363,21 @@ def tree_apply_dense(tree, X):
             node = nodes[idx_leaf]
 
         # out_ptr[i] = <SIZE_t>(node - tree.nodes)  # node offset
-        out[i] = nb_size_t(idx_leaf)
+        out[i] = uintp(idx_leaf)
 
     return out
 
 
-
 import numba
 
-@numba.jit(nopython=True, nogil=True, locals={"i": nb_size_t, "idx_current": nb_size_t})
+
+@numba.jit(nopython=True, nogil=True, locals={"i": uintp, "idx_current": uintp})
 def tree_predict_aggregate(tree, X, step):
     n_samples = X.shape[0]
     n_classes = tree.n_classes
     nodes = tree.nodes
     y_pred = tree.y_pred
-    out = np.zeros((n_samples, n_classes), dtype=np_float32)
+    out = np.zeros((n_samples, n_classes), dtype=float32)
 
     for i in range(n_samples):
         # print(i)
@@ -564,6 +419,7 @@ def tree_predict_aggregate(tree, X, step):
             idx_current = node["parent"]
 
     return out
+
 
 # #
 # # @njit(void(get_type(TreeClassifier), float32[::1], float32[::1], boolean))
