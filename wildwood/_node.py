@@ -24,70 +24,50 @@ node_dtype = np.dtype(
     [
         # Index of the node in the nodes array
         ("node_id", np.uintp),
-        #
         # Index of the parent node
         ("parent", np.uintp),
-        #
         # Index of the left child node (it's TREE_LEAF is node is a leaf)
         ("left_child", np.intp),
-        #
         # Index of the right child node (it's TREE_LEAF is node is a leaf)
         ("right_child", np.intp),
-        #
         # Is the node a leaf ?
         ("is_leaf", np.bool),
-        #
         # Is the node a left child ? (it's ? for the root node)
         ("is_left", np.bool),
-        #
         # Depth of the node in the tree
         ("depth", np.uintp),
-        #
         # Feature used for splitting the node (it's ??? if node is a leaf)
         ("feature", np.uintp),
-        #
         # Continuous threshold used for splitting the node (not used for now)
         ("threshold", np.float32),
-        #
         # Index of the bin threshold used for splitting the node
         ("bin_threshold", np.uint8),
-        #
         # Impurity of the node. Used to avoid to split a "pure" node (with impurity=0).
         #   Note that impurity is computed using training samples (as all tree-growing
         #   related things)
         ("impurity", np.float32),
-        #
         # Validation loss of the node, computed on validation (out-of-the-bag) samples
         ("loss_valid", np.float32),
-        #
         # Logarithm of the subtree aggregation weight
         ("log_weight_tree", np.float32),
-        #
         # Number of training samples in the node
         ("n_samples_train", np.uintp),
-        #
         # Number of validation (out-of-the-bag) samples in the node
         ("n_samples_valid", np.uintp),
-        #
         # Weighted number of training samples in the node
         ("w_samples_train", np.float32),
-        #
         # Weighted number of validation (out-of-the-bag) samples in the node
         ("w_samples_valid", np.float32),
-        #
         # Index of the first training sample in the node. We have that
         #   partition_train[start_train:end_train] contains the indexes of the node's
         #   training samples
         ("start_train", np.uintp),
-        #
         # End-index of the slice containing the node's training samples indexes
         ("end_train", np.uintp),
-        #
         # Index of the first validation (out-of-the-bag) sample in the node. We have
         #   that partition_valid[start_valid:end_valid] contains the indexes of the
         #   node's validation samples
         ("start_valid", np.uintp),
-        #
         # End-index of the slice containing the node's validation samples indexes
         ("end_valid", np.uintp),
     ]
@@ -104,47 +84,34 @@ node_type = from_dtype(node_dtype)
 node_context_type = [
     # Array of candidate features for splitting
     ("features", uintp[::1]),
-    #
     # Number of training samples in the node
     ("n_samples_train", intp),
-    #
     # Number of validation (out-of-the-bag) samples in the node
     ("n_samples_valid", intp),
-    #
     # Weighted number of training samples in the node
     ("w_samples_train", float32),
-    #
     # Weighted number of validation (out-of-the-bag) samples in the node
     ("w_samples_valid", float32),
-    #
     # Index of the first training sample in the node. We have that
     #   partition_train[start_train:end_train] contains the indexes of the node's
     #   training samples
     ("start_train", intp),
-    #
     # End-index of the slice containing the node's training samples indexes
     ("end_train", intp),
-    #
     # Index of the first validation (out-of-the-bag) sample in the node. We have
     #   that partition_valid[start_valid:end_valid] contains the indexes of the
     #   node's validation samples
     ("start_valid", intp),
-    #
     # End-index of the slice containing the node's validation samples indexes
     ("end_valid", intp),
-    #
     # Validation loss of the node, computed on validation (out-of-the-bag) samples
     ("loss_valid", float32),
-    #
     # Weighted number of training samples for each (feature, bin) in the node
     ("w_samples_train_in_bins", float32[:, ::1]),
-    #
     # Weighted number of validation samples for each (feature, bin) in the node
     ("w_samples_valid_in_bins", float32[:, ::1]),
-    #
     # Weighted number of training samples for each (feature, bin, label) in the node
     ("y_sum", float32[:, :, ::1]),
-    #
     # Prediction produced by the node using the training data it contains
     ("y_pred", float32[::1]),
 ]

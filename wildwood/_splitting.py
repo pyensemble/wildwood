@@ -7,8 +7,6 @@ a node.
 """
 
 import numpy as np
-from math import log
-
 from numba import (
     jit,
     njit,
@@ -22,27 +20,6 @@ from numba import (
 )
 from numba.experimental import jitclass
 
-# from ._utils import (
-#     njit,
-#     jitclass,
-#     nb_ssize_t,
-#     nb_size_t,
-#     np_ssize_t,
-#     np_size_t,
-#     nb_bool,
-#     np_uint8,
-#     nb_uint8,
-#     np_size_t,
-#     nb_size_t,
-#     np_uint32,
-#     nb_uint32,
-#     np_float32,
-#     nb_float32,
-#     np_uint8,
-#     nb_uint8,
-#     infinity,
-# )
-
 from ._impurity import gini_childs, information_gain_proxy, information_gain
 
 from ._utils import get_type
@@ -50,36 +27,109 @@ from ._utils import get_type
 
 # TODO: mettre aussi weighted_samples_left
 
-spec_split_info = [
+split_type = [
+    # True if we found a split, False otherwise
     ("found_split", boolean),
+    # Information gain proxy obtained thanks to this split
     ("gain_proxy", float32),
+    # Feature used to split the node
     ("feature", uintp),
-    ("bin", uint8),
+    # Index of the bin threshold used to split the node
+    ("bin_threshold", uint8),
+    # Number of training samples in the left child node
     ("n_samples_train_left", uintp),
+    # Number of training samples in the right child node
     ("n_samples_train_right", uintp),
+    # Weighted number of training samples in the left child node
     ("w_samples_train_left", float32),
+    # Weighted number of training samples in the right child node
     ("w_samples_train_right", float32),
+    # Number of validation samples in the left child node
     ("n_samples_valid_left", uintp),
+    # Number of validation samples in the right child node
     ("n_samples_valid_right", uintp),
+    # Weighted number of validation samples in the left child node
     ("w_samples_valid_left", float32),
+    # Weighted number of validation samples in the right child node
     ("w_samples_valid_right", float32),
+    # Weighted number of training samples for each label class in the left child node
     ("y_sum_left", float32[::1]),
+    # Weighted number of training samples for each label class in the right child node
     ("y_sum_right", float32[::1]),
+    # Impurity of the left child node
     ("impurity_left", float32),
+    # Impurity of the right child node
     ("impurity_right", float32),
 ]
 
 
-@jitclass(spec_split_info)
-class SplitInfo(object):
-    """Pure data class to store information about a potential split.
+@jitclass(split_type)
+class Split(object):
+    """Pure dataclass to store information about a potential split.
+
+    Parameters
+    ----------
+    n_classes : int
+        Number of label classes
+
+    Attributes
+    ----------
+    found_split : bool
+        True if we found a split, False otherwise
+
+    gain_proxy : float
+        Information gain proxy obtained thanks to this split
+
+    feature : int
+        Feature used to split the node
+
+    bin_threshold : int
+        Index of the bin threshold used to split the node
+
+    n_samples_train_left : int
+        Number of training samples in the left child node
+
+    n_samples_train_right : int
+        Number of training samples in the right child node
+
+    w_samples_train_left : float
+        Weighted number of training samples in the left child node
+
+    w_samples_train_right : float
+        Weighted number of training samples in the right child node
+
+    n_samples_valid_left : int
+        Number of validation samples in the left child node
+
+    n_samples_valid_right : int
+        Number of validation samples in the right child node
+
+    w_samples_valid_left : int
+        Weighted number of validation samples in the left child node
+
+    w_samples_valid_right : int
+        Weighted number of validation samples in the right child node
+
+    y_sum_left : ndarray
+        Array of shape (n_classes,) with float32 dtype containing the weighted number
+        of training samples for each label class in the left child node
+
+    y_sum_right : ndarray
+        Array of shape (n_classes,) with float32 dtype containing the weighted number
+        of training samples for each label class in the right child node
+
+    impurity_left : float
+        Impurity of the left child node
+
+    impurity_right : float
+        Impurity of the right child node
     """
 
     def __init__(self, n_classes):
         self.found_split = False
         self.gain_proxy = -np.inf
         self.feature = 0
-        self.bin = 0
+        self.bin_threshold = 0
         self.n_samples_train_left = 0
         self.n_samples_train_right = 0
         self.w_samples_train_left = 0.0
@@ -94,25 +144,25 @@ class SplitInfo(object):
         self.impurity_right = 0.0
 
 
-@njit
+SplitType = get_type(Split)
+
+
+@jit(void(SplitType, SplitType), nopython=True, nogil=True)
 def copy_split(from_split, to_split):
     to_split.found_split = from_split.found_split
     to_split.gain_proxy = from_split.gain_proxy
     to_split.feature = from_split.feature
-    to_split.bin = from_split.bin
+    to_split.bin_threshold = from_split.bin_threshold
     to_split.n_samples_train_left = from_split.n_samples_train_left
     to_split.n_samples_train_right = from_split.n_samples_train_right
     to_split.w_samples_train_left = from_split.w_samples_train_left
     to_split.w_samples_train_right = from_split.w_samples_train_right
-
     to_split.n_samples_valid_left = from_split.n_samples_valid_left
     to_split.n_samples_valid_right = from_split.n_samples_valid_right
     to_split.w_samples_valid_left = from_split.w_samples_valid_left
     to_split.w_samples_valid_right = from_split.w_samples_valid_right
-
     to_split.impurity_left = from_split.impurity_left
     to_split.impurity_right = from_split.impurity_right
-
     to_split.y_sum_left[:] = from_split.y_sum_left
     to_split.y_sum_right[:] = from_split.y_sum_right
 
@@ -240,8 +290,8 @@ def find_node_split(tree_context, node_context):
 
     # Ne les initialiser qu'une seule fois... donc en dehors d'ici ? Dans le
     # local_context ?
-    best_split = SplitInfo(tree_context.n_classes)
-    candidate_split = SplitInfo(tree_context.n_classes)
+    best_split = Split(tree_context.n_classes)
+    candidate_split = Split(tree_context.n_classes)
 
     for feature in features:
         # Compute the best bin and gain proxy obtained for the feature
@@ -423,7 +473,7 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
             best_split.found_split = True
             best_split.gain_proxy = gain_proxy
             best_split.feature = feature
-            best_split.bin = bin
+            best_split.bin_threshold = bin
 
             best_split.impurity_left = impurity_left
             best_split.impurity_right = impurity_right
@@ -460,7 +510,7 @@ def split_indices(tree_context, split, start_train, end_train, start_valid, end_
 
     # The feature and bin used for this split
     feature = split.feature
-    bin = split.bin
+    bin = split.bin_threshold
 
     # TODO: pourquoi transposition ici ?
     Xf = tree_context.X.T[feature]

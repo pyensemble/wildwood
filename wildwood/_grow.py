@@ -340,7 +340,7 @@ def grow(tree, tree_context, node_context):
             # TODO: pourquoi on mettrai impurity = infini ici ?
         else:
             split = find_node_split(tree_context, node_context)
-            bin = split.bin
+            bin = split.bin_threshold
             feature = split.feature
             found_split = split.found_split
 
