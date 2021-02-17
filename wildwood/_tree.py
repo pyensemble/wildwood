@@ -140,122 +140,6 @@ def get_nodes(tree):
     )
 
 
-@jit(
-    # uintp(
-    #     TreeType,
-    #     intp,
-    #     uintp,
-    #     boolean,
-    #     boolean,
-    #     uintp,
-    #     float32,
-    #     uint8,
-    #     float32,
-    #     uintp,
-    #     uintp,
-    #     float32,
-    #     float32,
-    #     uintp,
-    #     uintp,
-    #     uintp,
-    #     uintp,
-    #     float32,
-    # ),
-    nopython=True,
-    nogil=True,
-)
-def add_node_tree(
-    tree,
-    parent,
-    depth,
-    is_left,
-    is_leaf,
-    feature,
-    threshold,
-    bin_threshold,
-    impurity,
-    n_samples_train,
-    n_samples_valid,
-    w_samples_train,
-    w_samples_valid,
-    start_train,
-    end_train,
-    start_valid,
-    end_valid,
-    loss_valid,
-):
-    """
-
-    Parameters
-    ----------
-    tree
-    parent
-    depth
-    is_left
-    is_leaf
-    feature
-    threshold
-    bin_threshold
-    impurity
-    n_samples_train
-    n_samples_valid
-    w_samples_train
-    w_samples_valid
-    start_train
-    end_train
-    start_valid
-    end_valid
-    loss_valid
-
-    Returns
-    -------
-
-    """
-    # New node index is given by the current number of nodes in the tree
-    node_idx = tree.node_count
-    if node_idx >= tree.capacity:
-        resize_tree(tree, None)
-
-    nodes = tree.nodes
-    node = nodes[node_idx]
-    node["node_id"] = node_idx
-    node["parent"] = parent
-    node["depth"] = depth
-    node["is_leaf"] = is_leaf
-    node["impurity"] = impurity
-    node["n_samples_train"] = n_samples_train
-    node["n_samples_valid"] = n_samples_valid
-    node["w_samples_train"] = w_samples_train
-    node["w_samples_valid"] = w_samples_valid
-    node["start_train"] = start_train
-    node["end_train"] = end_train
-    node["start_valid"] = start_valid
-    node["end_valid"] = end_valid
-    node["loss_valid"] = loss_valid
-    node["log_weight_tree"] = np.nan
-
-    if parent != TREE_UNDEFINED:
-        if is_left:
-            nodes[parent]["left_child"] = node_idx
-        else:
-            nodes[parent]["right_child"] = node_idx
-
-    if is_leaf:
-        node["left_child"] = TREE_LEAF
-        node["right_child"] = TREE_LEAF
-        node["feature"] = TREE_UNDEFINED
-        node["threshold"] = TREE_UNDEFINED
-        node["bin_threshold"] = TREE_UNDEFINED
-    else:
-        node["feature"] = feature
-        node["threshold"] = threshold
-        node["bin_threshold"] = bin_threshold
-
-    tree.node_count += uintp(1)
-
-    return node_idx
-
-
 @jit(void(TreeType, uintp), nopython=True, nogil=True)
 def resize_tree_(tree, capacity):
     """Resizes and updates the tree to have the required capacity. This functions
@@ -303,6 +187,155 @@ def resize_tree(tree, capacity=None):
         else:
             # Otherwise, we resize using the specified capacity
             resize_tree_(tree, capacity)
+
+
+@jit(
+    uintp(
+        TreeType,
+        intp,
+        uintp,
+        boolean,
+        boolean,
+        uintp,
+        float32,
+        uint8,
+        float32,
+        uintp,
+        uintp,
+        float32,
+        float32,
+        uintp,
+        uintp,
+        uintp,
+        uintp,
+        float32,
+    ),
+    nopython=True,
+    nogil=True,
+)
+def add_node_tree(
+    tree,
+    parent,
+    depth,
+    is_left,
+    is_leaf,
+    feature,
+    threshold,
+    bin_threshold,
+    impurity,
+    n_samples_train,
+    n_samples_valid,
+    w_samples_train,
+    w_samples_valid,
+    start_train,
+    end_train,
+    start_valid,
+    end_valid,
+    loss_valid,
+):
+    """Adds a node in the tree
+
+    Parameters
+    ----------
+    tree : TreeType
+        The tree
+
+    parent : int
+        Index of the parent node
+
+    depth : int
+       Depth of the node in the tree
+
+    is_left : bool
+        True if the node is a left child, False otherwise
+
+    is_leaf : bool
+        True if the node is a leaf node, False otherwise
+
+    feature : int
+        Feature used to split the node
+
+    threshold : float
+        Continuous threshold used to split the node (not used for now)
+
+    bin_threshold : int
+        Index of the bin threshold used to split the node
+
+    n_samples_train : int
+        Number of training samples in the node
+
+    n_samples_valid : int
+        Number of validation (out-of-the-bag) samples in the node
+
+    w_samples_train : float
+        Weighted number of training samples in the node
+
+    w_samples_valid : float
+        Weighted number of validation (out-of-the-bag) samples in the node
+
+    start_train : int
+        Index of the first training sample in the node. We have that
+        partition_train[start_train:end_train] contains the indexes of the node's
+        training samples
+
+    end_train : int
+        End-index of the slice containing the node's training samples indexes
+
+    start_valid : int
+        Index of the first validation (out-of-the-bag) sample in the node. We have
+        that partition_valid[start_valid:end_valid] contains the indexes of the
+        node's validation samples
+
+    end_valid : int
+        End-index of the slice containing the node's validation samples indexes
+
+    loss_valid : float
+        Validation loss of the node, computed on validation (out-of-the-bag) samples
+
+    """
+    # New node index is given by the current number of nodes in the tree
+    node_idx = tree.node_count
+    if node_idx >= tree.capacity:
+        resize_tree(tree, None)
+
+    nodes = tree.nodes
+    node = nodes[node_idx]
+    node["node_id"] = node_idx
+    node["parent"] = parent
+    node["depth"] = depth
+    node["is_leaf"] = is_leaf
+    node["impurity"] = impurity
+    node["n_samples_train"] = n_samples_train
+    node["n_samples_valid"] = n_samples_valid
+    node["w_samples_train"] = w_samples_train
+    node["w_samples_valid"] = w_samples_valid
+    node["start_train"] = start_train
+    node["end_train"] = end_train
+    node["start_valid"] = start_valid
+    node["end_valid"] = end_valid
+    node["loss_valid"] = loss_valid
+    node["log_weight_tree"] = np.nan
+
+    if parent != TREE_UNDEFINED:
+        if is_left:
+            nodes[parent]["left_child"] = node_idx
+        else:
+            nodes[parent]["right_child"] = node_idx
+
+    if is_leaf:
+        node["left_child"] = TREE_LEAF
+        node["right_child"] = TREE_LEAF
+        node["feature"] = TREE_UNDEFINED
+        node["threshold"] = TREE_UNDEFINED
+        node["bin_threshold"] = TREE_UNDEFINED
+    else:
+        node["feature"] = feature
+        node["threshold"] = threshold
+        node["bin_threshold"] = bin_threshold
+
+    tree.node_count += uintp(1)
+
+    return node_idx
 
 
 # TODO: tous les trucs de prediction faut les faire a part comme dans pygbm,
