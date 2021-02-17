@@ -355,12 +355,25 @@ def add_node_tree(
 
 
 @jit(
-    uintp[::1](TreeType, uint8[::1, :]),
+    # uintp[::1](TreeType, uint8[::1, :]),
     nopython=True,
     nogil=True,
-    locals={"n_samples": uintp, "out": uintp[:, ::1], "idx_leaf": uintp},
+    locals={"n_samples": uintp, "out": uintp[::1], "idx_leaf": uintp},
 )
 def tree_apply_dense(tree, X):
+    """
+
+    Parameters
+    ----------
+    tree : TreeType
+        The tree
+
+    X
+
+    Returns
+    -------
+
+    """
     n_samples = X.shape[0]
     out = np.zeros((n_samples,), dtype=uintp)
 
@@ -368,7 +381,7 @@ def tree_apply_dense(tree, X):
         # Index of the leaf containing the sample
         idx_leaf = 0
         node = tree.nodes[idx_leaf]
-        # While node not a leaf
+        # While the node not a leaf
         while not node["is_leaf"]:
             if X[i, node["feature"]] <= node["bin_threshold"]:
                 idx_leaf = node["left_child"]
@@ -381,8 +394,23 @@ def tree_apply_dense(tree, X):
     return out
 
 
-@jit(float32[:, ::1](TreeType, uint8[::1, :]), nopython=True, nogil=True)
+@jit(
+    uintp[::1](TreeType, uint8[:, ::1]),
+    nopython=True, nogil=True
+)
 def tree_apply(tree, X):
+    """
+
+    Parameters
+    ----------
+    tree : TreeType
+        The tree
+    X
+
+    Returns
+    -------
+
+    """
     return tree_apply_dense(tree, X)
 
 
@@ -437,13 +465,14 @@ def tree_predict_aggregate(tree, X, step):
 
 
 @jit(
-    float32[:, ::1](TreeType, uint8[::1, :], boolean, float32),
+    float32[:, ::1](TreeType, uint8[:, ::1], boolean, float32),
     nopython=True,
     nogil=True,
     locals={"n_samples": uintp, "out": float32[:, ::1]},
 )
 def tree_predict_proba(tree, X, aggregation, step):
 
+    print("BLABLABLA")
     # Index of the leaves containing the samples in X (note that X has been binned by
     # the forest)
 
