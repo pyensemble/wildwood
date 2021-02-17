@@ -53,7 +53,7 @@ from ._utils import np_float32, np_uint8, np_size_t, np_ssize_t
 from ._node import NodeContext
 from ._splitting import TreeContext
 
-from ._tree import Tree, get_nodes, tree_predict
+from ._tree import Tree, get_nodes, tree_predict_proba
 
 
 # from ._tree import BestFirstTreeBuilder
@@ -602,7 +602,7 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
 
         # proba = self.tree_.predict(X)
 
-        proba = _tree_old.tree_predict(self.tree_, X)
+        proba = _tree_old.tree_predict_proba(self.tree_, X)
         n_samples = X.shape[0]
 
         # Classification
@@ -859,7 +859,7 @@ class TreeBinaryClassifier(ClassifierMixin, TreeBase):
         # proba = self.tree_.predict(X)
 
         # TODO: pas encore des proba mais juste des sums
-        proba = tree_predict(
+        proba = tree_predict_proba(
             self._tree, X, self._tree_context.aggregation, self._tree_context.step
         )
 

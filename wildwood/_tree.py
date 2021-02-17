@@ -2,14 +2,13 @@
 # License: BSD 3 clause
 
 """
-This contains all the data structures for holding tree data.
+This contains all the data structures for a tree.
 """
 
 from math import exp
 import numpy as np
 
 from numba import (
-    from_dtype,
     njit,
     jit,
     boolean,
@@ -19,27 +18,20 @@ from numba import (
     float32,
     void,
     optional,
-    generated_jit,
 )
 from numba.experimental import jitclass
 
-from ._utils import max_size_t, get_type, resize, resize2d, log_sum_2_exp
-
+from ._utils import get_type, resize, resize2d
 from ._node import node_type, node_dtype
-
-
-# TODO: on a vraiment besoin de tout ca dans un stack_record ?
 
 
 IS_FIRST = 1
 IS_NOT_FIRST = 0
 IS_LEFT = 1
 IS_NOT_LEFT = 0
-
 TREE_LEAF = intp(-1)
 TREE_UNDEFINED = intp(-2)
 
-# TODO: replace n_classes by pred_size ?
 
 tree_type = [
     # Number of features
@@ -50,52 +42,66 @@ tree_type = [
     ("max_depth", uintp),
     # Number of nodes in the tree
     ("node_count", uintp),
-    # ???
+    # Maximum number of nodes storable in the tree
     ("capacity", uintp),
     # A numpy array containing the nodes data
     ("nodes", node_type[::1]),
-    # This array contains values allowing to compute the prediction of each node
-    # Its shape is (n_nodes, n_outputs, max_n_classes)
-    # TODO: IMPORTANT a priori ca serait mieux ::1 sur le premier axe mais l'init
-    #  avec shape (0, ., .) foire dans ce cas avec numba
+    # The predictions of each node in the tree with shape (n_nodes, n_classes)
     ("y_pred", float32[:, ::1]),
 ]
 
 
-# TODO: pas sur que ca soit utile en fait values avec cette strategie histogramme ?
-
-
 @jitclass(tree_type)
 class Tree(object):
+    """A tree containing an array of nodes and an array for its predictions
+
+    Parameters
+    ----------
+    n_features : int
+        Number of input features
+
+    n_classes : int
+        Number of label classes
+
+    Attributes
+    ----------
+    n_features : int
+        Number of input features
+
+    n_classes :
+        Number of label classes
+
+    max_depth :
+        Maximum depth allowed in the tree (not used for now)
+
+    node_count :
+        Number of nodes in the tree
+
+    capacity :
+        Maximum number of nodes storable in the tree
+
+    nodes : ndarray
+        A numpy array containing the nodes data
+
+    y_pred : ndarray
+        The predictions of each node in the tree with shape (n_nodes, n_classes)
+    """
+
     def __init__(self, n_features, n_classes):
         self.n_features = n_features
         self.n_classes = n_classes
+        # TODO: is this useful ?
         self.max_depth = 0
         self.node_count = 0
         self.capacity = 0
-        # Both values and nodes arrays have zero on the first axis and are resized
-        # later when we know the capacity of the tree
-        # The array of nodes contained in the tree
+        # Both node and prediction arrays have zero on the first axis and are resized
+        # later when we know the initial capacity required for the tree
         self.nodes = np.empty(0, dtype=node_dtype)
-        # The array of y sums or counts for each node
         self.y_pred = np.empty((0, self.n_classes), dtype=float32)
 
 
+# Numba type for a Tree
 TreeType = get_type(Tree)
-
-
-# @njit
-# def print_tree(tree):
-#     s = "-" * 64 + "\n"
-#     s += "Tree("
-#     s += "n_features={n_features}".format(n_features=tree.n_features)
-#     s += ", n_classes={n_classes}".format(n_classes=tree.n_classes)
-#     s += ", capacity={capacity}".format(capacity=tree.capacity)
-#     s += ", node_count={node_count}".format(node_count=tree.node_count)
-#     s += ")"
-#     print(s)
-#     if tree.node_count > 0:
-#         print_nodes(tree)
 
 
 def get_nodes(tree):
@@ -212,6 +218,7 @@ def resize_tree(tree, capacity=None):
     ),
     nopython=True,
     nogil=True,
+    locals={"node_idx": uintp, "nodes": node_type[::1], "node": node_type},
 )
 def add_node_tree(
     tree,
@@ -233,7 +240,7 @@ def add_node_tree(
     end_valid,
     loss_valid,
 ):
-    """Adds a node in the tree
+    """Adds a node in the tree.
 
     Parameters
     ----------
@@ -260,6 +267,9 @@ def add_node_tree(
 
     bin_threshold : int
         Index of the bin threshold used to split the node
+
+    impurity : float
+        Impurity of the node. Used to avoid to split a "pure" node (with impurity=0).
 
     n_samples_train : int
         Number of training samples in the node
@@ -333,78 +343,50 @@ def add_node_tree(
         node["threshold"] = threshold
         node["bin_threshold"] = bin_threshold
 
-    tree.node_count += uintp(1)
-
+    tree.node_count += 1
     return node_idx
 
 
 # TODO: tous les trucs de prediction faut les faire a part comme dans pygbm,
 #  on y mettra dedans l'aggregation ? Dans un module _prediction separe
 
-
 # TODO: pas de jit car numba n'accepte pas l'option axis dans .take (a verifier) mais
 #  peut etre qu'on s'en fout en fait ? Et puis ca sera assez rapide
 
 
-@njit
-def tree_predict(tree, X, aggregation, step):
-    # Index of the leaves containing the samples in X (note that X has been binned by
-    # the forest)
-
-    if aggregation:
-        return tree_predict_aggregate(tree, X, step)
-    else:
-        idx_leaves = tree_apply(tree, X)
-        n_samples = X.shape[0]
-        # TODO: only binary classification right ?
-        out = np.empty((n_samples, 2), dtype=float32)
-        # Predictions given by each leaf node of the tree
-        y_pred = tree.y_pred
-        i = 0
-        # TODO: idx_leaves.shape[0] == n_samples
-        for i in range(n_samples):
-            idx_leaf = idx_leaves[i]
-            out[i] = y_pred[idx_leaf]
-
-        return out
-
-
-@njit
-def tree_apply(tree, X):
-    # TODO: on va supposer que X est deja binnee hein ?
-    return tree_apply_dense(tree, X)
-
-
-@njit
+@jit(
+    uintp[::1](TreeType, uint8[::1, :]),
+    nopython=True,
+    nogil=True,
+    locals={"n_samples": uintp, "out": uintp[:, ::1], "idx_leaf": uintp},
+)
 def tree_apply_dense(tree, X):
-    # TODO: X is assumed to be binned here
     n_samples = X.shape[0]
     out = np.zeros((n_samples,), dtype=uintp)
-    nodes = tree.nodes
 
     for i in range(n_samples):
         # Index of the leaf containing the sample
         idx_leaf = 0
-        node = nodes[idx_leaf]
+        node = tree.nodes[idx_leaf]
         # While node not a leaf
         while not node["is_leaf"]:
-            # ... and node.right_child != TREE_LEAF:
             if X[i, node["feature"]] <= node["bin_threshold"]:
                 idx_leaf = node["left_child"]
             else:
                 idx_leaf = node["right_child"]
-            node = nodes[idx_leaf]
+            node = tree.nodes[idx_leaf]
 
-        # out_ptr[i] = <SIZE_t>(node - tree.nodes)  # node offset
-        out[i] = uintp(idx_leaf)
+        out[i] = idx_leaf
 
     return out
 
 
-import numba
+@jit(float32[:, ::1](TreeType, uint8[::1, :]), nopython=True, nogil=True)
+def tree_apply(tree, X):
+    return tree_apply_dense(tree, X)
 
 
-@numba.jit(nopython=True, nogil=True, locals={"i": uintp, "idx_current": uintp})
+@jit(nopython=True, nogil=True, locals={"i": uintp, "idx_current": uintp})
 def tree_predict_aggregate(tree, X, step):
     n_samples = X.shape[0]
     n_classes = tree.n_classes
@@ -454,31 +436,30 @@ def tree_predict_aggregate(tree, X, step):
     return out
 
 
-# #
-# # @njit(void(get_type(TreeClassifier), float32[::1], float32[::1], boolean))
-# def tree_classifier_predict(tree, x_t, scores, use_aggregation):
-#     nodes = tree.nodes
-#     leaf = tree_get_leaf(tree, x_t)
-#     if not use_aggregation:
-#         node_classifier_predict(tree, leaf, scores)
-#         return
-#     current = leaf
-#     # Allocate once and for all
-#     pred_new = np.empty(tree.n_classes, float32)
-#     while True:
-#         # This test is useless ?
-#         if nodes.is_leaf[current]:
-#             node_classifier_predict(tree, current, scores)
-#         else:
-#             weight = nodes.weight[current]
-#             log_weight_tree = nodes.log_weight_tree[current]
-#             w = exp(weight - log_weight_tree)
-#             # Get the predictions of the current node
-#             node_classifier_predict(tree, current, pred_new)
-#             for c in range(tree.n_classes):
-#                 scores[c] = 0.5 * w * pred_new[c] + (1 - 0.5 * w) * scores[c]
-#         # Root must be update as well
-#         if current == 0:
-#             break
-#         # And now we go up
-#         current = nodes.parent[current]
+@jit(
+    float32[:, ::1](TreeType, uint8[::1, :], boolean, float32),
+    nopython=True,
+    nogil=True,
+    locals={"n_samples": uintp, "out": float32[:, ::1]},
+)
+def tree_predict_proba(tree, X, aggregation, step):
+
+    # Index of the leaves containing the samples in X (note that X has been binned by
+    # the forest)
+
+    if aggregation:
+        return tree_predict_aggregate(tree, X, step)
+    else:
+        idx_leaves = tree_apply(tree, X)
+        n_samples = X.shape[0]
+        # TODO: only binary classification right ?
+        out = np.empty((n_samples, 2), dtype=float32)
+        # Predictions given by each leaf node of the tree
+        y_pred = tree.y_pred
+        i = 0
+        # TODO: idx_leaves.shape[0] == n_samples
+        for i in range(n_samples):
+            idx_leaf = idx_leaves[i]
+            out[i] = y_pred[idx_leaf]
+
+        return out
