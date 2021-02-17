@@ -34,8 +34,8 @@ np.set_printoptions(precision=2)
 # logging.info("Spent {time} compiling.".format(time=toc - tic))
 
 
-n_samples = 2000
-# n_samples = 2_000_000
+# n_samples = 2000
+n_samples = 2_000_000
 
 # n_samples = 10
 random_state = 42

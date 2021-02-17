@@ -2,14 +2,14 @@
 # License: BSD 3 clause
 
 """
-This contains all the data structures for a tree.
+This contains all the data structures for a tree together with prediction functions
+of a tree.
 """
 
 from math import exp
 import numpy as np
 
 from numba import (
-    njit,
     jit,
     boolean,
     uint8,

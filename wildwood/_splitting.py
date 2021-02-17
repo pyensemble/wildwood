@@ -9,26 +9,39 @@ a node.
 import numpy as np
 from math import log
 
-from ._utils import (
+from numba import (
+    jit,
     njit,
-    jitclass,
-    nb_ssize_t,
-    nb_size_t,
-    np_ssize_t,
-    np_size_t,
-    nb_bool,
-    np_uint8,
-    nb_uint8,
-    np_size_t,
-    nb_size_t,
-    np_uint32,
-    nb_uint32,
-    np_float32,
-    nb_float32,
-    np_uint8,
-    nb_uint8,
-    infinity,
+    boolean,
+    uint8,
+    intp,
+    uintp,
+    float32,
+    void,
+    optional,
 )
+from numba.experimental import jitclass
+
+# from ._utils import (
+#     njit,
+#     jitclass,
+#     nb_ssize_t,
+#     nb_size_t,
+#     np_ssize_t,
+#     np_size_t,
+#     nb_bool,
+#     np_uint8,
+#     nb_uint8,
+#     np_size_t,
+#     nb_size_t,
+#     np_uint32,
+#     nb_uint32,
+#     np_float32,
+#     nb_float32,
+#     np_uint8,
+#     nb_uint8,
+#     infinity,
+# )
 
 from ._impurity import gini_childs, information_gain_proxy, information_gain
 
@@ -38,22 +51,22 @@ from ._utils import get_type
 # TODO: mettre aussi weighted_samples_left
 
 spec_split_info = [
-    ("found_split", nb_bool),
-    ("gain_proxy", nb_float32),
-    ("feature", nb_size_t),
-    ("bin", nb_uint8),
-    ("n_samples_train_left", nb_size_t),
-    ("n_samples_train_right", nb_size_t),
-    ("w_samples_train_left", nb_float32),
-    ("w_samples_train_right", nb_float32),
-    ("n_samples_valid_left", nb_size_t),
-    ("n_samples_valid_right", nb_size_t),
-    ("w_samples_valid_left", nb_float32),
-    ("w_samples_valid_right", nb_float32),
-    ("y_sum_left", nb_float32[::1]),
-    ("y_sum_right", nb_float32[::1]),
-    ("impurity_left", nb_float32),
-    ("impurity_right", nb_float32),
+    ("found_split", boolean),
+    ("gain_proxy", float32),
+    ("feature", uintp),
+    ("bin", uint8),
+    ("n_samples_train_left", uintp),
+    ("n_samples_train_right", uintp),
+    ("w_samples_train_left", float32),
+    ("w_samples_train_right", float32),
+    ("n_samples_valid_left", uintp),
+    ("n_samples_valid_right", uintp),
+    ("w_samples_valid_left", float32),
+    ("w_samples_valid_right", float32),
+    ("y_sum_left", float32[::1]),
+    ("y_sum_right", float32[::1]),
+    ("impurity_left", float32),
+    ("impurity_right", float32),
 ]
 
 
@@ -64,22 +77,19 @@ class SplitInfo(object):
 
     def __init__(self, n_classes):
         self.found_split = False
-        self.gain_proxy = -infinity
-        self.feature = nb_size_t(0)
-        self.bin = nb_uint8(0)
-        self.n_samples_train_left = nb_size_t(0)
-        self.n_samples_train_right = nb_size_t(0)
-        self.w_samples_train_left = nb_float32(0.0)
-        self.w_samples_train_right = nb_float32(0.0)
-
-        self.n_samples_valid_left = nb_size_t(0)
-        self.n_samples_valid_right = nb_size_t(0)
-        self.w_samples_valid_left = nb_float32(0.0)
-        self.w_samples_valid_right = nb_float32(0.0)
-
-        self.y_sum_left = np.empty(n_classes, dtype=np_float32)
-        self.y_sum_right = np.empty(n_classes, dtype=np_float32)
-
+        self.gain_proxy = -np.inf
+        self.feature = 0
+        self.bin = 0
+        self.n_samples_train_left = 0
+        self.n_samples_train_right = 0
+        self.w_samples_train_left = 0.0
+        self.w_samples_train_right = 0.0
+        self.n_samples_valid_left = 0
+        self.n_samples_valid_right = 0
+        self.w_samples_valid_left = 0.0
+        self.w_samples_valid_right = 0.0
+        self.y_sum_left = np.empty(n_classes, dtype=np.float32)
+        self.y_sum_right = np.empty(n_classes, dtype=np.float32)
         self.impurity_left = 0.0
         self.impurity_right = 0.0
 
@@ -126,42 +136,42 @@ def copy_split(from_split, to_split):
 # training and validation indices, etc.
 spec_tree_context = [
     # The binned matrix of features
-    ("X", nb_uint8[::1, :]),
+    ("X", uint8[::1, :]),
     # The vector of labels
-    ("y", nb_float32[::1]),
+    ("y", float32[::1]),
     # Sample weights
-    ("sample_weights", nb_float32[::1]),
+    ("sample_weights", float32[::1]),
     # Training sample indices for tree growth
-    ("train_indices", nb_size_t[::1]),
+    ("train_indices", uintp[::1]),
     # Validation sample indices for tree aggregation
-    ("valid_indices", nb_size_t[::1]),
+    ("valid_indices", uintp[::1]),
     # Total sample size
-    ("n_samples", nb_size_t),
+    ("n_samples", uintp),
     # Training sample size
-    ("n_samples_train", nb_size_t),
+    ("n_samples_train", uintp),
     # Validation sample size
-    ("n_samples_valid", nb_size_t),
+    ("n_samples_valid", uintp),
     # The total number of features
-    ("n_features", nb_size_t),
+    ("n_features", uintp),
     # The number of classes
-    ("n_classes", nb_size_t),
+    ("n_classes", uintp),
     # Maximum number of bins
-    ("max_bins", nb_ssize_t),
+    ("max_bins", intp),
     # Actual number of bins used for each feature
-    ("n_bins_per_feature", nb_ssize_t[::1]),
+    ("n_bins_per_feature", intp[::1]),
     # Maximum number of features to try for splitting
-    ("max_features", nb_size_t),
+    ("max_features", uintp),
     # TODO: only for classification
     # Dirichlet parameter
-    ("aggregation", nb_bool),
+    ("aggregation", boolean),
     # Dirichlet parameter
-    ("dirichlet", nb_float32),
+    ("dirichlet", float32),
     # Step-size used in the aggregation weights
-    ("step", nb_float32),
-    ("partition_train", nb_size_t[::1]),
-    ("partition_valid", nb_size_t[::1]),
-    ("left_buffer", nb_size_t[::1]),
-    ("right_buffer", nb_size_t[::1]),
+    ("step", float32),
+    ("partition_train", uintp[::1]),
+    ("partition_valid", uintp[::1]),
+    ("left_buffer", uintp[::1]),
+    ("right_buffer", uintp[::1]),
 ]
 
 # TODO: a mettre dans _tree
@@ -208,8 +218,8 @@ class TreeContext:
         self.n_samples_valid = valid_indices.shape[0]
 
         # Two buffers used in the split_indices function
-        self.left_buffer = np.empty(n_samples, dtype=np_size_t)
-        self.right_buffer = np.empty(n_samples, dtype=np_size_t)
+        self.left_buffer = np.empty(n_samples, dtype=uintp)
+        self.right_buffer = np.empty(n_samples, dtype=uintp)
 
 
 @njit
@@ -226,7 +236,7 @@ def find_node_split(tree_context, node_context):
 
     # best_feature = 0
     # best_bin = 0
-    best_gain_proxy = -infinity
+    best_gain_proxy = -np.inf
 
     # Ne les initialiser qu'une seule fois... donc en dehors d'ici ? Dans le
     # local_context ?
@@ -302,14 +312,14 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
     # TODO: faudra que les vecteurs left et right soient dans le local_context
     # Counts and sums on left are zero, since we go from left to right, while counts
     # and sums on the right contain everything
-    n_samples_train_left = nb_size_t(0)
+    n_samples_train_left = uintp(0)
     n_samples_train_right = n_samples_train
     # n_samples_valid_left = nb_size_t(0)
     # n_samples_valid_right = n_samples_valid
 
-    w_samples_train_left = nb_float32(0)
+    w_samples_train_left = float32(0)
     w_samples_train_right = w_samples_train
-    w_samples_valid_left = nb_float32(0)
+    w_samples_valid_left = float32(0)
     w_samples_valid_right = w_samples_valid
 
     # print("w_samples_train_left:", w_samples_train_left)
@@ -317,12 +327,12 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
     # print("w_samples_valid_left:", w_samples_valid_left)
     # print("w_samples_valid_right:", w_samples_valid_right)
 
-    y_sum_left = np.zeros(n_classes, dtype=np_float32)
-    y_sum_right = np.empty(n_classes, dtype=np_float32)
+    y_sum_left = np.zeros(n_classes, dtype=np.float32)
+    y_sum_right = np.empty(n_classes, dtype=np.float32)
     y_sum_right[:] = y_sum_in_bins.sum(axis=0)
 
-    best_bin = nb_uint8(0)
-    best_gain_proxy = -infinity
+    best_bin = uint8(0)
+    best_gain_proxy = -np.inf
 
     # TODO: right to left also for features with missing values
     # TODO: this works only for ordered features... special sorting for categorical
@@ -482,15 +492,15 @@ def split_indices(tree_context, split, start_train, end_train, start_valid, end_
     #   the right child
 
     # TODO: c'est bourrin et peut etre pas optimal mais ca suffira pour l'instant
-    n_samples_train_left = nb_size_t(0)
-    n_samples_train_right = nb_size_t(0)
+    n_samples_train_left = uintp(0)
+    n_samples_train_right = uintp(0)
     for i in partition_train[start_train:end_train]:
         if Xf[i] <= bin:
             left_buffer[n_samples_train_left] = i
-            n_samples_train_left += nb_size_t(1)
+            n_samples_train_left += uintp(1)
         else:
             right_buffer[n_samples_train_right] = i
-            n_samples_train_right += nb_size_t(1)
+            n_samples_train_right += uintp(1)
 
     # print("start_train: ", start_train, ", n_samples_train_left: ",
     #       n_samples_train_left, ", n_samples_train_right: ", n_samples_train_right,
@@ -509,15 +519,15 @@ def split_indices(tree_context, split, start_train, end_train, start_valid, end_
     # We must have start_train + n_samples_train_left + n_samples_train_right ==
     # end_train
 
-    n_samples_valid_left = nb_size_t(0)
-    n_samples_valid_right = nb_size_t(0)
+    n_samples_valid_left = uintp(0)
+    n_samples_valid_right = uintp(0)
     for i in partition_valid[start_valid:end_valid]:
         if Xf[i] <= bin:
             left_buffer[n_samples_valid_left] = i
-            n_samples_valid_left += nb_size_t(1)
+            n_samples_valid_left += uintp(1)
         else:
             right_buffer[n_samples_valid_right] = i
-            n_samples_valid_right += nb_size_t(1)
+            n_samples_valid_right += uintp(1)
 
     pos_valid = start_valid + n_samples_valid_left
     partition_valid[start_valid:pos_valid] = left_buffer[:n_samples_valid_left]
