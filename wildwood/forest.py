@@ -246,7 +246,8 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
 
     step : float, default=1
         Step-size for the aggregation weights. Default is 1 for classification with
-        the log-loss, which is usually the best choice.
+        the log-loss, which is usually the best choice. A larger value will lead to
+        aggregation weights with the best validation loss.
 
     aggregation : bool, default=True
         Controls if aggregation is used in the trees. It is highly recommended to

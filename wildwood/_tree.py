@@ -347,119 +347,69 @@ def add_node_tree(
     return node_idx
 
 
-# TODO: tous les trucs de prediction faut les faire a part comme dans pygbm,
-#  on y mettra dedans l'aggregation ? Dans un module _prediction separe
-
-# TODO: pas de jit car numba n'accepte pas l'option axis dans .take (a verifier) mais
-#  peut etre qu'on s'en fout en fait ? Et puis ca sera assez rapide
-
-
 @jit(
-    # uintp[::1](TreeType, uint8[::1, :]),
+    uintp(node_type[::1], uint8[::1]),
     nopython=True,
     nogil=True,
-    locals={"n_samples": uintp, "out": uintp[::1], "idx_leaf": uintp},
+    locals={"idx_leaf": uintp, "node": node_type},
 )
-def tree_apply_dense(tree, X):
-    """
+def find_leaf(nodes, xi):
+    """Find the leaf index containing the given features vector.
 
     Parameters
     ----------
-    tree : TreeType
-        The tree
+    nodes : ndarray
+        Array of nodes with shape (n_nodes,) with node_dtype dtype
 
-    X
+    xi : ndarray
+        Input features vector of shape (n_features,) with uint8 dtype
 
     Returns
     -------
-
+    output : uintp
+        Index of the leaf node containing the input features vector
     """
-    n_samples = X.shape[0]
-    out = np.zeros((n_samples,), dtype=uintp)
+    idx_leaf = 0
+    node = nodes[idx_leaf]
+    while not node["is_leaf"]:
+        if xi[node["feature"]] <= node["bin_threshold"]:
+            idx_leaf = node["left_child"]
+        else:
+            idx_leaf = node["right_child"]
+        node = nodes[idx_leaf]
 
-    for i in range(n_samples):
-        # Index of the leaf containing the sample
-        idx_leaf = 0
-        node = tree.nodes[idx_leaf]
-        # While the node not a leaf
-        while not node["is_leaf"]:
-            if X[i, node["feature"]] <= node["bin_threshold"]:
-                idx_leaf = node["left_child"]
-            else:
-                idx_leaf = node["right_child"]
-            node = tree.nodes[idx_leaf]
-
-        out[i] = idx_leaf
-
-    return out
+    return idx_leaf
 
 
 @jit(
     uintp[::1](TreeType, uint8[:, ::1]),
-    nopython=True, nogil=True
+    nopython=True,
+    nogil=True,
+    locals={"n_samples": uintp, "out": uintp[::1], "i": uintp, "idx_leaf": uintp},
 )
 def tree_apply(tree, X):
-    """
+    """Finds the indexes of the leaves containing each input vector of features (rows
+    of the input matrix of features)
 
     Parameters
     ----------
     tree : TreeType
         The tree
-    X
+
+    X : ndarray
+        Input matrix of features with shape (n_samples, n_features) and uint8 dtype
 
     Returns
     -------
-
+    output : ndarray
+        An array of shape (n_samples,) and uintp dtype containing the indexes of the
+        leaves containing each input vector of features
     """
-    return tree_apply_dense(tree, X)
-
-
-@jit(nopython=True, nogil=True, locals={"i": uintp, "idx_current": uintp})
-def tree_predict_aggregate(tree, X, step):
     n_samples = X.shape[0]
-    n_classes = tree.n_classes
-    nodes = tree.nodes
-    y_pred = tree.y_pred
-    out = np.zeros((n_samples, n_classes), dtype=float32)
-
+    out = np.zeros((n_samples,), dtype=uintp)
     for i in range(n_samples):
-        # print(i)
-        # Index of the leaf containing the sample
-        # idx_current = nb_size_t(0)
-        idx_current = 0
-        node = nodes[idx_current]
-        # While node not a leaf
-        while not node["is_leaf"]:
-            if X[i, node["feature"]] <= node["bin_threshold"]:
-                idx_current = node["left_child"]
-            else:
-                idx_current = node["right_child"]
-            node = nodes[idx_current]
-        # Now idx_current is the index of the leaf node containing X[i]
-
-        # The aggregated prediction of the tree is saved in out[i]
-        # y_pred_tree = out[i].view()
-        # We first put the predictions of the leaf
-        # print(y_pred_tree.shape, y_pred[idx_current].shape)
-        # print(idx_current, type(idx_current))
-        # print(i, type(i))
-        out[i, :] = y_pred[idx_current]
-        # Go up in the tree
-        idx_current = node["parent"]
-
-        while idx_current != 0:
-            # Get the current node
-            node = nodes[idx_current]
-            # The prediction given by the current node
-            node_pred = y_pred[idx_current]
-            # The aggregation weights of the current node
-            log_weight = step * node["loss_valid"]
-            log_weight_tree = node["log_weight_tree"]
-            w = exp(log_weight - log_weight_tree)
-            # Apply the dark magic recursive formula from CTW
-            out[i, :] = 0.5 * w * node_pred + (1 - 0.5 * w) * out[i, :]
-            # Go up in the tree
-            idx_current = node["parent"]
+        idx_leaf = find_leaf(tree.nodes, X[i])
+        out[i] = idx_leaf
 
     return out
 
@@ -468,27 +418,73 @@ def tree_predict_aggregate(tree, X, step):
     float32[:, ::1](TreeType, uint8[:, ::1], boolean, float32),
     nopython=True,
     nogil=True,
-    locals={"n_samples": uintp, "out": float32[:, ::1]},
+    locals={
+        "n_samples": uintp,
+        "n_classes": uintp,
+        "nodes": node_type[::1],
+        "y_pred": float32[:, ::1],
+        "out": float32[:, ::1],
+        "i": uintp,
+        "idx_current": uintp,
+        "node": node_type,
+    },
 )
 def tree_predict_proba(tree, X, aggregation, step):
+    """Predicts class probabilities for the input matrix of features.
 
-    print("BLABLABLA")
-    # Index of the leaves containing the samples in X (note that X has been binned by
-    # the forest)
+    Parameters
+    ----------
+    tree : TreeType
+        The tree
 
-    if aggregation:
-        return tree_predict_aggregate(tree, X, step)
-    else:
-        idx_leaves = tree_apply(tree, X)
-        n_samples = X.shape[0]
-        # TODO: only binary classification right ?
-        out = np.empty((n_samples, 2), dtype=float32)
-        # Predictions given by each leaf node of the tree
-        y_pred = tree.y_pred
-        i = 0
-        # TODO: idx_leaves.shape[0] == n_samples
-        for i in range(n_samples):
-            idx_leaf = idx_leaves[i]
-            out[i] = y_pred[idx_leaf]
+    X : ndarray
+        Input matrix of features with shape (n_samples, n_features) and uint8 dtype
 
-        return out
+    aggregation : bool
+        If True we predict the class probabilities using the aggregation algorithm.
+        Otherwise, we simply use the prediction given by the leaf node containing the
+        input features.
+
+    step : float
+        Step-size used for the computation of the aggregation weights. Used only if
+        aggregation=True
+
+    Returns
+    -------
+    output : ndarray
+        An array of shape (n_samples, n_classes) and float32 dtype containing the
+        predicted class probabilities
+    """
+    n_samples = X.shape[0]
+    n_classes = tree.n_classes
+    nodes = tree.nodes
+    y_pred = tree.y_pred
+    out = np.zeros((n_samples, n_classes), dtype=float32)
+    for i in range(n_samples):
+        idx_current = find_leaf(nodes, X[i])
+        # Array of predictions for sample i
+        pred_i = out[i]
+        # First, we get the prediction of the leaf
+        pred_i[:] = y_pred[idx_current]
+        if aggregation:
+            # Then, we go up in the tree
+            idx_current = nodes[idx_current]["parent"]
+            # Now, we follow the path going up to the tree to compute the aggregated
+            # prediction
+            while idx_current != 0:
+                # Get the current node
+                node = nodes[idx_current]
+                # Get the prediction given by the current node
+                node_pred = y_pred[idx_current]
+                # Get the aggregation weights of the current node
+                log_weight = step * node["loss_valid"]
+                # Get the aggregation weight of the subtree rooted at the current node
+                log_weight_tree = node["log_weight_tree"]
+                # Compute the aggregation weight for this subtree
+                w = exp(log_weight - log_weight_tree)
+                # Apply the context tree weighting dark magic
+                pred_i[:] = 0.5 * w * node_pred + (1 - 0.5 * w) * pred_i
+                # Go up in the tree
+                idx_current = node["parent"]
+
+    return out
