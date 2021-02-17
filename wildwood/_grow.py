@@ -17,7 +17,7 @@ from numba.experimental import jitclass
 
 from ._node import NodeContext, compute_node_context, node_type
 
-from ._splitting import (
+from ._split import (
     find_node_split,
     split_indices,
 )

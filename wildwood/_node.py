@@ -12,7 +12,7 @@ from numba import from_dtype, jit, uint8, intp, uintp, float32, void
 from numba.experimental import jitclass
 
 from ._utils import get_type
-from ._splitting import TreeContextType
+from ._tree_context import TreeContextType
 
 
 # TODO: Some things in the node_tree could be removed

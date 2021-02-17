@@ -51,7 +51,7 @@ from ._grow import grow
 from ._utils import np_float32, np_uint8, np_size_t, np_ssize_t
 
 from ._node import NodeContext
-from ._splitting import TreeContext
+from ._tree_context import TreeContext
 
 from ._tree import Tree, get_nodes, tree_predict_proba
 

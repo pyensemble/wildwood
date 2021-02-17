@@ -9,6 +9,11 @@
 
 # TODO
 
+- J'en suis a nettoyer _split, aller voir ICI ICI ICI
+
+- Ensuite nettoyer _tree_context.py
+
+
 - La loss de validation n'est pas divisee par le nombre de samples...
 
 - Finish to clean the _grow.py module
