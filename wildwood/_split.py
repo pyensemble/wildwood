@@ -275,7 +275,7 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
         w_samples_train_right -= w_samples_train_in_bins[bin]
         w_samples_valid_right -= w_samples_valid_in_bins[bin]
 
-        # TODO: on peut pas mettre ca apres les tests ?
+        # Update the label sums on the left and write in the same fashion
         y_sum_left += y_sum_in_bins[bin]
         y_sum_right -= y_sum_in_bins[bin]
 
@@ -290,8 +290,7 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
         if (w_samples_train_right <= 0.0) or (w_samples_valid_right <= 0.0):
             break
 
-        # Compute the information gain proxy
-
+        # TODO: we shall pass the child impurity function to handle different impurities
         # Get the impurities of the left and right childs
         impurity_left, impurity_right = gini_childs(
             n_classes,
@@ -300,19 +299,18 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
             y_sum_left,
             y_sum_right,
         )
-
+        # And compute the information gain proxy
         gain_proxy = information_gain_proxy(
             impurity_left, impurity_right, w_samples_train_left, w_samples_train_right,
         )
 
         if gain_proxy > best_gain_proxy:
-            # We've found a better split
+            # We've found a split better than the current one, so we save it
             best_gain_proxy = gain_proxy
             best_split.found_split = True
             best_split.gain_proxy = gain_proxy
             best_split.feature = feature
             best_split.bin_threshold = bin
-
             best_split.impurity_left = impurity_left
             best_split.impurity_right = impurity_right
             best_split.n_samples_train_left = n_samples_train_left
@@ -325,24 +323,36 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
             pass
 
 
-@jit(SplitType(TreeContextType, NodeContextType), nopython=True, nogil=True)
+@jit(
+    SplitType(TreeContextType, NodeContextType),
+    nopython=True,
+    nogil=True,
+    locals={
+        "features": uintp[::1],
+        "best_gain_proxy": float32,
+        "best_split": SplitType,
+        "candidate_split": SplitType,
+        "feature": uintp,
+    },
+)
 def find_node_split(tree_context, node_context):
-    # print("================ Begin find_node_split ================")
+    """
+
+    Parameters
+    ----------
+    tree_context
+    node_context
+
+    Returns
+    -------
+
+    """
+    # Get the set of features to try out (we shall use columns subsampling)
     features = node_context.features
     # Loop over the possible features
-
-    # TODO: a quoi ca sert vraiment de recuperer plein de split_info ?
-    # # Pre-allocate the results datastructure to be able to use prange:
-    # # numba jitclass do not seem to properly support default values for kwargs.
-    # split_infos = [SplitInfo(-1., 0, 0, 0., 0., 0., 0., 0, 0)
-    #                for i in range(context.n_features)]
-
-    # best_feature = 0
-    # best_bin = 0
     best_gain_proxy = -np.inf
 
-    # Ne les initialiser qu'une seule fois... donc en dehors d'ici ? Dans le
-    # local_context ?
+    # TODO: we should initialize these just once, in the node_context ?
     best_split = Split(tree_context.n_classes)
     candidate_split = Split(tree_context.n_classes)
 
@@ -351,12 +361,6 @@ def find_node_split(tree_context, node_context):
         find_best_split_along_feature(
             tree_context, node_context, feature, candidate_split
         )
-
-        # print("For feature: ", feature, " found a best split")
-        # print("found_split:", candidate_split.found_split)
-        # print("bin:", candidate_split.bin)
-        # print("gain_proxy:", candidate_split.gain_proxy)
-
         # If we found a candidate split along the feature
         if candidate_split.found_split:
             # And if it's better than the current one
@@ -365,14 +369,8 @@ def find_node_split(tree_context, node_context):
                 copy_split(candidate_split, best_split)
                 best_gain_proxy = candidate_split.gain_proxy
 
-        # exit(0)
-
-    # TODO: ici faut calculer le vrai gain et le mettre dans le best split ?
-
-    # print("Best split is feature: ", best_split.feature,
-    #       ", bin:", best_split.bin, "gain proxy: ", best_split.gain_proxy)
-    #
-    # print("================ End   find_node_split ================")
+    # TODO: here compute the true information gain and save it somewhere ? Why is it
+    #  useful ?
 
     return best_split
 
