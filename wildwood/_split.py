@@ -260,14 +260,8 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
     y_sum_right = np.empty(n_classes, dtype=np.float32)
     y_sum_right[:] = y_sum_in_bins.sum(axis=0)
 
+    # The best gain proxy seen so far
     best_gain_proxy = -np.inf
-
-    # TODO: faut aussi rejeter un split qui a weighted_n_samples_valid_left ou
-    #  weighted_n_samples_valid_right a 0 verifier
-    #  que le
-    #  nombre de
-    #  noeuds
-
     # Did we find a split ? Not for now
     best_split.found_split = False
 
