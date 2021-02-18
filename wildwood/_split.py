@@ -27,8 +27,6 @@ from ._impurity import gini_childs, information_gain_proxy, information_gain
 from ._utils import get_type
 
 
-# TODO: mettre aussi weighted_samples_left
-
 split_type = [
     # True if we found a split, False otherwise
     ("found_split", boolean),
@@ -179,6 +177,13 @@ def copy_split(from_split, to_split):
     to_split.y_sum_right[:] = from_split.y_sum_right
 
 
+# TODO: We do not handle missing values yet: it will require a right to left also for
+#  features with missing values
+
+# TODO: For now, find_split works only for ordered features... we'll need to
+#  code a special sorting for categorical variables
+
+
 @jit(
     void(TreeContextType, NodeContextType, uintp, SplitType),
     nopython=True,
@@ -188,65 +193,74 @@ def copy_split(from_split, to_split):
         "n_bins": uint8,
         "n_samples_train": uintp,
         "w_samples_train": float32,
-        "n_samples_valid": uintp,
         "w_samples_valid": float32,
-        # ICI ICI ICI
+        "w_samples_train_in_bins": float32[::1],
+        "w_samples_valid_in_bins": float32[::1],
+        # TODO: put back this
+        # "y_sum_in_bins": float32[::1],
+        "n_samples_train_left": uintp,
+        "n_samples_train_right": uintp,
+        "w_samples_train_left": float32,
+        "w_samples_train_right": float32,
+        "w_samples_valid_left": float32,
+        "w_samples_valid_right": float32,
+        "y_sum_left": float32[::1],
+        "y_sum_right": float32[::1],
+        "best_gain_proxy": float32,
     },
 )
 def find_best_split_along_feature(tree_context, node_context, feature, best_split):
-    """
+    """Finds the best split (best bin_threshold) for a feature. If no split can be
+    found (this happens when we can't find a split with a large enough weighted
+    number of training and validation samples in the left and right childs) we simply
+    set best_split.found_split to False).
 
     Parameters
     ----------
-    tree_context
-    node_context
-    feature
-    best_split
+    tree_context : TreeContextType
+        The tree context which contains all the data about the tree that is useful to
+        find a split
 
-    Returns
-    -------
+    node_context : NodeContextType
+        The node context which contains all the data about the node required to find
+        a best split for it
 
+    feature : uint
+        The index of the feature for which we want to find a split
+
+    best_split : SplitType
+        Data about the best split found for the feature
     """
-    # TODO: We shall use the correct number of bins for each feature
-    # n_bins = context.n_bins_per_feature[feature]
-
+    # TODO: We shall use the correct number of bins for each feature (for categorical
+    #  features with less than 256 modalities for instance)
     n_classes = tree_context.n_classes
     n_bins = tree_context.max_bins
 
     n_samples_train = node_context.n_samples_train
     w_samples_train = node_context.w_samples_train
-    n_samples_valid = node_context.n_samples_valid
     w_samples_valid = node_context.w_samples_valid
     # Weighed number of training samples in each bin for the feature
-    # ICI ICI ICI
     w_samples_train_in_bins = node_context.w_samples_train_in_bins[feature]
     # Weighted number of validation samples in each bin for the feature
     w_samples_valid_in_bins = node_context.w_samples_valid_in_bins[feature]
     # Get the sum of labels (counts) in each bin for the feature
     y_sum_in_bins = node_context.y_sum[feature]
 
-    # TODO: faudra que les vecteurs left et right soient dans le local_context
-    # Counts and sums on left are zero, since we go from left to right, while counts
-    # and sums on the right contain everything
-    n_samples_train_left = uintp(0)
+    # Counts and sums on the left are zero, since we go from left to right, while
+    # counts and sums on the right contain everything
+    n_samples_train_left = 0
     n_samples_train_right = n_samples_train
-
-    w_samples_train_left = float32(0)
+    w_samples_train_left = 0.0
     w_samples_train_right = w_samples_train
-    w_samples_valid_left = float32(0)
+    w_samples_valid_left = 0
     w_samples_valid_right = w_samples_valid
-
+    # TODO: we should allocate these vectors in the tree_context, but the benefit should
+    #  be negligible
     y_sum_left = np.zeros(n_classes, dtype=np.float32)
     y_sum_right = np.empty(n_classes, dtype=np.float32)
     y_sum_right[:] = y_sum_in_bins.sum(axis=0)
 
-    best_bin = uint8(0)
     best_gain_proxy = -np.inf
-
-    # TODO: right to left also for features with missing values
-    # TODO: this works only for ordered features... special sorting for categorical
-    # We go from left to right and compute the information gain proxy of all possible
-    # splits
 
     # TODO: faut aussi rejeter un split qui a weighted_n_samples_valid_left ou
     #  weighted_n_samples_valid_right a 0 verifier
@@ -254,9 +268,11 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
     #  nombre de
     #  noeuds
 
-    # Did we find a split ?
+    # Did we find a split ? Not for now
     best_split.found_split = False
 
+    # We go from left to right and compute the information gain proxy of all possible
+    # splits in order to find the best one
     for bin in range(n_bins):
         # On the left we accumulate the counts
         w_samples_train_left += w_samples_train_in_bins[bin]
