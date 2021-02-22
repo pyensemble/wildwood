@@ -319,8 +319,6 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
             best_split.w_samples_train_right = w_samples_train_right
             best_split.y_sum_left[:] = y_sum_left
             best_split.y_sum_right[:] = y_sum_right
-        else:
-            pass
 
 
 @jit(
@@ -336,26 +334,33 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
     },
 )
 def find_node_split(tree_context, node_context):
-    """
+    """Finds the best split (best bin_threshold) given the node context.
+    If no split can be found (this happens when we can't find a split with a large
+    enough weighted number of training and validation samples in the left and right
+    childs) we simply set best_split.found_split to False).
 
     Parameters
     ----------
-    tree_context
-    node_context
+    tree_context : TreeContextType
+        The tree context which contains all the data about the tree that is useful to
+        find a split
+
+    node_context : NodeContextType
+        The node context which contains all the data about the node required to find
+        a best split for it
 
     Returns
     -------
-
+    best_split : SplitType
+        Data about the best split found.
     """
     # Get the set of features to try out (we shall use columns subsampling)
     features = node_context.features
     # Loop over the possible features
     best_gain_proxy = -np.inf
-
     # TODO: we should initialize these just once, in the node_context ?
     best_split = Split(tree_context.n_classes)
     candidate_split = Split(tree_context.n_classes)
-
     for feature in features:
         # Compute the best bin and gain proxy obtained for the feature
         find_best_split_along_feature(
@@ -369,9 +374,8 @@ def find_node_split(tree_context, node_context):
                 copy_split(candidate_split, best_split)
                 best_gain_proxy = candidate_split.gain_proxy
 
-    # TODO: here compute the true information gain and save it somewhere ? Why is it
-    #  useful ?
-
+    # TODO: Compute the true information gain and save it somewhere ? But it's only
+    #  useful for root ?
     return best_split
 
 
