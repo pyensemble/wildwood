@@ -18,6 +18,7 @@ from numba import (
     void,
     optional,
 )
+from numba.types import Tuple
 from numba.experimental import jitclass
 
 from ._node import NodeContextType
@@ -379,62 +380,105 @@ def find_node_split(tree_context, node_context):
     return best_split
 
 
-@njit
+@jit(
+    Tuple((uintp, uintp))(TreeContextType, SplitType, uintp, uintp, uintp, uintp),
+    nopython=True,
+    nogil=True,
+    locals={
+        "feature": uintp,
+        "bin_threshold": uint8,
+        "Xf": uint8[::1],
+        "left_buffer": uintp[::1],
+        "right_buffer": uintp[::1],
+        "partition_train": uintp[::1],
+        "partition_valid": uintp[::1],
+        "n_samples_train_left": uintp,
+        "n_samples_train_right": uintp,
+        "n_samples_valid_left": uintp,
+        "n_samples_valid_right": uintp,
+        "pos_train": uintp,
+        "pos_valid": uintp
+    },
+)
 def split_indices(tree_context, split, start_train, end_train, start_valid, end_valid):
+    """This functions updates both partition_train, partition_valid, pos_train,
+    pos_valid so that the following is satisfied:
 
-    # The feature and bin used for this split
+    - partition_train[start_train:pos_train] contains the training sample indices of
+      the left child
+    - partition_train[pos_train:end_train] contains the training sample indices of
+      the right child
+    - partition_valid[start_valid:pos_valid] contains the validation sample indices
+      of the left child
+    - partition_valid[pos_valid:end_valid] contains the validation sample indices of
+      the right child
+
+    Parameters
+    ----------
+    tree_context : TreeContextType
+        The tree context which contains all the data about the tree that is useful to
+        find a split
+
+    split : SplitType
+        Data about the best split found for the node
+
+    start_train : int
+        Index of the first training sample in the node. We have that
+        partition_train[start_train:end_train] contains the indexes of the node's
+        training samples
+
+    end_train : int
+        End-index of the slice containing the node's training samples indexes
+
+    start_valid : int
+        Index of the first validation (out-of-the-bag) sample in the node. We have
+        that partition_valid[start_valid:end_valid] contains the indexes of the
+        node's validation samples
+
+    end_valid : int
+        End-index of the slice containing the node's validation samples indexes
+
+    Returns
+    -------
+    output : tuple
+        A tuple with two elements containing:
+
+        - pos_train : int
+            The index such that partition_train[start_train:pos_train] contains the
+            training sample indices of the left child and
+            partition_train[pos_train:end_train] contains the training sample indices of
+            the right child
+        - pos_train : int
+            The index such that partition_valid[start_valid:pos_valid] contains the
+            validation sample indices of the left child and
+            partition_valid[pos_valid:end_valid] contains the validation sample
+            indices of the right child
+    """
+    # The feature and the bin threshold used for this split
     feature = split.feature
-    bin = split.bin_threshold
+    bin_threshold = split.bin_threshold
 
-    # TODO: pourquoi transposition ici ?
+    # TODO: pourquoi on fait la transposition ici ?
     Xf = tree_context.X.T[feature]
 
     left_buffer = tree_context.left_buffer
     right_buffer = tree_context.right_buffer
-
-    # TODO: faudrait avoir le calcul du nombre de train et valid dans le split
-
-    # start_train = node_record["start_train"]
-    # end_train = node_record["end_train"]
-    # start_valid = node_record["start_valid"]
-    # end_valid = node_record["end_valid"]
 
     # The current training sample indices in the node
     partition_train = tree_context.partition_train
     # The current validation sample indices in the node
     partition_valid = tree_context.partition_valid
 
-    # We want to update both partition_train, partition_valid, pos_train, pos_valid so
-    # that:
-    # - partition_train[start_train:pos_train] contains the training sample indices of
-    #   the left child
-    # - partition_train[pos_train:end_train] contains the training sample indices of
-    #   the right child
-    # - partition_valid[start_valid:pos_valid] contains the validation sample indices
-    #   of the left child
-    # - partition_valid[pos_valid:end_valid] contains the validation sample indices of
-    #   the right child
+    n_samples_train_left = 0
+    n_samples_train_right = 0
 
-    # TODO: c'est bourrin et peut etre pas optimal mais ca suffira pour l'instant
-    n_samples_train_left = uintp(0)
-    n_samples_train_right = uintp(0)
     for i in partition_train[start_train:end_train]:
-        if Xf[i] <= bin:
+        if Xf[i] <= bin_threshold:
             left_buffer[n_samples_train_left] = i
-            n_samples_train_left += uintp(1)
+            n_samples_train_left += 1
         else:
             right_buffer[n_samples_train_right] = i
-            n_samples_train_right += uintp(1)
-
-    # print("start_train: ", start_train, ", n_samples_train_left: ",
-    #       n_samples_train_left, ", n_samples_train_right: ", n_samples_train_right,
-    #       ", end_train: ", end_train)
-
-    # print("partition_train[start_train:end_train]: ", partition_train[start_train:end_train])
-    # print("left_buffer[:n_samples_train_left]: ", left_buffer[:n_samples_train_left])
-    # print("right_buffer[:n_samples_train_right]: ", right_buffer[:n_samples_train_right])
-
-    # start_train + n_samples_train_left + n_samples_train_right
+            n_samples_train_right += 1
 
     pos_train = start_train + n_samples_train_left
     partition_train[start_train:pos_train] = left_buffer[:n_samples_train_left]
@@ -442,16 +486,15 @@ def split_indices(tree_context, split, start_train, end_train, start_valid, end_
 
     # We must have start_train + n_samples_train_left + n_samples_train_right ==
     # end_train
-
-    n_samples_valid_left = uintp(0)
-    n_samples_valid_right = uintp(0)
+    n_samples_valid_left = 0
+    n_samples_valid_right = 0
     for i in partition_valid[start_valid:end_valid]:
-        if Xf[i] <= bin:
+        if Xf[i] <= bin_threshold:
             left_buffer[n_samples_valid_left] = i
-            n_samples_valid_left += uintp(1)
+            n_samples_valid_left += 1
         else:
             right_buffer[n_samples_valid_right] = i
-            n_samples_valid_right += uintp(1)
+            n_samples_valid_right += 1
 
     pos_valid = start_valid + n_samples_valid_left
     partition_valid[start_valid:pos_valid] = left_buffer[:n_samples_valid_left]
