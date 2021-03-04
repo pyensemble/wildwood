@@ -1,21 +1,11 @@
-"""
-This module gathers tree-based methods, including decision, regression and
-randomized trees. Single and multi-output problems are both handled.
-"""
-
-# Authors: Gilles Louppe <g.louppe@gmail.com>
-#          Peter Prettenhofer <peter.prettenhofer@gmail.com>
-#          Brian Holt <bdholt1@gmail.com>
-#          Noel Dawe <noel@dawe.me>
-#          Satrajit Gosh <satrajit.ghosh@gmail.com>
-#          Joly Arnaud <arnaud.v.joly@gmail.com>
-#          Fares Hedayati <fares.hedayati@gmail.com>
-#          Nelson Liu <nelson@nelsonliu.me>
-#
+# Authors: Stephane Gaiffas <stephane.gaiffas@gmail.com>
 # License: BSD 3 clause
 
+"""
+This module contains wildwood's trees. These are not intended for end-users.
+"""
+
 import numbers
-import warnings
 from abc import ABCMeta
 from abc import abstractmethod
 from math import ceil
@@ -25,14 +15,8 @@ from scipy.sparse import issparse
 
 from sklearn.base import BaseEstimator, check_array
 from sklearn.base import ClassifierMixin
-from sklearn.base import clone
-from sklearn.base import RegressorMixin
 from sklearn.base import is_classifier
 from sklearn.base import MultiOutputMixin
-from sklearn.utils import Bunch
-from sklearn.utils import check_random_state
-from sklearn.utils.validation import _check_sample_weight
-from sklearn.utils import compute_sample_weight
 from sklearn.utils.multiclass import check_classification_targets
 from sklearn.utils.validation import check_is_fitted
 from sklearn.utils.validation import _deprecate_positional_args
@@ -41,64 +25,17 @@ from numba import _helperlib
 
 
 from ._grow import grow
-
-# from ._criterion import Criterion
-# from ._splitter import BestSplitter
-# from ._tree_old import DepthFirstTreeBuilder
-
-# from . import _tree_old
-
-from ._utils import np_float32, np_uint8, np_size_t, np_ssize_t
-
 from ._node import NodeContext
 from ._tree_context import TreeContext
-
 from ._tree import Tree, get_nodes, tree_predict_proba
 
-
-# from ._tree import BestFirstTreeBuilder
-# from ._tree_old import Tree
-
-# from ._tree import _build_pruned_tree_ccp
-# from ._tree import ccp_pruning_path
-# from . import _tree_old, _splitter, _criterion, _utils
-
-
-# __all__ = ["DecisionTreeClassifier"]
-
-# TODO: dans wildwood le TreeBinaryClassifier est prive et ne devrait pas etre utilise
-#  en dehors d'une foret, mais bon pour l'instant on fait ca viiiite
-
-
-# =============================================================================
-# Types and constants
-# =============================================================================
-
-
-# DTYPE = ._utils.np_dtype_t
-# DOUBLE = _utils.np_double_t
-
-# CRITERIA_CLF = {
-#     "gini": _criterion.Gini,
-#     # "entropy": _criterion.Entropy
-# }
-
-# CRITERIA_REG = {"mse": _criterion.MSE,
-#                 "friedman_mse": _criterion.FriedmanMSE,
-#                 "mae": _criterion.MAE,
-#                 "poisson": _criterion.Poisson}
-
-# DENSE_SPLITTERS = {
-#     "best": _splitter.BestSplitter,
-#     # "random": _splitter.RandomSplitter
-# }
-
-# SPARSE_SPLITTERS = {"best": _splitter.BestSparseSplitter,
-#                     "random": _splitter.RandomSparseSplitter}
 
 # =============================================================================
 # Base decision tree
 # =============================================================================
+
+# TODO: tout le preprocessing doit etre fait dans la classe forest. Les arbres ne
+#  doivent pas etre accessibles en dehors de la foret
 
 
 class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
@@ -251,8 +188,8 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
 
             self.n_classes_ = np.array(self.n_classes_, dtype=np.intp)
 
-        if getattr(y, "dtype", None) != np_float32 or not y.flags.contiguous:
-            y = np.ascontiguousarray(y, dtype=np_float32)
+        if getattr(y, "dtype", None) != np.float32 or not y.flags.contiguous:
+            y = np.ascontiguousarray(y, dtype=np.float32)
 
         # Check parameters
         max_depth = np.iinfo(np.int32).max if self.max_depth is None else self.max_depth
@@ -415,7 +352,7 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
         # TODO: on obtiendra cette info via le binner qui est dans la foret
         n_samples, n_features = X.shape
         n_bins_per_feature = max_bins * np.ones(n_features)
-        n_bins_per_feature = n_bins_per_feature.astype(np_ssize_t)
+        n_bins_per_feature = n_bins_per_feature.astype(np.intp)
 
         # print(y.flags)
         # print("y.dtype: ", y.dtype)
@@ -560,7 +497,7 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
         """Validate the training data on predict (probabilities)."""
         if check_input:
 
-            X = check_array(X, accept_sparse="csr", dtype=np_float32)
+            X = check_array(X, accept_sparse="csr", dtype=np.float32)
             # X = self._validate_data(X, dtype=DTYPE, accept_sparse="csr",
             #                         reset=False)
             if issparse(X) and (

@@ -40,9 +40,9 @@ from sklearn.utils.validation import check_is_fitted, _check_sample_weight
 
 from ._binning import Binner
 
-from ._utils import np_size_t, max_size_t
+# from ._utils import np_size_t, max_size_t
 
-__all__ = ["BinaryClassifier"]
+__all__ = ["ForestBinaryClassifier"]
 
 # from wildwood._utils import MAX_INT
 
@@ -78,14 +78,15 @@ def _generate_train_valid_samples(random_state, n_samples, tree_idx):
     valid_mask = sample_counts == 0
     # For very small samples, we might end up with empty validation...
     if valid_mask.sum() == 0:
-        return _generate_train_valid_samples((random_state + 1) % max_size_t, n_samples)
+        return _generate_train_valid_samples((random_state + 1) % np.iinfo(
+            np.uintp).max, n_samples)
     else:
         # print("sample_indices: ", sample_indices)
         # print("sample_counts: ", sample_counts)
         train_mask = np.logical_not(valid_mask)
-        train_indices = indices[train_mask].astype(np_size_t)
-        valid_indices = indices[valid_mask].astype(np_size_t)
-        train_indices_count = sample_counts[train_mask].astype(np_size_t)
+        train_indices = indices[train_mask].astype(np.uintp)
+        valid_indices = indices[valid_mask].astype(np.uintp)
+        train_indices_count = sample_counts[train_mask].astype(np.uintp)
         return train_indices, valid_indices, train_indices_count
 
 
@@ -223,9 +224,9 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
     possible subtrees (prunings) of the full tree. The required computations are
     performed efficiently thanks to a variant of the context tree weighting algorithm.
 
-    TODO: discuss histogram strategy
+    Also, features are all binned with a maximum of 255 bins, following lightGBM's
+    binning strategy.
 
-    TODO: insert references
 
     TODO: update doc link
     Read more in the :ref:`User Guide <forest>`.
@@ -309,13 +310,13 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         Note: the search for a split does not stop until at least one
         valid partition of the node samples is found, even if it requires to
         effectively inspect more than ``max_features`` features.
+        TODO: this is not true for now...
 
-    n_jobs : int, default=None
-        The number of jobs to run in parallel. :meth:`fit`, :meth:`predict`,
-        :meth:`decision_path` and :meth:`apply` are all parallelized over the
-        trees. ``None`` means 1 unless in a :obj:`joblib.parallel_backend`
-        context. ``-1`` means using all processors. See :term:`Glossary
-        <n_jobs>` for more details.
+    n_jobs : int, default=1
+        The number of jobs to run in parallel for :meth:`fit`, :meth:`predict`,
+        :meth:`predict_proba`, :meth:`decision_path` and :meth:`apply`. All
+        these methods are parallelized over the trees in the forets. ``n_jobs=-1``
+        means using all processors.
 
     random_state : int, RandomState instance or None, default=None
         Controls both the randomness of the bootstrapping of the samples used
@@ -352,6 +353,10 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
 
         Note that these weights will be multiplied with sample_weight (passed
         through the fit method) if sample_weight is specified.
+
+    References
+    ----------
+    TODO: insert references
 
     """
 
@@ -1086,8 +1091,8 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         else:
             if not isinstance(val, numbers.Integral):
                 raise ValueError("n_estimators must an integer number")
-            elif val < -1 or val == 0:
-                raise ValueError("n_estimators must be >= 1 or =-1")
+            elif val < 1:
+                raise ValueError("n_estimators must be >= 1")
             else:
                 self._n_estimators = val
 

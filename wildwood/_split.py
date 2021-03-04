@@ -9,21 +9,18 @@ a node.
 import numpy as np
 from numba import (
     jit,
-    njit,
     boolean,
     uint8,
-    intp,
     uintp,
     float32,
-    void,
-    optional,
+    void
 )
 from numba.types import Tuple
 from numba.experimental import jitclass
 
 from ._node import NodeContextType
 from ._tree_context import TreeContextType
-from ._impurity import gini_childs, information_gain_proxy, information_gain
+from ._impurity import gini_childs, information_gain_proxy
 
 from ._utils import get_type
 

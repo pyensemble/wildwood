@@ -24,30 +24,30 @@ njit = njit_(fastmath=False, nogil=True, cache=False, boundscheck=False)
 
 
 # We centralize below the definition of all the numba and numpy dtypes we'll need
-nb_bool = boolean
-np_bool = np.bool
-nb_uint8 = uint8
-np_uint8 = np.uint8
-nb_float32 = float32
-np_float32 = np.float32
-nb_float64 = float64
-np_float64 = np.float64
-
-np_size_t = np.uintp
-nb_size_t = uintp
-np_ssize_t = np.intp
-nb_ssize_t = intp
-nb_int32 = int32
-np_int32 = np.int32
-nb_uint32 = uint32
-np_uint32 = np.uint32
+# nb_bool = boolean
+# np_bool = np.bool
+# nb_uint8 = uint8
+# np_uint8 = np.uint8
+# nb_float32 = float32
+# np_float32 = np.float32
+# nb_float64 = float64
+# np_float64 = np.float64
+#
+# np_size_t = np.uintp
+# nb_size_t = uintp
+# np_ssize_t = np.intp
+# nb_ssize_t = intp
+# nb_int32 = int32
+# np_int32 = np.int32
+# nb_uint32 = uint32
+# np_uint32 = np.uint32
 
 # Some useful constants
-infinity = np.inf
-epsilon = np.finfo("double").eps
-max_int32 = np.iinfo(np.int32).max
-max_size_t = np.iinfo(np_size_t).max
-max_ssize_t = np.iinfo(np_ssize_t).max
+# infinity = np.inf
+# epsilon = np.finfo("double").eps
+# max_int32 = np.iinfo(np.int32).max
+# max_size_t = np.iinfo(np_size_t).max
+# max_ssize_t = np.iinfo(np_ssize_t).max
 
 
 def get_numba_type(class_):
@@ -71,7 +71,7 @@ def get_numba_type(class_):
         return class_type.instance_type
 
 
-@jit(nopython=True, nogil=True, locals={"new_size": nb_size_t})
+@jit(nopython=True, nogil=True, locals={"new_size": uintp})
 def resize(a, new_size, zeros=False):
     # print("================ Begin resize ================")
     # print("new_size: ", new_size)
@@ -88,7 +88,7 @@ def resize(a, new_size, zeros=False):
 @jit(
     nopython=True,
     nogil=True,
-    locals={"new_size": nb_size_t, "d0": nb_size_t, "d1": nb_size_t},
+    locals={"new_size": uintp, "d0": uintp, "d1": uintp},
 )
 def resize2d(a, new_size, zeros=False):
     d0, d1 = a.shape
@@ -103,7 +103,7 @@ def resize2d(a, new_size, zeros=False):
 @jit(
     nopython=True,
     nogil=True,
-    locals={"new_size": nb_size_t, "d0": nb_size_t, "d1": nb_size_t, "d2": nb_size_t},
+    locals={"new_size": uintp, "d0": uintp, "d1": uintp, "d2": uintp},
 )
 def resize3d(a, new_size, zeros=False):
     d0, d1, d2 = a.shape
@@ -121,19 +121,18 @@ def log_sum_2_exp(a, b):
 
     Parameters
     ----------
-    a : `float32`
+    a : float
         First number
 
-    b : `float32`
+    b : float32
         Second number
 
     Returns
     -------
-    output : `float32`
+    output : float
         Value of log( (e^a + e^b) / 2) for the given a and b
     """
     # TODO: if |a - b| > 50 skip
-    # TODO: try several log and exp implementations
     if a > b:
         return a + log((1 + exp(b - a)) / 2)
     else:
