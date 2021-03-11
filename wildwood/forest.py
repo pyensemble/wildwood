@@ -96,7 +96,7 @@ def _parallel_build_trees(tree, X, y, sample_weight, tree_idx, n_trees, verbose=
     Private function used to fit a single tree in parallel.
     """
     # if verbose > 1:
-    print("building tree %d of %d" % (tree_idx + 1, n_trees))
+    # print("building tree %d of %d" % (tree_idx + 1, n_trees))
 
     n_samples = X.shape[0]
     if sample_weight is None:
@@ -140,9 +140,9 @@ def _parallel_build_trees(tree, X, y, sample_weight, tree_idx, n_trees, verbose=
         sample_weight,
         check_input=False,
     )
-    toc = time()
-    print("Done building tree %d with %d nodes in %.2f s" % (tree_idx,
-                                                              tree.n_nodes_, toc-tic))
+    # toc = time()
+    # print("Done building tree %d with %d nodes in %.2f s" % (tree_idx,
+    #                                                           tree.n_nodes_, toc-tic))
 
     return tree
 
@@ -263,13 +263,14 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         they are "pure" (impurity is small enough) or until they contain
         min_samples_split samples.
 
-    min_samples_split : int or float, default=2
-        The minimum number of samples required to split an internal node (not a leaf)
+    min_samples_split : int, default=2
+        The minimum number of training samples and out-of-the-bag samples required to
+        split a node. This must be >= 2.
 
-    min_samples_leaf : int or float, default=1
-        The minimum number of samples required to be in a leaf node.
-        A split point at any depth will only be considered if it leaves at
-        least ``min_samples_leaf`` samples in the left and right childs.
+    min_samples_leaf : int, default=1
+        A split point is considered if it leaves at least ``min_samples_leaf``
+        training samples and out-of-the-bag samples in the left and right childs.
+        This must be >= 1.
 
     max_bins : int, default=255
         The maximum number of bins to use for non-missing values. Before
@@ -467,7 +468,7 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         # self._validate_parameters()
 
         # used for validation in predict
-        n_samples, self._n_features = X.shape
+        n_samples, self._n_features_ = X.shape
 
         self.is_categorical_, known_categories = self._check_categories(X)
 
@@ -622,9 +623,8 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         # parallel_backend contexts set at a higher level,
         # since correctness does not rely on using threads.
 
-        print("self.n_jobs: ", self.n_jobs)
-
-        print("options: ", _joblib_parallel_args(prefer="threads"))
+        # print("self.n_jobs: ", self.n_jobs)
+        # print("options: ", _joblib_parallel_args(prefer="threads"))
         trees = Parallel(
             n_jobs=self.n_jobs,
             # verbose=self.verbose,
@@ -648,6 +648,7 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         )
 
         self.trees = trees
+
         self._fitted = True
 
         return self
@@ -1070,6 +1071,34 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         return self.trees[0]._validate_X_predict(X, check_input=True)
 
     @property
+    def min_samples_split(self):
+        return self._min_samples_split
+
+    @min_samples_split.setter
+    def min_samples_split(self, val):
+        if not isinstance(val, numbers.Integral):
+            raise ValueError("min_samples_split must be an integer number")
+        else:
+            if val < 2:
+                raise ValueError("min_samples_split must be >= 2")
+            else:
+                self._min_samples_split = val
+
+    @property
+    def min_samples_leaf(self):
+        return self._min_samples_leaf
+
+    @min_samples_leaf.setter
+    def min_samples_leaf(self, val):
+        if not isinstance(val, numbers.Integral):
+            raise ValueError("min_samples_leaf must be an integer number")
+        else:
+            if val < 1:
+                raise ValueError("min_samples_leaf must be >= 1")
+            else:
+                self._min_samples_leaf = val
+
+    @property
     def n_features_(self):
         if self._fitted:
             return self._n_features_
@@ -1090,7 +1119,7 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
             raise ValueError("You cannot change n_estimators after calling fit")
         else:
             if not isinstance(val, numbers.Integral):
-                raise ValueError("n_estimators must an integer number")
+                raise ValueError("n_estimators must be an integer number")
             elif val < 1:
                 raise ValueError("n_estimators must be >= 1")
             else:
@@ -1104,10 +1133,10 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
     def n_jobs(self, val):
         if not isinstance(val, numbers.Integral):
             raise ValueError("n_jobs must be an integer number")
-        elif val < -1:
-            raise ValueError("n_jobs must be >= -1")
+        elif val < -1 or val == 0:
+            raise ValueError("n_jobs must be >= 1 or equal to -1")
         else:
-            self._n_jobs = int(val)
+            self._n_jobs = val
 
     @property
     def step(self):

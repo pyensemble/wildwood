@@ -5,13 +5,18 @@
 
 import numpy as np
 import pytest
+
+
+def approx(v, abs=1e-15):
+    return pytest.approx(v, abs)
+
+
 from sklearn.datasets import make_moons
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score
 
 from wildwood import ForestBinaryClassifier
 
-from .utils import parameter_test_with_min, parameter_test_with_type, approx
 
 #     def test_online_forest_n_features_differs(self):
 #         n_samples = 1000
@@ -50,15 +55,152 @@ from .utils import parameter_test_with_min, parameter_test_with_type, approx
 
 
 class TestForestBinaryClassifier(object):
+    def test_min_samples_split(self):
+        clf = ForestBinaryClassifier()
+        assert clf.min_samples_split == 2
+        clf = ForestBinaryClassifier(min_samples_split=17)
+        assert clf.min_samples_split == 17
+        clf.min_samples_split = 5
+        assert clf.min_samples_split == 5
+        with pytest.raises(
+            ValueError, match="min_samples_split must be an integer number"
+        ):
+            clf.min_samples_split = 0.42
+        with pytest.raises(
+            ValueError, match="min_samples_split must be an integer number"
+        ):
+            clf.min_samples_split = None
+        with pytest.raises(
+            ValueError, match="min_samples_split must be an integer number"
+        ):
+            clf.min_samples_split = "4"
 
-    def test_n_features(self):
-        clf = ForestBinaryClassifier(n_estimators=10)
-        X = np.random.randn(2, 2)
-        y = np.array([0.0, 1.0])
+        with pytest.raises(ValueError, match="min_samples_split must be >= 2"):
+            clf.min_samples_split = 1
+        with pytest.raises(ValueError, match="min_samples_split must be >= 2"):
+            clf.min_samples_split = -3
+
+    def test_min_samples_leaf(self):
+        clf = ForestBinaryClassifier()
+        assert clf.min_samples_leaf == 1
+        clf = ForestBinaryClassifier(min_samples_leaf=17)
+        assert clf.min_samples_leaf == 17
+        clf.min_samples_leaf = 5
+        assert clf.min_samples_leaf == 5
+        with pytest.raises(
+                ValueError, match="min_samples_leaf must be an integer number"
+        ):
+            clf.min_samples_leaf = 0.42
+        with pytest.raises(
+                ValueError, match="min_samples_leaf must be an integer number"
+        ):
+            clf.min_samples_leaf = None
+        with pytest.raises(
+                ValueError, match="min_samples_leaf must be an integer number"
+        ):
+            clf.min_samples_leaf = "4"
+        with pytest.raises(ValueError, match="min_samples_leaf must be >= 1"):
+            clf.min_samples_leaf = 0
+        with pytest.raises(ValueError, match="min_samples_leaf must be >= 1"):
+            clf.min_samples_leaf = -3
+
+    def test_n_features_(self):
+        clf = ForestBinaryClassifier(n_estimators=2)
+        with pytest.raises(
+                ValueError, match="You must call fit before asking for n_features_"
+        ):
+            _ = clf.n_features_
+        np.random.seed(42)
+        X = np.random.randn(10, 3)
+        y = np.array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
         clf.fit(X, y)
-        assert clf.n_features == 2
-        with pytest.raises(ValueError, match="`n_features` is a readonly attribute"):
-            clf.n_features = 3
+        assert clf.n_features_ == 3
+
+    def test_n_estimators(self):
+        clf = ForestBinaryClassifier()
+        assert clf.n_estimators == 100
+        clf = ForestBinaryClassifier(n_estimators=17)
+        assert clf.n_estimators == 17
+        clf.n_estimators = 42
+        assert clf.n_estimators == 42
+        with pytest.raises(
+                ValueError, match="n_estimators must be an integer number"
+        ):
+            clf.n_estimators = 0.42
+        with pytest.raises(
+                ValueError, match="n_estimators must be an integer number"
+        ):
+            clf.n_estimators = None
+        with pytest.raises(
+                ValueError, match="n_estimators must be an integer number"
+        ):
+            clf.n_estimators = "4"
+        with pytest.raises(ValueError, match="n_estimators must be >= 1"):
+            clf.n_estimators = 0
+        with pytest.raises(ValueError, match="n_estimators must be >= 1"):
+            clf.n_estimators = -3
+
+        np.random.seed(42)
+        X = np.random.randn(10, 3)
+        y = np.array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
+        clf.fit(X, y)
+        with pytest.raises(
+                ValueError, match="You cannot change n_estimators after calling fit"
+        ):
+            clf.n_estimators = 0.42
+
+    def test_n_jobs(self):
+        # TODO: test that n_jobs=1 is slower than n_jobs=4 for instance ? indeed
+        # TODO: test that n_jobs=-1 indeed uses all physical cores
+        clf = ForestBinaryClassifier()
+        assert clf.n_jobs == 1
+        clf = ForestBinaryClassifier(n_jobs=17)
+        assert clf.n_jobs == 17
+        clf.n_jobs = 42
+        assert clf.n_jobs == 42
+        with pytest.raises(
+                ValueError, match="n_jobs must be an integer number"
+        ):
+            clf.n_jobs = 0.42
+        with pytest.raises(
+                ValueError, match="n_jobs must be an integer number"
+        ):
+            clf.n_jobs = None
+        with pytest.raises(
+                ValueError, match="n_jobs must be an integer number"
+        ):
+            clf.n_jobs = "4"
+        with pytest.raises(ValueError, match="n_jobs must be >= 1 or equal to -1"):
+            clf.n_jobs = -2
+        with pytest.raises(ValueError, match="n_jobs must be >= 1 or equal to -1"):
+            clf.n_jobs = 0
+
+
+
+        # @n_estimators.setter
+        # def n_estimators(self, val):
+        #     if self._fitted:
+        #         raise ValueError("You cannot change n_estimators after calling fit")
+        #     else:
+        #         if not isinstance(val, numbers.Integral):
+        #             raise ValueError("n_estimators must an integer number")
+        #         elif val < 1:
+        #             raise ValueError("n_estimators must be >= 1")
+        #         else:
+        #             self._n_estimators = val
+        # with pytest.raises(ValueError) as exc_info:
+        #     clf.min_samples_split = 0.42
+        # assert exc_info.type is ValueError
+        # assert exc_info.value.args[0] == "min_samples_split must be an integer number"
+
+    # def test_n_features(self):
+    #     clf = ForestBinaryClassifier(n_estimators=10)
+    #     X = np.random.randn(2, 2)
+    #     y = np.array([0.0, 1.0])
+    #     clf.fit(X, y)
+    #     assert clf.n_features == 2
+    #     with pytest.raises(ValueError, match="`n_features` is a readonly attribute"):
+    #         clf.n_features = 3
 
     # def test_n_estimators(self):
     #     parameter_test_with_min(

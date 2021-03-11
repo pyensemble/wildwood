@@ -277,6 +277,7 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
         y_sum_left += y_sum_in_bins[bin]
         y_sum_right -= y_sum_in_bins[bin]
 
+        # TODO: this should be parametrizable through something like min_samples_leaf
         # If the split would lead to 0 training or 0 validation samples in the left
         # child then we don't consider the split
         if (w_samples_train_left <= 0.0) or (w_samples_valid_left <= 0.0):
