@@ -140,10 +140,9 @@ class TestForestBinaryClassifier(object):
         with pytest.raises(ValueError, match="n_estimators must be >= 1"):
             clf.n_estimators = -3
 
-        np.random.seed(42)
-        X = np.random.randn(10, 3)
-        y = np.array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
-        clf.fit(X, y)
+        clf = ForestBinaryClassifier()
+        # Check that  the properties checks the _fitted flag
+        clf._fitted = True
         with pytest.raises(
                 ValueError, match="You cannot change n_estimators after calling fit"
         ):
@@ -170,10 +169,92 @@ class TestForestBinaryClassifier(object):
                 ValueError, match="n_jobs must be an integer number"
         ):
             clf.n_jobs = "4"
+        with pytest.raises(
+                ValueError, match="n_jobs must be an integer number"
+        ):
+            clf.n_jobs = 4.0
+
         with pytest.raises(ValueError, match="n_jobs must be >= 1 or equal to -1"):
             clf.n_jobs = -2
         with pytest.raises(ValueError, match="n_jobs must be >= 1 or equal to -1"):
             clf.n_jobs = 0
+
+    def test_step(self):
+        clf = ForestBinaryClassifier()
+        assert clf.step == 1.0
+        clf = ForestBinaryClassifier(step=0.17)
+        assert clf.step == 0.17
+        clf.step = 0.42
+        assert clf.step == 0.42
+        # "step must be a real number"
+        # "step must be positive"
+        with pytest.raises(
+                ValueError, match="step must be a float"
+        ):
+            clf.step = "1"
+        with pytest.raises(
+                ValueError, match="step must be a float"
+        ):
+            clf.step = None
+        with pytest.raises(
+                ValueError, match="step must be positive"
+        ):
+            clf.step = -1
+        with pytest.raises(
+                ValueError, match="step must be positive"
+        ):
+            clf.step = -0.42
+
+    def test_aggregation(self):
+        clf = ForestBinaryClassifier()
+        assert clf.aggregation
+        clf = ForestBinaryClassifier(aggregation=False)
+        assert not clf.aggregation
+        clf.aggregation = True
+        assert clf.aggregation
+        with pytest.raises(
+                ValueError, match="aggregation must be boolean"
+        ):
+            clf.aggregation = "true"
+        with pytest.raises(
+                ValueError, match="aggregation must be boolean"
+        ):
+            clf.aggregation = 1
+
+    def test_verbose(self):
+        clf = ForestBinaryClassifier()
+        assert not clf.verbose
+        clf = ForestBinaryClassifier(verbose=True)
+        assert clf.verbose
+        clf.verbose = False
+        assert not clf.verbose
+        with pytest.raises(
+                ValueError, match="verbose must be boolean"
+        ):
+            clf.verbose = "true"
+        with pytest.raises(
+                ValueError, match="verbose must be boolean"
+        ):
+            clf.verbose = 1
+
+    def test_loss(self):
+        clf = ForestBinaryClassifier()
+        assert clf.loss == "log"
+        with pytest.raises(
+                ValueError, match="loss must be a string"
+        ):
+            clf.loss = 3.14
+        with pytest.raises(
+                ValueError, match="Only loss='log' is supported for now"
+        ):
+            clf.loss = "other"
+
+        with pytest.raises(
+                ValueError, match="Only loss='log' is supported for now"
+        ):
+            _ = ForestBinaryClassifier(loss="other")
+
+    # TODO: test for random_state
 
 
 

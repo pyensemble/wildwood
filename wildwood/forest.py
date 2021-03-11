@@ -78,8 +78,9 @@ def _generate_train_valid_samples(random_state, n_samples, tree_idx):
     valid_mask = sample_counts == 0
     # For very small samples, we might end up with empty validation...
     if valid_mask.sum() == 0:
-        return _generate_train_valid_samples((random_state + 1) % np.iinfo(
-            np.uintp).max, n_samples)
+        return _generate_train_valid_samples(
+            (random_state + 1) % np.iinfo(np.uintp).max, n_samples
+        )
     else:
         # print("sample_indices: ", sample_indices)
         # print("sample_counts: ", sample_counts)
@@ -133,12 +134,7 @@ def _parallel_build_trees(tree, X, y, sample_weight, tree_idx, n_trees, verbose=
 
     tic = time()
     tree.fit(
-        X,
-        y,
-        train_indices,
-        valid_indices,
-        sample_weight,
-        check_input=False,
+        X, y, train_indices, valid_indices, sample_weight, check_input=False,
     )
     # toc = time()
     # print("Done building tree %d with %d nodes in %.2f s" % (tree_idx,
@@ -950,7 +946,9 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
             verbose=self.verbose,
             **_joblib_parallel_args(require="sharedmem"),
         )(
-            delayed(_get_tree_prediction)(e.predict_proba, X_binned, probas, lock, tree_idx)
+            delayed(_get_tree_prediction)(
+                e.predict_proba, X_binned, probas, lock, tree_idx
+            )
             for tree_idx, e in enumerate(self.trees)
         )
         return probas
@@ -1070,44 +1068,9 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
 
         return self.trees[0]._validate_X_predict(X, check_input=True)
 
-    @property
-    def min_samples_split(self):
-        return self._min_samples_split
-
-    @min_samples_split.setter
-    def min_samples_split(self, val):
-        if not isinstance(val, numbers.Integral):
-            raise ValueError("min_samples_split must be an integer number")
-        else:
-            if val < 2:
-                raise ValueError("min_samples_split must be >= 2")
-            else:
-                self._min_samples_split = val
-
-    @property
-    def min_samples_leaf(self):
-        return self._min_samples_leaf
-
-    @min_samples_leaf.setter
-    def min_samples_leaf(self, val):
-        if not isinstance(val, numbers.Integral):
-            raise ValueError("min_samples_leaf must be an integer number")
-        else:
-            if val < 1:
-                raise ValueError("min_samples_leaf must be >= 1")
-            else:
-                self._min_samples_leaf = val
-
-    @property
-    def n_features_(self):
-        if self._fitted:
-            return self._n_features_
-        else:
-            raise ValueError("You must call fit before asking for n_features_")
-
-    @n_features_.setter
-    def n_features_(self, val):
-        raise ValueError("n_features_ is a readonly attribute")
+    # # # # # # # # # # # # # # # # # # # #
+    # Below are all the class properties  #
+    # # # # # # # # # # # # # # # # # # # #
 
     @property
     def n_estimators(self):
@@ -1126,17 +1089,32 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
                 self._n_estimators = val
 
     @property
-    def n_jobs(self):
-        return self._n_jobs
+    def criterion(self):
+        return self._criterion
 
-    @n_jobs.setter
-    def n_jobs(self, val):
-        if not isinstance(val, numbers.Integral):
-            raise ValueError("n_jobs must be an integer number")
-        elif val < -1 or val == 0:
-            raise ValueError("n_jobs must be >= 1 or equal to -1")
+    @criterion.setter
+    def criterion(self, val):
+        if not isinstance(val, str):
+            raise ValueError("criterion must be a string")
         else:
-            self._n_jobs = val
+            if val != "gini":
+                raise ValueError("Only criterion='gini' is supported for now")
+            else:
+                self._criterion = val
+
+    @property
+    def loss(self):
+        return self._loss
+
+    @loss.setter
+    def loss(self, val):
+        if not isinstance(val, str):
+            raise ValueError("loss must be a string")
+        else:
+            if val != "log":
+                raise ValueError("Only loss='log' is supported for now")
+            else:
+                self._loss = val
 
     @property
     def step(self):
@@ -1145,7 +1123,7 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
     @step.setter
     def step(self, val):
         if not isinstance(val, numbers.Real):
-            raise ValueError("step must be a real number")
+            raise ValueError("step must be a float")
         elif val <= 0:
             raise ValueError("step must be positive")
         else:
@@ -1163,23 +1141,80 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
             self._aggregation = val
 
     @property
-    def verbose(self):
-        return self._verbose
+    def dirichlet(self):
+        return self._dirichlet
 
-    @verbose.setter
-    def verbose(self, val):
-        if not isinstance(val, bool):
-            raise ValueError("`verbose` must be of type `bool`")
+    @dirichlet.setter
+    def dirichlet(self, val):
+        if not isinstance(val, numbers.Real):
+            raise ValueError("dirichlet must be a float")
         else:
-            self._verbose = val
+            if val < 0.0:
+                raise ValueError("dirichlet must be positive")
+            else:
+                self._dirichlet = float(val)
 
     @property
-    def loss(self):
-        return "log"
+    def max_depth(self):
+        return self._max_depth
 
-    @loss.setter
-    def loss(self, val):
-        pass
+    @max_depth.setter
+    def max_depth(self, val):
+        if val is None:
+            self._max_depth = val
+        else:
+            if not isinstance(val, numbers.Integral):
+                raise ValueError("max_depth must be None or an integer number")
+            else:
+                if val < 2:
+                    raise ValueError("max_depth must be >= 2")
+                else:
+                    self._max_depth = val
+
+    @property
+    def min_samples_split(self):
+        return self._min_samples_split
+
+    @min_samples_split.setter
+    def min_samples_split(self, val):
+        if not isinstance(val, numbers.Integral):
+            raise ValueError("min_samples_split must be an integer number")
+        else:
+            if val < 2:
+                raise ValueError("min_samples_split must be >= 2")
+            else:
+                self._min_samples_split = int(val)
+
+    @property
+    def min_samples_leaf(self):
+        return self._min_samples_leaf
+
+    @min_samples_leaf.setter
+    def min_samples_leaf(self, val):
+        if not isinstance(val, numbers.Integral):
+            raise ValueError("min_samples_leaf must be an integer number")
+        else:
+            if val < 1:
+                raise ValueError("min_samples_leaf must be >= 1")
+            else:
+                self._min_samples_leaf = val
+
+    # TODO: property for max_bins
+    # TODO: property for categorical_features
+    # TODO: property for max_features
+
+    @property
+    def n_jobs(self):
+        return self._n_jobs
+
+    @n_jobs.setter
+    def n_jobs(self, val):
+        if not isinstance(val, numbers.Integral):
+            raise ValueError("n_jobs must be an integer number")
+        elif val < -1 or val == 0:
+            raise ValueError("n_jobs must be >= 1 or equal to -1")
+        else:
+            self._n_jobs = val
 
     @property
     def random_state(self):
@@ -1202,5 +1237,29 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
                 raise ValueError("`random_state` must be >= 0")
             else:
                 self._random_state = val
+
+    @property
+    def n_features_(self):
+        if self._fitted:
+            return self._n_features_
+        else:
+            raise ValueError("You must call fit before asking for n_features_")
+
+    @n_features_.setter
+    def n_features_(self, val):
+        raise ValueError("n_features_ is a readonly attribute")
+
+    @property
+    def verbose(self):
+        return self._verbose
+
+    @verbose.setter
+    def verbose(self, val):
+        if not isinstance(val, bool):
+            raise ValueError("verbose must be boolean")
+        else:
+            self._verbose = val
+
+    # TODO: property for class_weight
 
     # TODO: code properties for all arguments with scikit-learn checks
