@@ -369,10 +369,10 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         max_depth=None,
         min_samples_split=2,
         min_samples_leaf=1,
+        # TODO: max_bins is 255, not 256 ? (for missing values ?)
         max_bins=255,
         categorical_features=None,
         max_features="auto",
-        # TODO: default for n_jobs must be integer ?
         n_jobs=1,
         random_state=None,
         verbose=False,
@@ -380,9 +380,9 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
     ):
         self._fitted = False
         self._n_features_ = None
-        self._n_features_ = None
         self._n_outputs_ = 1
 
+        # Set the parameters. This calls the properties defined below
         self.n_estimators = n_estimators
         self.criterion = criterion
         self.loss = loss
@@ -1199,9 +1199,58 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
             else:
                 self._min_samples_leaf = val
 
-    # TODO: property for max_bins
-    # TODO: property for categorical_features
-    # TODO: property for max_features
+    @property
+    def max_bins(self):
+        return self._max_bins
+
+    @max_bins.setter
+    def max_bins(self, val):
+        if not isinstance(val, numbers.Integral):
+            raise ValueError("max_bins must be an integer number")
+        else:
+            if (val < 2) or (val > 256):
+                raise ValueError("max_bins must be between 2 and 256")
+            else:
+                self._max_bins = val
+
+    # TODO: property for categorical_features here
+
+    @property
+    def max_features(self):
+        return self._max_features
+
+    @max_features.setter
+    def max_features(self, val):
+        if val is None:
+            self._max_features = None
+        elif isinstance(val, str):
+            if val in {"sqrt", "log2", "auto"}:
+                self._max_features = val
+            else:
+                raise ValueError(
+                    "max_features can be either None, an integer value "
+                    "or 'sqrt', 'log2' or 'auto'"
+                )
+        elif isinstance(val, numbers.Integral):
+            if val < 1:
+                raise ValueError("max_features must be >= 1")
+            else:
+                self._max_features = val
+        else:
+            raise ValueError(
+                "max_features can be either None, an integer value "
+                "or 'sqrt', 'log2' or 'auto'"
+            )
+
+    @max_bins.setter
+    def max_bins(self, val):
+        if not isinstance(val, numbers.Integral):
+            raise ValueError("max_bins must be an integer number")
+        else:
+            if (val < 2) or (val > 256):
+                raise ValueError("max_bins must be between 2 and 256")
+            else:
+                self._max_bins = val
 
     @property
     def n_jobs(self):
@@ -1218,36 +1267,22 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
 
     @property
     def random_state(self):
-        """:obj:`int` or :obj:`None`: Controls the randomness involved in the trees."""
-        if self._random_state == -1:
-            return None
-        else:
-            return self._random_state
+        return self._random_state
 
     @random_state.setter
     def random_state(self, val):
         if self._fitted:
-            raise ValueError("You cannot modify `random_state` after calling `fit`")
+            raise ValueError("You cannot modify random_state after calling fit")
         else:
             if val is None:
-                self._random_state = -1
-            elif not isinstance(val, int):
-                raise ValueError("`random_state` must be of type `int`")
-            elif val < 0:
-                raise ValueError("`random_state` must be >= 0")
-            else:
                 self._random_state = val
-
-    @property
-    def n_features_(self):
-        if self._fitted:
-            return self._n_features_
-        else:
-            raise ValueError("You must call fit before asking for n_features_")
-
-    @n_features_.setter
-    def n_features_(self, val):
-        raise ValueError("n_features_ is a readonly attribute")
+            elif isinstance(val, int):
+                if val >= 0:
+                    self._random_state = val
+                else:
+                    ValueError("random_state must be >= 0")
+            else:
+                ValueError("random_state must be either None or an integer number")
 
     @property
     def verbose(self):
@@ -1260,6 +1295,15 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         else:
             self._verbose = val
 
-    # TODO: property for class_weight
+    # TODO: property for class_weight here
 
-    # TODO: code properties for all arguments with scikit-learn checks
+    @property
+    def n_features_(self):
+        if self._fitted:
+            return self._n_features_
+        else:
+            raise ValueError("You must call fit before asking for n_features_")
+
+    @n_features_.setter
+    def n_features_(self, val):
+        raise ValueError("n_features_ is a readonly attribute")
