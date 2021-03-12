@@ -3,53 +3,42 @@
 """
 # License: BSD 3 clause
 
-
-import numbers
-from warnings import catch_warnings, simplefilter, warn
+from warnings import warn
 import threading
-
-from abc import ABCMeta, abstractmethod
 import numpy as np
+from joblib import Parallel, effective_n_jobs
 
-# from scipy.sparse import issparse
-# from scipy.sparse import hstack as sparse_hstack
-from joblib import Parallel
-
-from time import time
+from scipy.sparse import issparse
 
 from sklearn.ensemble._base import _partition_estimators
-
-from sklearn.base import ClassifierMixin, RegressorMixin, MultiOutputMixin
-
-from sklearn.utils import check_random_state, check_array, compute_sample_weight
-
+from sklearn.utils import check_random_state, compute_sample_weight, check_array
 from sklearn.base import BaseEstimator, ClassifierMixin
-from sklearn.utils.validation import (
-    check_is_fitted,
-    check_consistent_length,
-    _check_sample_weight,
-)
+from sklearn.utils.validation import check_consistent_length
 from sklearn.preprocessing import LabelEncoder
 
-
-# from ..exceptions import DataConversionWarning
-# from ._base import BaseEnsemble, _partition_estimators
 from sklearn.utils.fixes import _joblib_parallel_args, delayed
 from sklearn.utils.multiclass import check_classification_targets
-from sklearn.utils.validation import check_is_fitted, _check_sample_weight
+from sklearn.utils.validation import check_is_fitted
 
 from ._binning import Binner
 
-# from ._utils import np_size_t, max_size_t
 
 __all__ = ["ForestBinaryClassifier"]
 
-# from wildwood._utils import MAX_INT
 
 from wildwood.tree import TreeBinaryClassifier
 
 
-def _generate_train_valid_samples(random_state, n_samples, tree_idx):
+# TODO: bootstrap with stratification for unbalanced data ?
+# TODO: bon il faut gerer: 1. le bootstrap 2. la stratification 3. les
+#  sample_weight 4. le binning. On va pour l'instant aller au plus simple: 1.
+#  on binne les donnees des de debut et on ne s'emmerde pas avec les
+#  sample_weight. Le bootstrap et la stratification devront etre geres dans la
+#  fonction _generate_train_valid_samples au dessus (qu'on appelle avec un
+#  Parallel comme dans l'implem originelle des forets)
+
+
+def _generate_train_valid_samples(random_state, n_samples):
     """
     This functions generates "in-the-bag" (train) and "out-of-the-bag" samples
 
@@ -68,10 +57,8 @@ def _generate_train_valid_samples(random_state, n_samples, tree_idx):
         * output[1] contains the indices of the validation samples
         * output[2] contains the counts of the training samples
     """
-    # TODO: add the tree_idx to get different indices ???
-    random_instance = check_random_state(random_state + tree_idx)
+    random_instance = check_random_state(random_state)
     # Sample the bootstrap samples (uniform sampling with replacement)
-
     sample_indices = random_instance.randint(0, n_samples, n_samples)
     sample_counts = np.bincount(sample_indices, minlength=n_samples)
     indices = np.arange(n_samples)
@@ -82,8 +69,6 @@ def _generate_train_valid_samples(random_state, n_samples, tree_idx):
             (random_state + 1) % np.iinfo(np.uintp).max, n_samples
         )
     else:
-        # print("sample_indices: ", sample_indices)
-        # print("sample_counts: ", sample_counts)
         train_mask = np.logical_not(valid_mask)
         train_indices = indices[train_mask].astype(np.uintp)
         valid_indices = indices[valid_mask].astype(np.uintp)
@@ -92,54 +77,27 @@ def _generate_train_valid_samples(random_state, n_samples, tree_idx):
 
 
 # TODO: faudrait que la parallelisation marche des de le debut...
-def _parallel_build_trees(tree, X, y, sample_weight, tree_idx, n_trees, verbose=0):
+def _parallel_build_trees(tree, X, y, sample_weight):
     """
     Private function used to fit a single tree in parallel.
     """
-    # if verbose > 1:
-    # print("building tree %d of %d" % (tree_idx + 1, n_trees))
-
     n_samples = X.shape[0]
     if sample_weight is None:
         sample_weight = np.ones((n_samples,), dtype=np.float32)
     else:
-        # Do a copy with float32 dtype
         sample_weight = sample_weight.astype(np.float32)
 
     # TODO: all trees have the same train and valid indices...
     train_indices, valid_indices, train_indices_count = _generate_train_valid_samples(
-        tree.random_state, n_samples, tree_idx
+        tree.random_state, n_samples
     )
-
-    # print("train_indices:", train_indices)
-    # print("valid_indices:", valid_indices)
-
-    # sample_weight_train = sample_weight_full[train_indices]
-    # sample_weight_valid = sample_weight_full[valid_indices]
     # We use bootstrap: sample repetition is achieved by multiplying the sample
     # weights by the sample counts. By construction, no repetition is possible in
     # validation data
     sample_weight[train_indices] *= train_indices_count
-
-    # TODO: je ne comprends pas les lignes commentees suivantes. Pour l'instant,
-    #  il faut que sample weight contienne deja les poids si
-    #  class_weighted="balanced" dans la foret. NB : je crois que ca vient du fait
-    #  qu'on peut appeler plusieurs fois fit avec des sample_weight differents
-    # if class_weight == "subsample":
-    #     with catch_warnings():
-    #         simplefilter("ignore", DeprecationWarning)
-    #         curr_sample_weight *= compute_sample_weight("auto", y, indices=indices)
-    # elif class_weight == "balanced_subsample":
-    #     curr_sample_weight *= compute_sample_weight("balanced", y, indices=indices)
-
-    tic = time()
     tree.fit(
         X, y, train_indices, valid_indices, sample_weight, check_input=False,
     )
-    # toc = time()
-    # print("Done building tree %d with %d nodes in %.2f s" % (tree_idx,
-    #                                                           tree.n_nodes_, toc-tic))
-
     return tree
 
 
@@ -150,59 +108,15 @@ def _accumulate_prediction(predict, X, out, lock):
     It can't go locally in ForestClassifier or ForestRegressor, because joblib
     complains that it cannot pickle it when placed there.
     """
-    prediction = predict(X, check_input=False)
+    prediction = predict(X)
     with lock:
         out += prediction
-        # if len(out) == 1:
-        #     out[0] += prediction
-        # else:
-        #     for i in range(len(out)):
-        #         out[i] += prediction[i]
 
 
 def _get_tree_prediction(predict, X, out, lock, tree_idx):
     prediction = predict(X, check_input=False)
     with lock:
         out[tree_idx] = prediction
-
-
-# class ForestClassifier(ClassifierMixin, BaseForest, metaclass=ABCMeta):
-#     """
-#     Base class for forest of trees-based classifiers.
-#
-#     Warning: This class should not be used directly. Use derived classes
-#     instead.
-#     """
-#
-#     @abstractmethod
-#     def __init__(
-#         self,
-#         base_estimator,
-#         n_estimators=100,
-#         *,
-#         estimator_params=tuple(),
-#         bootstrap=False,
-#         oob_score=False,
-#         n_jobs=None,
-#         random_state=None,
-#         verbose=0,
-#         warm_start=False,
-#         class_weight=None,
-#         max_samples=None
-#     ):
-#         super().__init__(
-#             base_estimator,
-#             n_estimators=n_estimators,
-#             estimator_params=estimator_params,
-#             bootstrap=bootstrap,
-#             oob_score=oob_score,
-#             n_jobs=n_jobs,
-#             random_state=random_state,
-#             verbose=verbose,
-#             warm_start=warm_start,
-#             class_weight=class_weight,
-#             max_samples=max_samples,
-#         )
 
 
 class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
@@ -369,7 +283,6 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         max_depth=None,
         min_samples_split=2,
         min_samples_leaf=1,
-        # TODO: max_bins is 255, not 256 ? (for missing values ?)
         max_bins=255,
         categorical_features=None,
         max_features="auto",
@@ -379,8 +292,12 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         class_weight=None,
     ):
         self._fitted = False
+        self._n_samples_ = None
         self._n_features_ = None
-        self._n_outputs_ = 1
+        self._n_classes_ = None
+        self._n_outputs_ = None
+        self.max_features_ = None
+        self.n_jobs_ = None
 
         # Set the parameters. This calls the properties defined below
         self.n_estimators = n_estimators
@@ -404,186 +321,62 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         # encode classes into 0 ... n_classes - 1 and sets attributes classes_
         # and n_trees_per_iteration_
         check_classification_targets(y)
-
         label_encoder = LabelEncoder()
         encoded_y = label_encoder.fit_transform(y)
         self.classes_ = label_encoder.classes_
         n_classes = self.classes_.shape[0]
-        # only 1 tree for binary classification. For multiclass classification,
-        # we build 1 tree per class.
+        # only 1 tree for binary classification.
+        # TODO: For multiclass classification, we build 1 tree per class.
         self.n_trees_per_iteration_ = 1 if n_classes <= 2 else n_classes
-        encoded_y = encoded_y.astype(np.float64, copy=False)
+        encoded_y = np.ascontiguousarray(encoded_y, dtype=np.float32)
         return encoded_y
 
     def fit(self, X, y):
         """
-        Build a forest of trees from the training set (X, y).
-
-        Parameters
-        ----------
-        X : {array-like, sparse matrix} of shape (n_samples, n_features)
-            The training input samples. Internally, its dtype will be converted
-            to ``dtype=np.float32``. If a sparse matrix is provided, it will be
-            converted into a sparse ``csc_matrix``.
-
-        y : array-like of shape (n_samples,) or (n_samples, n_outputs)
-            The target values (class labels in classification, real numbers in
-            regression).
-
-        Returns
-        -------
-        self : object
         """
-        # Validate or convert input data
-
-        # TODO: reprendre ce que j'avais dans _classes.py et gerer la creation des bins
-        # TODO: tout simplifier au cas classification binaire
-        # TODO : on a fait un copier/coller depuis scikit-learn ici...
-
-        # TODO: Why only float64 ? What is the data is already binned ?
+        # TODO: Why only float64 ? What if the data is already binned ?
         X, y = self._validate_data(X, y, dtype=[np.float64], force_all_finite=False)
         y = self._encode_y(y)
         check_consistent_length(X, y)
-
-        # Do not create unit sample weights by default to later skip some
-        # computation
-        # if sample_weight is not None:
-        #     sample_weight = _check_sample_weight(sample_weight, X, dtype=np.float64)
-        #     # TODO: remove when PDP suports sample weights
-        #     self._fitted_with_sw = True
-
-        rng = check_random_state(self.random_state)
-
-        # # When warm starting, we want to re-use the same seed that was used
-        # # the first time fit was called (e.g. for subsampling or for the
-        # # train/val split).
-        # if not (self.warm_start and self._is_fitted()):
-        #     self._random_seed = rng.randint(np.iinfo(np.uint32).max, dtype="u8")
-
-        # TODO: mettre un max de trucs dans les properties
-        # self._validate_parameters()
-
-        # used for validation in predict
-        n_samples, self._n_features_ = X.shape
-
+        # TODO: deal properly with categorical features. What if these are specified ?
         self.is_categorical_, known_categories = self._check_categories(X)
 
-        # we need this stateful variable to tell raw_predict() that it was
-        # called from fit() (this current method), and that the data it has
-        # received is pre-binned.
-        # predicting is faster on pre-binned data, so we want early stopping
-        # predictions to be made on pre-binned data. Unfortunately the _scorer
-        # can only call predict() or predict_proba(), not raw_predict(), and
-        # there's no way to tell the scorer that it needs to predict binned
-        # data.
-        self._in_fit = True
+        n_samples, n_features = X.shape
+        # Let's get actual parameters based on the parameters passed by the user and
+        # the data
+        max_depth_ = self._get_max_depth_(self.max_depth)
+        max_features_ = self._get_max_features_(self.max_features, n_features)
+        self.max_features_ = max_features_
+        n_jobs_ = self._get_n_jobs_(self.n_jobs, self.n_estimators)
+        self.n_jobs_ = n_jobs_
+        random_state_ = check_random_state(self.random_state)
 
-        # if isinstance(self.loss, str):
-        #     self._loss = self._get_loss(sample_weight=sample_weight)
-        # elif isinstance(self.loss, BaseLoss):
-        #     self._loss = self.loss
+        # TODO: deal with class_weight here
 
-        # if self.early_stopping == "auto":
-        #     self.do_early_stopping_ = n_samples > 10000
-        # else:
-        #     self.do_early_stopping_ = self.early_stopping
-
-        # self._use_validation_data = self.validation_fraction is not None
-        # if self.do_early_stopping_ and self._use_validation_data:
-        #     # stratify for classification
-        #     stratify = y if hasattr(self._loss, "predict_proba") else None
-
-        # TODO: bootstrap avec stratification pour jeux de donnees mal balances ?
-        #  Quelle est la bonne facon de gerer ca ?
-
-        # Save the state of the RNG for the training and validation split.
-        # This is needed in order to have the same split when using
-        # warm starting.
-        #     if sample_weight is None:
-        #         X_train, X_val, y_train, y_val = train_test_split(
-        #             X,
-        #             y,
-        #             test_size=self.validation_fraction,
-        #             stratify=stratify,
-        #             random_state=self._random_seed,
-        #         )
-        #         sample_weight_train = sample_weight_val = None
-        #     else:
-        #         # TODO: incorporate sample_weight in sampling here, as well as
-        #         # stratify
-        #         (
-        #             X_train,
-        #             X_val,
-        #             y_train,
-        #             y_val,
-        #             sample_weight_train,
-        #             sample_weight_val,
-        #         ) = train_test_split(
-        #             X,
-        #             y,
-        #             sample_weight,
-        #             test_size=self.validation_fraction,
-        #             stratify=stratify,
-        #             random_state=self._random_seed,
-        #         )
-        # else:
-        #     X_train, y_train, sample_weight_train = X, y, sample_weight
-        #     X_val = y_val = sample_weight_val = None
-
-        # TODO: bon il faut gerer: 1. le bootstrap 2. la stratification 3. les
-        #  sample_weight 4. le binning. On va pour l'instant aller au plus simple: 1.
-        #  on binne les donnees des de debut et on ne s'emmerde pas avec les
-        #  sample_weight. Le bootstrap et la stratification devront etre geres dans la
-        #  fonction _generate_train_valid_samples au dessus (qu'on appelle avec un
-        #  Parallel comme dans l'implem originelle des forets)
-
-        # Bin the data
-        # For ease of use of the API, the user-facing GBDT classes accept the
-        # parameter max_bins, which doesn't take into account the bin for
-        # missing values (which is always allocated). However, since max_bins
-        # isn't the true maximal number of bins, all other private classes
-        # (binmapper, histbuilder...) accept n_bins instead, which is the
-        # actual total number of bins. Everywhere in the code, the
-        # convention is that n_bins == max_bins + 1
+        # Everywhere in the code, the convention is that n_bins == max_bins + 1,
+        # since max_bins is the maximum number of bins, without the eventual bin for
+        # missing values (+ 1 is for the missing values bin)
         n_bins = self.max_bins + 1  # + 1 for missing values
 
         # TODO: ici ici ici faut que je reprenne le code de scikit et pas de pygbm
         #  car ils gerent les features categorielles dans le mapper
 
+        # TODO: Deal more intelligently with this. Do not bin if the data is already
+        #  binned by test for dtype=='uint8' for instance
         self._bin_mapper = Binner(
             n_bins=n_bins,
             is_categorical=self.is_categorical_,
             known_categories=known_categories,
-            # TODO: what to do with this ?
-            # random_state=self._random_seed,
         )
         X_binned = self._bin_data(X, is_training_data=True)
 
-        # X_binned_train = self._bin_data(X_train, is_training_data=True)
-        # if X_val is not None:
-        #     X_binned_val = self._bin_data(X_val, is_training_data=False)
-        # else:
-        #     X_binned_val = None
-
+        # TODO: Deal with categorical data
         # Uses binned data to check for missing values
         has_missing_values = (
             (X_binned == self._bin_mapper.missing_values_bin_idx_)
             .any(axis=0)
             .astype(np.uint8)
         )
-
-        # if self.verbose:
-        #     print("Fitting gradient boosted rounds:")
-
-        n_samples = X_binned.shape[0]
-
-        # if not self.warm_start or not hasattr(self, "estimators_"):
-        #     # Free allocated memory, if any
-
-        # TODO: ici on initialise les estimateurs. Gerer le warm-start plus tard
-        # self.estimators_ = []
-
-        # print("self.n_estimators: ", self.n_estimators)
 
         trees = [
             TreeBinaryClassifier(
@@ -592,61 +385,39 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
                 step=self.step,
                 aggregation=self.aggregation,
                 dirichlet=self.dirichlet,
-                max_depth=self.max_depth,
+                max_depth=max_depth_,
                 min_samples_split=self.min_samples_split,
                 min_samples_leaf=self.min_samples_leaf,
                 categorical_features=self.categorical_features,
-                max_features=self.max_features,
-                random_state=self.random_state,
+                max_features=max_features_,
+                random_state=random_state_,
                 verbose=self.verbose,
             )
             for _ in range(self.n_estimators)
         ]
 
-        # trees = [
-        #     self._make_estimator(
-        #         append=False,
-        #         # TODO: correct random_state here ?
-        #         random_state=rng,
-        #     )
-        #     for i in range(self.n_estimators)
-        # ]
-
-        # Parallel loop: we prefer the threading backend as the Cython code
-        # for fitting the trees is internally releasing the Python GIL
-        # making threading more efficient than multiprocessing in
-        # that case. However, for joblib 0.12+ we respect any
-        # parallel_backend contexts set at a higher level,
-        # since correctness does not rely on using threads.
-
-        # print("self.n_jobs: ", self.n_jobs)
-        # print("options: ", _joblib_parallel_args(prefer="threads"))
+        # Parallel loop: use threading since all the numba code releases the GIL
         trees = Parallel(
-            n_jobs=self.n_jobs,
-            # verbose=self.verbose,
-            # verbose=10,
-            # backend="threading",
-            # require="sharedmem"
-            **_joblib_parallel_args(prefer="threads"),
+            n_jobs=self.n_jobs, **_joblib_parallel_args(prefer="threads"),
         )(
             delayed(_parallel_build_trees)(
-                # tree, X, y, sample_weight, i, len(trees),
                 tree,
                 X_binned,
                 y,
                 # TODO: deal with sample_weight
                 None,
-                tree_idx,
-                len(trees),
-                verbose=self.verbose,
+                # tree_idx,
+                # len(trees),
+                # verbose=self.verbose,
             )
             for tree_idx, tree in enumerate(trees)
         )
 
         self.trees = trees
-
         self._fitted = True
-
+        self._n_samples_ = n_samples
+        self._n_features_ = n_features
+        self._n_outputs_ = 1
         return self
 
     def get_nodes(self, tree_idx):
@@ -891,7 +662,7 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
 
         check_is_fitted(self)
         # Check data
-        X = self._validate_X_predict(X)
+        X = self._validate_X_predict(X, check_input=True)
 
         # TODO: we can also avoid data binning for predictions...
         # Bin the data
@@ -1016,58 +787,68 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
 
         return np.array(results).T
 
-    def decision_path(self, X):
-        """
-        Return the decision path in the forest.
+    # def decision_path(self, X):
+    #     """
+    #     Return the decision path in the forest.
+    #
+    #     .. versionadded:: 0.18
+    #
+    #     Parameters
+    #     ----------
+    #     X : {array-like, sparse matrix} of shape (n_samples, n_features)
+    #         The input samples. Internally, its dtype will be converted to
+    #         ``dtype=np.float32``. If a sparse matrix is provided, it will be
+    #         converted into a sparse ``csr_matrix``.
+    #
+    #     Returns
+    #     -------
+    #     indicator : sparse matrix of shape (n_samples, n_nodes)
+    #         Return a node indicator matrix where non zero elements indicates
+    #         that the samples goes through the nodes. The matrix is of CSR
+    #         format.
+    #
+    #     n_nodes_ptr : ndarray of shape (n_estimators + 1,)
+    #         The columns from indicator[n_nodes_ptr[i]:n_nodes_ptr[i+1]]
+    #         gives the indicator value for the i-th estimator.
+    #
+    #     """
+    #     X = self._validate_X_predict(X)
+    #     indicators = Parallel(
+    #         n_jobs=self.n_jobs,
+    #         verbose=self.verbose,
+    #         **_joblib_parallel_args(prefer="threads"),
+    #     )(
+    #         delayed(tree.decision_path)(X, check_input=False)
+    #         for tree in self.estimators_
+    #     )
+    #
+    #     n_nodes = [0]
+    #     n_nodes.extend([i.shape[1] for i in indicators])
+    #     n_nodes_ptr = np.array(n_nodes).cumsum()
+    #
+    #     return sparse_hstack(indicators).tocsr(), n_nodes_ptr
 
-        .. versionadded:: 0.18
+    # def _validate_y_class_weight(self, y):
+    #     # Default implementation
+    #     return y, None
 
-        Parameters
-        ----------
-        X : {array-like, sparse matrix} of shape (n_samples, n_features)
-            The input samples. Internally, its dtype will be converted to
-            ``dtype=np.float32``. If a sparse matrix is provided, it will be
-            converted into a sparse ``csr_matrix``.
+    def _validate_X_predict(self, X, check_input):
+        """Validate the training data on predict (probabilities)."""
+        if check_input:
 
-        Returns
-        -------
-        indicator : sparse matrix of shape (n_samples, n_nodes)
-            Return a node indicator matrix where non zero elements indicates
-            that the samples goes through the nodes. The matrix is of CSR
-            format.
-
-        n_nodes_ptr : ndarray of shape (n_estimators + 1,)
-            The columns from indicator[n_nodes_ptr[i]:n_nodes_ptr[i+1]]
-            gives the indicator value for the i-th estimator.
-
-        """
-        X = self._validate_X_predict(X)
-        indicators = Parallel(
-            n_jobs=self.n_jobs,
-            verbose=self.verbose,
-            **_joblib_parallel_args(prefer="threads"),
-        )(
-            delayed(tree.decision_path)(X, check_input=False)
-            for tree in self.estimators_
-        )
-
-        n_nodes = [0]
-        n_nodes.extend([i.shape[1] for i in indicators])
-        n_nodes_ptr = np.array(n_nodes).cumsum()
-
-        return sparse_hstack(indicators).tocsr(), n_nodes_ptr
-
-    def _validate_y_class_weight(self, y):
-        # Default implementation
-        return y, None
-
-    def _validate_X_predict(self, X):
-        """
-        Validate X whenever one tries to predict, apply, predict_proba."""
-        check_is_fitted(self)
-
-        return self.trees[0]._validate_X_predict(X, check_input=True)
-
+            X = check_array(X, accept_sparse="csr", dtype=np.float32)
+            # X = self._validate_data(X, dtype=DTYPE, accept_sparse="csr",
+            #                         reset=False)
+            if issparse(X) and (
+                X.indices.dtype != np.intc or X.indptr.dtype != np.intc
+            ):
+                raise ValueError(
+                    "No support for np.int64 index based " "sparse matrices"
+                )
+        else:
+            # The number of features is checked regardless of `check_input`
+            self._check_n_features(X, reset=False)
+        return X
     # # # # # # # # # # # # # # # # # # # #
     # Below are all the class properties  #
     # # # # # # # # # # # # # # # # # # # #
@@ -1081,7 +862,7 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         if self._fitted:
             raise ValueError("You cannot change n_estimators after calling fit")
         else:
-            if not isinstance(val, numbers.Integral):
+            if not isinstance(val, int):
                 raise ValueError("n_estimators must be an integer number")
             elif val < 1:
                 raise ValueError("n_estimators must be >= 1")
@@ -1122,12 +903,12 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
 
     @step.setter
     def step(self, val):
-        if not isinstance(val, numbers.Real):
+        if not isinstance(val, float):
             raise ValueError("step must be a float")
         elif val <= 0:
             raise ValueError("step must be positive")
         else:
-            self._step = float(val)
+            self._step = val
 
     @property
     def aggregation(self):
@@ -1146,13 +927,13 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
 
     @dirichlet.setter
     def dirichlet(self, val):
-        if not isinstance(val, numbers.Real):
+        if not isinstance(val, float):
             raise ValueError("dirichlet must be a float")
         else:
             if val < 0.0:
                 raise ValueError("dirichlet must be positive")
             else:
-                self._dirichlet = float(val)
+                self._dirichlet = val
 
     @property
     def max_depth(self):
@@ -1163,7 +944,7 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         if val is None:
             self._max_depth = val
         else:
-            if not isinstance(val, numbers.Integral):
+            if not isinstance(val, int):
                 raise ValueError("max_depth must be None or an integer number")
             else:
                 if val < 2:
@@ -1171,19 +952,23 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
                 else:
                     self._max_depth = val
 
+    @staticmethod
+    def _get_max_depth_(max_depth):
+        return np.iinfo(np.uintp).max if max_depth is None else max_depth
+
     @property
     def min_samples_split(self):
         return self._min_samples_split
 
     @min_samples_split.setter
     def min_samples_split(self, val):
-        if not isinstance(val, numbers.Integral):
+        if not isinstance(val, int):
             raise ValueError("min_samples_split must be an integer number")
         else:
             if val < 2:
                 raise ValueError("min_samples_split must be >= 2")
             else:
-                self._min_samples_split = int(val)
+                self._min_samples_split = val
 
     @property
     def min_samples_leaf(self):
@@ -1191,7 +976,7 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
 
     @min_samples_leaf.setter
     def min_samples_leaf(self, val):
-        if not isinstance(val, numbers.Integral):
+        if not isinstance(val, int):
             raise ValueError("min_samples_leaf must be an integer number")
         else:
             if val < 1:
@@ -1205,7 +990,7 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
 
     @max_bins.setter
     def max_bins(self, val):
-        if not isinstance(val, numbers.Integral):
+        if not isinstance(val, int):
             raise ValueError("max_bins must be an integer number")
         else:
             if (val < 2) or (val > 256):
@@ -1231,7 +1016,7 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
                     "max_features can be either None, an integer value "
                     "or 'sqrt', 'log2' or 'auto'"
                 )
-        elif isinstance(val, numbers.Integral):
+        elif isinstance(val, int):
             if val < 1:
                 raise ValueError("max_features must be >= 1")
             else:
@@ -1242,12 +1027,39 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
                 "or 'sqrt', 'log2' or 'auto'"
             )
 
+    @staticmethod
+    def _get_max_features_(max_features, n_features):
+        if isinstance(max_features, str):
+            if max_features == "auto":
+                return max(1, int(np.sqrt(n_features)))
+            elif max_features == "sqrt":
+                return max(1, int(np.sqrt(n_features)))
+            elif max_features == "log2":
+                return max(1, int(np.log2(n_features)))
+            else:
+                raise ValueError(
+                    "max_features can be either None, an integer "
+                    "value or 'sqrt', 'log2' or 'auto'"
+                )
+        elif max_features is None:
+            return n_features
+        elif isinstance(max_features, int):
+            if max_features > n_features:
+                raise ValueError("max_features must be <= n_features")
+            else:
+                return max_features
+        else:
+            raise ValueError(
+                "max_features can be either None, an integer "
+                "value or 'sqrt', 'log2' or 'auto'"
+            )
+
     @max_bins.setter
     def max_bins(self, val):
-        if not isinstance(val, numbers.Integral):
+        if not isinstance(val, int):
             raise ValueError("max_bins must be an integer number")
         else:
-            if (val < 2) or (val > 256):
+            if not 2 <= val <= 255:
                 raise ValueError("max_bins must be between 2 and 256")
             else:
                 self._max_bins = val
@@ -1258,12 +1070,16 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
 
     @n_jobs.setter
     def n_jobs(self, val):
-        if not isinstance(val, numbers.Integral):
+        if not isinstance(val, int):
             raise ValueError("n_jobs must be an integer number")
         elif val < -1 or val == 0:
             raise ValueError("n_jobs must be >= 1 or equal to -1")
         else:
             self._n_jobs = val
+
+    @staticmethod
+    def _get_n_jobs_(n_jobs, n_estimators):
+        return min(effective_n_jobs(n_jobs), n_estimators)
 
     @property
     def random_state(self):
@@ -1298,6 +1114,17 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
     # TODO: property for class_weight here
 
     @property
+    def n_samples_(self):
+        if self._fitted:
+            return self._n_samples_
+        else:
+            raise ValueError("You must call fit before asking for n_features_")
+
+    @n_samples_.setter
+    def n_samples_(self, _):
+        raise ValueError("n_samples_ is a readonly attribute")
+
+    @property
     def n_features_(self):
         if self._fitted:
             return self._n_features_
@@ -1305,5 +1132,21 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
             raise ValueError("You must call fit before asking for n_features_")
 
     @n_features_.setter
-    def n_features_(self, val):
+    def n_features_(self, _):
         raise ValueError("n_features_ is a readonly attribute")
+
+    @property
+    def n_classes_(self):
+        return self._n_classes_
+
+    @n_classes_.setter
+    def n_classes_(self, _):
+        raise ValueError("n_classes_ is a readonly attribute")
+
+    @property
+    def n_outputs_(self):
+        return self._n_outputs_
+
+    @n_outputs_.setter
+    def n_outputs_(self, _):
+        raise ValueError("n_outputs_ is a readonly attribute")
