@@ -93,51 +93,6 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
         check_is_fitted(self)
         return self.tree_.n_leaves
 
-    # def fit(
-    #     self, X, y, train_indices, valid_indices, sample_weights, check_input=False,
-    # ):
-    #     n_classes = 2
-    #     max_bins = 255
-    #     # TODO: on obtiendra cette info via le binner qui est dans la foret
-    #     n_samples, n_features = X.shape
-    #     n_bins_per_feature = max_bins * np.ones(n_features)
-    #     n_bins_per_feature = n_bins_per_feature.astype(np.intp)
-    #
-    #     # Then, we create the tree object, which is mostly a data container for the
-    #     # nodes.
-    #     tree = Tree(n_features, n_classes)
-    #
-    #     # TODO: faudra verifier ca aussi
-    #     max_features = 2
-    #
-    #     dirichlet = self.dirichlet
-    #     aggregation = self.aggregation
-    #     step = self.step
-    #
-    #     # We build a tree context, that contains global information about
-    #     # the data, in particular the way we'll organize data into contiguous
-    #     # node indexes both for training and validation samples
-    #     tree_context = TreeContext(
-    #         X,
-    #         y,
-    #         sample_weights,
-    #         train_indices,
-    #         valid_indices,
-    #         n_classes,
-    #         max_bins,
-    #         n_bins_per_feature,
-    #         max_features,
-    #         aggregation,
-    #         dirichlet,
-    #         step,
-    #     )
-    #
-    #     node_context = NodeContext(tree_context)
-    #     grow(tree, tree_context, node_context)
-    #     self._tree = tree
-    #     self._tree_context = tree_context
-    #     return self
-
     def get_nodes(self):
         return get_nodes(self._tree)
 
@@ -178,9 +133,7 @@ class TreeBinaryClassifier(ClassifierMixin, TreeBase):
         )
         self.n_classes = n_classes
 
-    def fit(
-        self, X, y, train_indices, valid_indices, sample_weights, check_input=False,
-    ):
+    def fit(self, X, y, train_indices, valid_indices, sample_weights):
         n_classes = self.n_classes
         max_bins = self.n_bins - 1
         # TODO: on obtiendra cette info via le binner qui est dans la foret
@@ -188,18 +141,8 @@ class TreeBinaryClassifier(ClassifierMixin, TreeBase):
         n_bins_per_feature = max_bins * np.ones(n_features)
         n_bins_per_feature = n_bins_per_feature.astype(np.intp)
 
-        # Then, we create the tree object, which is mostly a data container for the
-        # nodes.
+        # Create the tree object, which is mostly a data container for the nodes
         tree = Tree(n_features, n_classes)
-
-        # max_features = 2
-
-        # # # TODO: faudra verifier ca aussi
-        # # max_features = self.max_features
-        # #
-        # # dirichlet = self.dirichlet
-        # # aggregation = self.aggregation
-        # step = self.step
 
         # We build a tree context, that contains global information about
         # the data, in particular the way we'll organize data into contiguous

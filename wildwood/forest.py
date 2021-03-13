@@ -95,9 +95,7 @@ def _parallel_build_trees(tree, X, y, sample_weight):
     # weights by the sample counts. By construction, no repetition is possible in
     # validation data
     sample_weight[train_indices] *= train_indices_count
-    tree.fit(
-        X, y, train_indices, valid_indices, sample_weight, check_input=False,
-    )
+    tree.fit(X, y, train_indices, valid_indices, sample_weight)
     return tree
 
 
@@ -868,6 +866,7 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
             # The number of features is checked regardless of `check_input`
             self._check_n_features(X, reset=False)
         return X
+
     # # # # # # # # # # # # # # # # # # # #
     # Below are all the class properties  #
     # # # # # # # # # # # # # # # # # # # #

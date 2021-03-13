@@ -1,7 +1,9 @@
 from math import log, exp
 import numpy as np
+from numpy.random import randint
 from numba import (
     jit,
+    void,
     boolean,
     float32,
     float64,
@@ -86,9 +88,7 @@ def resize(a, new_size, zeros=False):
 
 
 @jit(
-    nopython=True,
-    nogil=True,
-    locals={"new_size": uintp, "d0": uintp, "d1": uintp},
+    nopython=True, nogil=True, locals={"new_size": uintp, "d0": uintp, "d1": uintp},
 )
 def resize2d(a, new_size, zeros=False):
     d0, d1 = a.shape
@@ -113,6 +113,7 @@ def resize3d(a, new_size, zeros=False):
         new = np.empty((new_size, d1, d2), a.dtype)
     new[:d0, :, :] = a
     return new
+
 
 # @njit(nb_float32(np_float32, np_float32))
 @njit
@@ -159,3 +160,34 @@ def get_type(class_):
     else:
         return class_type.instance_type
 
+
+@jit(
+    void(uintp[::1], uintp[::1]),
+    nopython=True,
+    nogil=True,
+    locals={"i": uintp, "j": uintp},
+)
+def sample_without_replacement(pool, out):
+    """Samples integers without replacement from pool into out inplace.
+
+    Parameters
+    ----------
+    pool : ndarray of size population_size
+        The array of integers to sample from (it containing [0, ..., n_samples-1]
+
+    out : ndarray of size n_samples
+        The sampled subsets of integer
+    """
+    # TODO: faudra verifier que les arbres n'utilisent pas tous les meme
+    #  permutations... faudra peut etre avoir a gerer le random_state ici ?
+    # We sample n_samples elements from the pool
+    n_samples = out.shape[0]
+    population_size = pool.shape[0]
+    # Initialize the pool
+    for i in range(population_size):
+        pool[i] = i
+
+    for i in range(n_samples):
+        j = randint(population_size - i)
+        out[i] = pool[j]
+        pool[j] = pool[population_size - i - 1]

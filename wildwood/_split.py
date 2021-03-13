@@ -183,7 +183,7 @@ def copy_split(from_split, to_split):
 
 
 @jit(
-    void(TreeContextType, NodeContextType, uintp, SplitType),
+    void(TreeContextType, NodeContextType, uintp, uintp, SplitType),
     nopython=True,
     nogil=True,
     locals={
@@ -207,7 +207,7 @@ def copy_split(from_split, to_split):
         "best_gain_proxy": float32,
     },
 )
-def find_best_split_along_feature(tree_context, node_context, feature, best_split):
+def find_best_split_along_feature(tree_context, node_context, feature, f, best_split):
     """Finds the best split (best bin_threshold) for a feature. If no split can be
     found (this happens when we can't find a split with a large enough weighted
     number of training and validation samples in the left and right childs) we simply
@@ -226,6 +226,10 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
     feature : uint
         The index of the feature for which we want to find a split
 
+    f : uint
+        The index in [0, ..., max_feature-1] corresponding to the position in the
+        node_context of the feature we are considering for a split
+
     best_split : SplitType
         Data about the best split found for the feature
     """
@@ -238,11 +242,11 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
     w_samples_train = node_context.w_samples_train
     w_samples_valid = node_context.w_samples_valid
     # Weighed number of training samples in each bin for the feature
-    w_samples_train_in_bins = node_context.w_samples_train_in_bins[feature]
+    w_samples_train_in_bins = node_context.w_samples_train_in_bins[f]
     # Weighted number of validation samples in each bin for the feature
-    w_samples_valid_in_bins = node_context.w_samples_valid_in_bins[feature]
+    w_samples_valid_in_bins = node_context.w_samples_valid_in_bins[f]
     # Get the sum of labels (counts) in each bin for the feature
-    y_sum_in_bins = node_context.y_sum[feature]
+    y_sum_in_bins = node_context.y_sum[f]
 
     # Counts and sums on the left are zero, since we go from left to right, while
     # counts and sums on the right contain everything
@@ -330,6 +334,7 @@ def find_best_split_along_feature(tree_context, node_context, feature, best_spli
         "best_split": SplitType,
         "candidate_split": SplitType,
         "feature": uintp,
+        "f": uintp
     },
 )
 def find_node_split(tree_context, node_context):
@@ -353,17 +358,18 @@ def find_node_split(tree_context, node_context):
     best_split : SplitType
         Data about the best split found.
     """
-    # Get the set of features to try out (we shall use columns subsampling)
-    features = node_context.features
+    # Get the set of features to try out
+    features = node_context.features_sampled
     # Loop over the possible features
     best_gain_proxy = -np.inf
     # TODO: we should initialize these just once, in the node_context ?
     best_split = Split(tree_context.n_classes)
     candidate_split = Split(tree_context.n_classes)
+    f = 0
     for feature in features:
         # Compute the best bin and gain proxy obtained for the feature
         find_best_split_along_feature(
-            tree_context, node_context, feature, candidate_split
+            tree_context, node_context, feature, f, candidate_split
         )
         # If we found a candidate split along the feature
         if candidate_split.found_split:
@@ -372,6 +378,7 @@ def find_node_split(tree_context, node_context):
                 # Then we replace the best current split
                 copy_split(candidate_split, best_split)
                 best_gain_proxy = candidate_split.gain_proxy
+        f += 1
 
     # TODO: Compute the true information gain and save it somewhere ? But it's only
     #  useful for root ?

@@ -1,34 +1,9 @@
-# from numba import njit
-# from heapq import heappush
-# from collections import namedtuple
-# from numpy.random import randint
-# from numba.experimental import jitclass
-# from numba import from_dtype
-# from numba.typed import List
-# from time import time
-# from numba import uint32
-
-# from wildwood._splitter import sort
-#
-# from wildwood._utils import SIZE_t, DOUBLE_t, NP_SIZE_t, NP_DOUBLE_t
-#
-# import numpy as np
-# from sklearn.utils import check_random_state
-
-# from wildwood._utils import MAX_INT
-
-from wildwood._utils import njit, jitclass
-
-from numba import from_dtype
-import numpy as np
-from wildwood._utils import np_float32, np_size_t, nb_float32, nb_size_t
 
 import numpy as np
 from numba import uintp, jit, void, optional
 
 
-# print("np.iinfo(np.uintp).max:", np.iinfo(np.uintp).max)
-# print("uintp.maxval: ", uintp.maxval)
+from numpy.random import randint
 
 
 @jit(signature=["void(uintp)", "void(uintp, optional(uintp))"], nopython=True,
@@ -42,11 +17,66 @@ def f(x, y=None):
         print(x + y)
 
 
+@jit(void(uintp[::1], uintp[::1]), nopython=True, nogil=True, locals={"i": uintp,
+                                                                  "j": uintp})
+def sample_without_replacement(pool, out):
+    """Sample integers without replacement.
+
+    Select n_samples integers from the set [0, n_population) without
+    replacement.
+
+    Time complexity: O(n_population +  O(np.random.randint) * n_samples)
+
+    Space complexity of O(n_population + n_samples).
+
+
+    Parameters
+    ----------
+    n_population : int
+        The size of the set to sample from.
+
+    n_samples : int
+        The number of integer to sample.
+
+    random_state : int, RandomState instance or None, default=None
+        If int, random_state is the seed used by the random number generator;
+        If RandomState instance, random_state is the random number generator;
+        If None, the random number generator is the RandomState instance used
+        by `np.random`.
+
+    Returns
+    -------
+    out : ndarray of shape (n_samples,)
+        The sampled subsets of integer.
+    """
+
+    n_samples = out.shape[0]
+    n_population = pool.shape[0]
+
+    # rng = check_random_state(random_state)
+    # rng_randint = rng.randint
+
+    # Initialize the pool
+    for i in range(n_population):
+        pool[i] = i
+
+    for i in range(n_samples):
+        j = randint(n_population - i)
+        out[i] = pool[j]
+        pool[j] = pool[n_population - i - 1]
+
+
 @jit(nopython=True, nogil=True)
 def main():
-    f(3)
-    f(3, 1)
-    f(1, None)
+    pool = np.arange(0, 11).astype(np.uintp)
+    out = np.arange(0, 3).astype(np.uintp)
+    print(pool)
+
+    for _ in range(10):
+        print(32 * "=")
+        sample_without_replacement(pool, out)
+        print(pool)
+        print(out)
 
 
 main()

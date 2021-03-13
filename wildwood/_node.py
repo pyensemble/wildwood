@@ -8,10 +8,10 @@ node numpy dtypes and several functions operating locally in nodes.
 
 from math import log
 import numpy as np
-from numba import from_dtype, jit, uint8, intp, uintp, float32, void
+from numba import from_dtype, jit, boolean, uint8, intp, uintp, float32, void
 from numba.experimental import jitclass
 
-from ._utils import get_type
+from ._utils import get_type, sample_without_replacement
 from ._tree_context import TreeContextType
 
 
@@ -82,8 +82,14 @@ node_type = from_dtype(node_dtype)
 
 # A node_context contains all the data required to find the best split of the node
 node_context_type = [
-    # Array of candidate features for splitting
-    ("features", uintp[::1]),
+    # This array contains the index of all the features. This will be modified
+    # inplace when sampling features to be considered for splits
+    ("features_pool", uintp[::1]),
+    # This array will contain the features sampled uniformly at random (without
+    # replacement) to be considered for splits
+    ("features_sampled", uintp[::1]),
+    # Do we need to perform features sampling ?
+    ("sample_features", boolean),
     # Number of training samples in the node
     ("n_samples_train", intp),
     # Number of validation (out-of-the-bag) samples in the node
@@ -128,6 +134,18 @@ class NodeContext:
 
     Attributes
     ----------
+    features_pool : ndarray
+        Array of shape (n_features,) of intp dtype containing all the features
+        indexes, namely [0, ..., n_features-1]
+
+    features_sampled : ndarray
+        Array of shape (max_features,) of intp dtype containing sampled features to
+        be considered for possible splitting
+
+    sample_features : bool
+        Do we need to perform features sampling ? (This if True if n_features !=
+        max_features and False otherwise)
+
     features : ndarray
         Array of shape (max_features,) of intp dtype containing the candidate features
         for splitting. These features are chosen uniformly at random each time a
@@ -182,8 +200,15 @@ class NodeContext:
         max_bins = tree_context.max_bins
         n_classes = tree_context.n_classes
         n_features = tree_context.n_features
-        # TODO: sample the features at random later
-        self.features = np.arange(0, n_features, dtype=np.uintp)
+        # If max_features is the same as n_features, we don't need to sample features
+        self.sample_features = max_features != n_features
+        # This array contains the index of all the features. This will be modified
+        # inplace when sampling features to be considered for splits
+        self.features_pool = np.arange(0, n_features, dtype=np.uintp)
+        # This array will contain the features sampled uniformly at random (without
+        # replacement) to be considered for splits
+        self.features_sampled = np.arange(0, max_features, dtype=np.uintp)
+
         self.w_samples_train_in_bins = np.empty(
             (max_features, max_bins), dtype=np.float32
         )
@@ -264,8 +289,14 @@ def compute_node_context(
     w_samples_valid_in_bins = node_context.w_samples_valid_in_bins
     y_sum = node_context.y_sum
     y_pred = node_context.y_pred
-    # TODO: initialize features with Fisher-Yates ?
-    features = node_context.features
+
+    # If necessary, sample the features
+    if node_context.sample_features:
+        sample_without_replacement(
+            node_context.features_pool, node_context.features_sampled
+        )
+
+    features = node_context.features_sampled
     w_samples_train_in_bins.fill(0.0)
     w_samples_valid_in_bins.fill(0.0)
     y_sum.fill(0.0)
@@ -295,6 +326,7 @@ def compute_node_context(
 
     # TODO: unrolling the for loop could be faster
     # For-loop on features first and then samples (X is F-major)
+
     for feature in features:
         # Compute statistics about training samples
         for sample in train_indices:
