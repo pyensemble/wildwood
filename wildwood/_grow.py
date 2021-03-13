@@ -154,7 +154,8 @@ def push_record(
     records.top += 1
 
 
-@jit(boolean(RecordsType), nopython=True, nogil=True)
+# @jit(boolean(RecordsType), nopython=True, nogil=True)
+@jit(nopython=True, nogil=True)
 def has_records(records):
     """Tests if the stack of records contain remaining records.
 
@@ -172,7 +173,7 @@ def has_records(records):
 
 
 @jit(
-    Tuple((intp, uintp, boolean, float32, uintp, uintp, uintp, uintp))(RecordsType),
+    # Tuple((intp, uintp, boolean, float32, uintp, uintp, uintp, uintp))(RecordsType),
     nopython=True,
     nogil=True,
     locals={"stack_top": record_type},

@@ -37,6 +37,7 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
     def __init__(
         self,
         *,
+        n_bins,
         criterion,
         loss,
         step,
@@ -50,6 +51,10 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
         random_state=None,
         verbose=0,
     ):
+        self._tree = None
+        self._tree_context = None
+
+        self.n_bins = n_bins
         self.criterion = criterion
         self.loss = loss
         self.step = step
@@ -88,50 +93,50 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
         check_is_fitted(self)
         return self.tree_.n_leaves
 
-    def fit(
-        self, X, y, train_indices, valid_indices, sample_weights, check_input=False,
-    ):
-        n_classes = 2
-        max_bins = 255
-        # TODO: on obtiendra cette info via le binner qui est dans la foret
-        n_samples, n_features = X.shape
-        n_bins_per_feature = max_bins * np.ones(n_features)
-        n_bins_per_feature = n_bins_per_feature.astype(np.intp)
-
-        # Then, we create the tree object, which is mostly a data container for the
-        # nodes.
-        tree = Tree(n_features, n_classes)
-
-        # TODO: faudra verifier ca aussi
-        max_features = 2
-
-        dirichlet = self.dirichlet
-        aggregation = self.aggregation
-        step = self.step
-
-        # We build a tree context, that contains global information about
-        # the data, in particular the way we'll organize data into contiguous
-        # node indexes both for training and validation samples
-        tree_context = TreeContext(
-            X,
-            y,
-            sample_weights,
-            train_indices,
-            valid_indices,
-            n_classes,
-            max_bins,
-            n_bins_per_feature,
-            max_features,
-            aggregation,
-            dirichlet,
-            step,
-        )
-
-        node_context = NodeContext(tree_context)
-        grow(tree, tree_context, node_context)
-        self._tree = tree
-        self._tree_context = tree_context
-        return self
+    # def fit(
+    #     self, X, y, train_indices, valid_indices, sample_weights, check_input=False,
+    # ):
+    #     n_classes = 2
+    #     max_bins = 255
+    #     # TODO: on obtiendra cette info via le binner qui est dans la foret
+    #     n_samples, n_features = X.shape
+    #     n_bins_per_feature = max_bins * np.ones(n_features)
+    #     n_bins_per_feature = n_bins_per_feature.astype(np.intp)
+    #
+    #     # Then, we create the tree object, which is mostly a data container for the
+    #     # nodes.
+    #     tree = Tree(n_features, n_classes)
+    #
+    #     # TODO: faudra verifier ca aussi
+    #     max_features = 2
+    #
+    #     dirichlet = self.dirichlet
+    #     aggregation = self.aggregation
+    #     step = self.step
+    #
+    #     # We build a tree context, that contains global information about
+    #     # the data, in particular the way we'll organize data into contiguous
+    #     # node indexes both for training and validation samples
+    #     tree_context = TreeContext(
+    #         X,
+    #         y,
+    #         sample_weights,
+    #         train_indices,
+    #         valid_indices,
+    #         n_classes,
+    #         max_bins,
+    #         n_bins_per_feature,
+    #         max_features,
+    #         aggregation,
+    #         dirichlet,
+    #         step,
+    #     )
+    #
+    #     node_context = NodeContext(tree_context)
+    #     grow(tree, tree_context, node_context)
+    #     self._tree = tree
+    #     self._tree_context = tree_context
+    #     return self
 
     def get_nodes(self):
         return get_nodes(self._tree)
@@ -141,6 +146,8 @@ class TreeBinaryClassifier(ClassifierMixin, TreeBase):
     def __init__(
         self,
         *,
+        n_bins,
+        n_classes,
         criterion="gini",
         loss="log",
         step=1.0,
@@ -155,6 +162,7 @@ class TreeBinaryClassifier(ClassifierMixin, TreeBase):
         verbose=0,
     ):
         super().__init__(
+            n_bins=n_bins,
             criterion=criterion,
             loss=loss,
             step=step,
@@ -168,13 +176,53 @@ class TreeBinaryClassifier(ClassifierMixin, TreeBase):
             random_state=random_state,
             verbose=verbose,
         )
+        self.n_classes = n_classes
 
     def fit(
         self, X, y, train_indices, valid_indices, sample_weights, check_input=False,
     ):
-        TreeBase.fit(
-            self, X, y, train_indices, valid_indices, sample_weights, check_input,
+        n_classes = self.n_classes
+        max_bins = self.n_bins - 1
+        # TODO: on obtiendra cette info via le binner qui est dans la foret
+        n_samples, n_features = X.shape
+        n_bins_per_feature = max_bins * np.ones(n_features)
+        n_bins_per_feature = n_bins_per_feature.astype(np.intp)
+
+        # Then, we create the tree object, which is mostly a data container for the
+        # nodes.
+        tree = Tree(n_features, n_classes)
+
+        # max_features = 2
+
+        # # # TODO: faudra verifier ca aussi
+        # # max_features = self.max_features
+        # #
+        # # dirichlet = self.dirichlet
+        # # aggregation = self.aggregation
+        # step = self.step
+
+        # We build a tree context, that contains global information about
+        # the data, in particular the way we'll organize data into contiguous
+        # node indexes both for training and validation samples
+        tree_context = TreeContext(
+            X,
+            y,
+            sample_weights,
+            train_indices,
+            valid_indices,
+            self.n_classes,
+            self.n_bins - 1,
+            n_bins_per_feature,
+            self.max_features,
+            self.aggregation,
+            self.dirichlet,
+            self.step,
         )
+
+        node_context = NodeContext(tree_context)
+        grow(tree, tree_context, node_context)
+        self._tree = tree
+        self._tree_context = tree_context
         return self
 
     def predict_proba(self, X):

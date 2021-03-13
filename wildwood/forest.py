@@ -318,16 +318,31 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         self.class_weight = class_weight
 
     def _encode_y(self, y):
-        # encode classes into 0 ... n_classes - 1 and sets attributes classes_
+        """
+        Encode classes into {0, ..., n_classes - 1} and sets attributes classes_,
+        n_classes_ and n_trees_per_iteration_
+
+        Parameters
+        ----------
+        y : ndarrray
+            Array of input labels
+
+        Returns
+        -------
+        output : ndarray
+            Encoded array of labels
+        """
+        #
         # and n_trees_per_iteration_
         check_classification_targets(y)
         label_encoder = LabelEncoder()
         encoded_y = label_encoder.fit_transform(y)
         self.classes_ = label_encoder.classes_
-        n_classes = self.classes_.shape[0]
+        n_classes_ = self.classes_.shape[0]
+        self._n_classes_ = n_classes_
         # only 1 tree for binary classification.
         # TODO: For multiclass classification, we build 1 tree per class.
-        self.n_trees_per_iteration_ = 1 if n_classes <= 2 else n_classes
+        self.n_trees_per_iteration_ = 1 if n_classes_ <= 2 else n_classes_
         encoded_y = np.ascontiguousarray(encoded_y, dtype=np.float32)
         return encoded_y
 
@@ -342,10 +357,12 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         self.is_categorical_, known_categories = self._check_categories(X)
 
         n_samples, n_features = X.shape
+        n_classes = self._n_classes_
         # Let's get actual parameters based on the parameters passed by the user and
         # the data
         max_depth_ = self._get_max_depth_(self.max_depth)
         max_features_ = self._get_max_features_(self.max_features, n_features)
+
         self.max_features_ = max_features_
         n_jobs_ = self._get_n_jobs_(self.n_jobs, self.n_estimators)
         self.n_jobs_ = n_jobs_
@@ -380,6 +397,8 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
 
         trees = [
             TreeBinaryClassifier(
+                n_bins=n_bins,
+                n_classes=n_classes,
                 criterion=self.criterion,
                 loss=self.loss,
                 step=self.step,
@@ -1017,8 +1036,8 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
                     "or 'sqrt', 'log2' or 'auto'"
                 )
         elif isinstance(val, int):
-            if val < 1:
-                raise ValueError("max_features must be >= 1")
+            if val < 2:
+                raise ValueError("max_features must be >= 2")
             else:
                 self._max_features = val
         else:
@@ -1031,11 +1050,11 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
     def _get_max_features_(max_features, n_features):
         if isinstance(max_features, str):
             if max_features == "auto":
-                return max(1, int(np.sqrt(n_features)))
+                return max(2, int(np.sqrt(n_features)))
             elif max_features == "sqrt":
-                return max(1, int(np.sqrt(n_features)))
+                return max(2, int(np.sqrt(n_features)))
             elif max_features == "log2":
-                return max(1, int(np.log2(n_features)))
+                return max(2, int(np.log2(n_features)))
             else:
                 raise ValueError(
                     "max_features can be either None, an integer "
@@ -1137,7 +1156,10 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
 
     @property
     def n_classes_(self):
-        return self._n_classes_
+        if self._fitted:
+            return self._n_classes_
+        else:
+            raise ValueError("You must call fit before asking for n_classes_")
 
     @n_classes_.setter
     def n_classes_(self, _):

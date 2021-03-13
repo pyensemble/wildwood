@@ -140,7 +140,7 @@ def log_sum_2_exp(a, b):
 
 
 def get_type(class_):
-    """Gives the numba type of an object is numba.jit decorators are enabled and None
+    """Gives the numba type of an object if numba.jit decorators are enabled and None
     otherwise. This helps to get correct coverage of the code
 
     Parameters
@@ -155,6 +155,7 @@ def get_type(class_):
     """
     class_type = getattr(class_, "class_type", None)
     if class_type is None:
-        return class_type
+        return lambda *_: None
     else:
         return class_type.instance_type
+
