@@ -3,10 +3,15 @@
 """
 # License: BSD 3 clause
 
+import time
+import random
+
 from warnings import warn
 import threading
 import numpy as np
 from joblib import Parallel, effective_n_jobs
+
+from tqdm import tqdm
 
 from scipy.sparse import issparse
 
@@ -414,21 +419,32 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         ]
 
         # Parallel loop: use threading since all the numba code releases the GIL
-        trees = Parallel(
-            n_jobs=self.n_jobs, **_joblib_parallel_args(prefer="threads"),
-        )(
-            delayed(_parallel_build_trees)(
-                tree,
-                X_binned,
-                y,
-                # TODO: deal with sample_weight
-                None,
-                # tree_idx,
-                # len(trees),
-                # verbose=self.verbose,
+        if self.verbose:
+            trees = Parallel(
+                n_jobs=self.n_jobs, **_joblib_parallel_args(prefer="threads"),
+            )(
+                delayed(_parallel_build_trees)(
+                    tree,
+                    X_binned,
+                    y,
+                    # TODO: deal with sample_weight
+                    None,
+                )
+                for tree in tqdm(trees)
             )
-            for tree_idx, tree in enumerate(trees)
-        )
+        else:
+            trees = Parallel(
+                n_jobs=self.n_jobs, **_joblib_parallel_args(prefer="threads"),
+            )(
+                delayed(_parallel_build_trees)(
+                    tree,
+                    X_binned,
+                    y,
+                    # TODO: deal with sample_weight
+                    None,
+                )
+                for tree in trees
+            )
 
         self.trees = trees
         self._fitted = True

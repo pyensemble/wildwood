@@ -69,6 +69,7 @@ clf_kwargs = {
     "dirichlet": 1e-8,
     "step": 1.0,
     "aggregation": True,
+    "verbose": False
 }
 
 
