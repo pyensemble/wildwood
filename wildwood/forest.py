@@ -3,9 +3,6 @@
 """
 # License: BSD 3 clause
 
-import time
-import random
-
 from warnings import warn
 import threading
 import numpy as np
