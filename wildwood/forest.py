@@ -695,7 +695,7 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         #     for j in np.atleast_1d(self.n_classes_)
         # ]
 
-        all_proba = np.zeros((X_binned.shape[0], 2))
+        all_proba = np.zeros((X_binned.shape[0], self.n_classes_))
 
         lock = threading.Lock()
         Parallel(

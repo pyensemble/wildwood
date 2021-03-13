@@ -1,3 +1,9 @@
+"""
+In this module we use wildwood on a binary classification problem with 2 features but
+with a very large sample size (to check that parallization works, and to track the
+evolution of computing times
+"""
+
 from time import time
 import logging
 import numpy as np
@@ -62,7 +68,7 @@ clf_kwargs = {
     "n_jobs": -1,
     "dirichlet": 1e-8,
     "step": 1.0,
-    "aggregation": True
+    "aggregation": True,
 }
 
 
@@ -199,6 +205,10 @@ def plot_decision_classification(classifiers, datasets):
 
 
 #
-#
+tic = time()
 plot_decision_classification(classifiers, datasets)
+toc = time()
+
+print("time: ", toc-tic)
+
 plt.show()
