@@ -20,7 +20,7 @@ from sklearn.ensemble import RandomForestClassifier
 
 # from wildwood._classes import DecisionTreeClassifier
 
-from wildwood.forest import ForestBinaryClassifier
+from wildwood.forest import ForestClassifier
 
 
 logging.basicConfig(
@@ -69,7 +69,7 @@ clf_kwargs = {
     "dirichlet": 1e-8,
     "step": 1.0,
     "aggregation": True,
-    "verbose": False
+    "verbose": True
 }
 
 
@@ -81,7 +81,7 @@ clf_kwargs = {
 
 classifiers = [
     # ("forest", ForestBinaryClassifier(n_estimators=1, **clf_kwargs)),
-    ("forest", ForestBinaryClassifier(**clf_kwargs)),
+    ("forest", ForestClassifier(**clf_kwargs)),
     # ("sk_forest", RandomForestClassifier(**clf_kwargs))
     # ("tree", DecisionTreeClassifier(**clf_kwargs)),
     # ("sk_tree", SkDecisionTreeClassifier(**clf_kwargs)),

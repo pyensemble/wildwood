@@ -15,13 +15,9 @@ from numba import jit, from_dtype, void, boolean, uint8, intp, uintp, float32
 from numba.types import Tuple
 from numba.experimental import jitclass
 
-from ._node import NodeContext, compute_node_context, node_type
+from ._split import find_node_split, split_indices
 
-from ._split import (
-    find_node_split,
-    split_indices,
-)
-
+from ._node import node_type
 
 from ._tree import (
     add_node_tree,
@@ -221,9 +217,11 @@ def pop_node_record(records):
     )
 
 
-# TODO: clean this function. 1. Remove useless stuff, clean the code. 2. Put locals
-#  3. Put docstring
+# TODO: we do not compute the correct information gain of the root node, but it's
+#  useless
 
+# TODO: for now, we don't specify the signature of grow, since it has first-order
+#  functions as argument and I don't know how specify the signature of those
 
 @jit(
     fastmath=False,
@@ -231,8 +229,6 @@ def pop_node_record(records):
     nogil=True,
     locals={
         "init_capacity": uintp,
-        # "n_samples_train": uintp,
-        # "n_samples_valid": uintp,
         "records": RecordsType,
         "parent": intp,
         "depth": uintp,
@@ -245,7 +241,6 @@ def pop_node_record(records):
         "min_samples_split": uintp,
         "min_impurity_split": float32,
         "is_leaf": boolean,
-        # split
         "bin": uint8,
         "feature": uintp,
         "found_split": boolean,
@@ -256,16 +251,49 @@ def pop_node_record(records):
         "aggregation": boolean,
         "step": float32,
         "node_count": intp,
-        "node_idx": intp,
-        "node": node_type,
-        "weight": float32,
-        "left_child": intp,
-        "right_child": intp,
-        "log_weight_tree_left": float32,
-        "log_weight_tree_right": float32,
     },
 )
-def grow(tree, tree_context, node_context):
+def grow(
+    tree,
+    tree_context,
+    node_context,
+    compute_node_context,
+    find_best_split_along_feature,
+    copy_split,
+    best_split,
+    candidate_split,
+):
+    """This function grows a tree in the forest, it is the main entry point for the
+    computations when fitting a forest.
+
+    Parameters
+    ----------
+    tree : TreeClassifier or TreeRegressor
+        The tree object which holds nodes and prediction data
+
+    tree_context : TreeClassifierContext or TreeRegressorContext
+        A tree context which will contain tree-level information that is useful to
+        find splits
+
+    node_context : NodeClassifierContext or NodeRegressorContext
+        A node context which will contain node-level information that is useful to
+        find splits
+
+    compute_node_context : function
+        The function used to compute the node context
+
+    find_best_split_along_feature : function
+        The function used to find the best split along a feature
+
+    copy_split : SplitClassifier or SplitRegressor
+        A temporary split object used for split computations
+
+    best_split : SplitClassifier or SplitRegressor
+        A temporary split object used for split computations
+
+    candidate_split : SplitClassifier or SplitRegressor
+        Data about the best split found for the node
+    """
     # Initialize the tree capacity
     init_capacity = 2047
     resize_tree(tree, init_capacity)
@@ -333,22 +361,28 @@ def grow(tree, tree_context, node_context):
         # TODO: put back the min_impurity_split option
 
         if is_leaf:
-            split = None
             bin = 0
             feature = 0
             found_split = False
-            # TODO: pourquoi on mettrai impurity = infini ici ?
         else:
-            split = find_node_split(tree_context, node_context)
-            bin = split.bin_threshold
-            feature = split.feature
-            found_split = split.found_split
+            find_node_split(
+                tree_context,
+                node_context,
+                find_best_split_along_feature,
+                copy_split,
+                best_split,
+                candidate_split,
+            )
+            bin = best_split.bin_threshold
+            feature = best_split.feature
+            found_split = best_split.found_split
 
         # If we did not find a split then the node is a leaf, since we can't split it
         is_leaf = is_leaf or not found_split
         # TODO: correct this when actually using the threshold instead of
         #  bin_threshold
         threshold = 0.42
+        # TODO: now used for now
         weighted_n_samples_valid = 42.0
 
         node_id = add_node_tree(
@@ -389,16 +423,17 @@ def grow(tree, tree_context, node_context):
             # Validation loss of the node, computed on validation samples
             node_context.loss_valid,
         )
-
-        # Save in the tree the predictions of the node
-        tree.y_pred[node_id, :] = node_context.y_pred
+        # Save in the tree the predictions of the node (works both for regression
+        # where node_context.y_pred is a float32 and for classification where
+        # node_context.y_pred is a ndarray of shape (n_classes,)
+        tree.y_pred[node_id] = node_context.y_pred
 
         if not is_leaf:
             # If the node is not a leaf, we update partition_train and
             # partition_valid so that they contain training and validation indices of
             # nodes in a contiguous way.
             pos_train, pos_valid = split_indices(
-                tree_context, split, start_train, end_train, start_valid, end_valid
+                tree_context, best_split, start_train, end_train, start_valid, end_valid
             )
 
             # If the node is not a leaf, we add both childs in the node records,
@@ -415,7 +450,7 @@ def grow(tree, tree_context, node_context):
                 # This is a left child (is_left=True)
                 True,
                 # Impurities of the childs are kept in the split information
-                split.impurity_left,
+                best_split.impurity_left,
                 # start_train of the left child is the same as the parent's
                 start_train,
                 # end_train of the left child is at the split's position
@@ -437,7 +472,7 @@ def grow(tree, tree_context, node_context):
                 # This is a right child (is_left=False)
                 False,
                 # Impurities of the childs are kept in the split information
-                split.impurity_right,
+                best_split.impurity_right,
                 # start_train of the right child is at the split's position
                 pos_train,
                 # end_train of the right child is the same as the parent's
@@ -457,24 +492,58 @@ def grow(tree, tree_context, node_context):
     # iteration over parents.
     node_count = tree.node_count
 
-    # TODO: mettre ca dans une fonction a part...
     if aggregation:
-        for node_idx in range(node_count - 1, -1, -1):
-            node = tree.nodes[node_idx]
-            if node["is_leaf"]:
-                # If the node is a leaf, the logarithm of its tree weight is simply
-                #   step * loss
-                node["log_weight_tree"] = step * node["loss_valid"]
-            else:
-                # If the node is not a leaf, then we apply context tree weighting
-                weight = step * node["loss_valid"]
-                left_child = intp(node["left_child"])
-                right_child = intp(node["right_child"])
-                # print("left_child: ", left_child, ", right_child: ", right_child)
-                log_weight_tree_left = tree.nodes[left_child]["log_weight_tree"]
-                log_weight_tree_right = tree.nodes[right_child]["log_weight_tree"]
-                node["log_weight_tree"] = log_sum_2_exp(
-                    weight, log_weight_tree_left + log_weight_tree_right
-                )
+        compute_tree_weights(tree.nodes, node_count, step)
 
-            node_idx -= 1
+
+@jit(
+    [void(node_type[:], intp, float32)],
+    fastmath=False,
+    nopython=True,
+    nogil=True,
+    locals={
+        "node_idx": intp,
+        "node": node_type,
+        "loss": float32,
+        "left_child": intp,
+        "right_child": intp,
+        "log_weight_tree_left": float32,
+        "log_weight_tree_right": float32,
+    },
+)
+def compute_tree_weights(nodes, node_count, step):
+    """Compute tree weights required to apply aggregation with exponential weights
+    over all subtrees for the predictions
+
+    Parameters
+    ----------
+    nodes : ndarray
+        A numpy array containing the nodes data
+
+    node_count : int
+        Number of nodes in the tree
+
+    step : float
+        Step-size used for the computation of the aggregation weights
+
+    References
+    ----------
+    This corresponds to Algorithm 1 in WildWood's paper
+    TODO: Insert reference here
+    """
+    for node_idx in range(node_count - 1, -1, -1):
+        node = nodes[node_idx]
+        if node["is_leaf"]:
+            # If the node is a leaf, the logarithm of its tree weight is simply
+            #   step * loss
+            node["log_weight_tree"] = -step * node["loss_valid"]
+        else:
+            # If the node is not a leaf, then we apply context tree weighting
+            loss = -step * node["loss_valid"]
+            left_child = intp(node["left_child"])
+            right_child = intp(node["right_child"])
+            log_weight_tree_left = nodes[left_child]["log_weight_tree"]
+            log_weight_tree_right = nodes[right_child]["log_weight_tree"]
+            node["log_weight_tree"] = log_sum_2_exp(
+                loss, log_weight_tree_left + log_weight_tree_right
+            )

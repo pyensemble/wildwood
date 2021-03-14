@@ -32,7 +32,7 @@ from sklearn.ensemble import RandomForestClassifier
 
 # from wildwood._classes import DecisionTreeClassifier
 
-from wildwood.forest import ForestBinaryClassifier
+from wildwood.forest import ForestClassifier
 
 
 logging.basicConfig(
@@ -70,7 +70,7 @@ clf_kwargs = {
     "aggregation": True
 }
 
-clf = ForestBinaryClassifier(**clf_kwargs)
+clf = ForestClassifier(**clf_kwargs)
 
 
 X_train, X_test, y_train, y_test = train_test_split(

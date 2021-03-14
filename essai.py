@@ -1,82 +1,237 @@
-
 import numpy as np
-from numba import uintp, jit, void, optional
+from numba import uintp, jit, void, optional, jitclass, generated_jit, njit
 
 
 from numpy.random import randint
 
+# from wildwood._utils import get_type
 
-@jit(signature=["void(uintp)", "void(uintp, optional(uintp))"], nopython=True,
-     nogil=True)
-# @njit
-def f(x, y=None):
-    if y is None:
-        print("y is None")
+# @jit(signature=["void(uintp)", "void(uintp, optional(uintp))"], nopython=True,
+#      nogil=True)
+# # @njit
+# def f(x, y=None):
+#     if y is None:
+#         print("y is None")
+#     else:
+#         print("y is not None")
+#         print(x + y)
+#
+#
+# @jit(void(uintp[::1], uintp[::1]), nopython=True, nogil=True, locals={"i": uintp,
+#                                                                   "j": uintp})
+# def sample_without_replacement(pool, out):
+#     """Sample integers without replacement.
+#
+#     Select n_samples integers from the set [0, n_population) without
+#     replacement.
+#
+#     Time complexity: O(n_population +  O(np.random.randint) * n_samples)
+#
+#     Space complexity of O(n_population + n_samples).
+#
+#
+#     Parameters
+#     ----------
+#     n_population : int
+#         The size of the set to sample from.
+#
+#     n_samples : int
+#         The number of integer to sample.
+#
+#     random_state : int, RandomState instance or None, default=None
+#         If int, random_state is the seed used by the random number generator;
+#         If RandomState instance, random_state is the random number generator;
+#         If None, the random number generator is the RandomState instance used
+#         by `np.random`.
+#
+#     Returns
+#     -------
+#     out : ndarray of shape (n_samples,)
+#         The sampled subsets of integer.
+#     """
+#
+#     n_samples = out.shape[0]
+#     n_population = pool.shape[0]
+#
+#     # rng = check_random_state(random_state)
+#     # rng_randint = rng.randint
+#
+#     # Initialize the pool
+#     for i in range(n_population):
+#         pool[i] = i
+#
+#     for i in range(n_samples):
+#         j = randint(n_population - i)
+#         out[i] = pool[j]
+#         pool[j] = pool[n_population - i - 1]
+
+
+# a_type = [
+#     ("a", uintp)
+# ]
+#
+# @jitclass(a_type)
+# class A(object):
+#
+#     def __init__(self, a):
+#         self.a = a
+#
+#
+# AType = get_type(A)
+#
+# b_type = [
+#     ("b", uintp)
+# ]
+#
+# @jitclass(b_type)
+# class B(object):
+#
+#     def __init__(self, b):
+#         self.b = b
+#
+#
+# BType = get_type(B)
+#
+#
+# @generated_jit(nopython=True, nogil=True)
+# def increment(obj):
+#
+#     if isinstance(obj, AType):
+#         @njit
+#         def tmp(obj):
+#             print("increment A")
+#             obj.a += 1
+#             return obj
+#         return tmp
+#
+#     elif isinstance(obj, BType):
+#         @njit
+#         def tmp(obj):
+#             print("increment B")
+#             obj.b += 1
+#             return obj
+#         return tmp
+#
+#     else:
+#         return lambda obj: None
+#
+
+# TODO: une seule fonction resize qui check .ndim et couvre les trois cas 1d,
+#  2d et 3d ?
+
+
+# @jit(nopython=True, nogil=True, locals={"new_size": uintp})
+# def resize(a, new_size, zeros=False):
+#     # print("================ Begin resize ================")
+#     # print("new_size: ", new_size)
+#     if zeros:
+#         new = np.zeros(new_size, a.dtype)
+#     else:
+#         new = np.empty(new_size, a.dtype)
+#
+#     new[: a.size] = a
+#     # print("================ End   resize ================")
+#     return new
+#
+#
+# @jit(
+#     nopython=True, nogil=True, locals={"new_size": uintp, "d0": uintp, "d1": uintp},
+# )
+# def resize2d(a, new_size, zeros=False):
+#     d0, d1 = a.shape
+#     if zeros:
+#         new = np.zeros((new_size, d1), a.dtype)
+#     else:
+#         new = np.empty((new_size, d1), a.dtype)
+#     new[:d0, :] = a
+#     return new
+#
+#
+# @jit(
+#     nopython=True,
+#     nogil=True,
+#     locals={"new_size": uintp, "d0": uintp, "d1": uintp, "d2": uintp},
+# )
+# def resize3d(a, new_size, zeros=False):
+#     d0, d1, d2 = a.shape
+#     if zeros:
+#         new = np.zeros((new_size, d1, d2), a.dtype)
+#     else:
+#         new = np.empty((new_size, d1, d2), a.dtype)
+#     new[:d0, :, :] = a
+#     return new
+
+
+@jit(
+    nopython=True,
+    nogil=True,
+    locals={"new_size": uintp, "d0": uintp, "d1": uintp, "d2": uintp},
+)
+def resize(a, new_size, zeros=False):
+    ndim = a.ndim
+    if ndim == 1:
+        if zeros:
+            new = np.zeros(new_size, a.dtype)
+        else:
+            new = np.empty(new_size, a.dtype)
+
+        new[: a.size] = a
+        return new
+    elif ndim == 2:
+        d0, d1 = a.shape
+        if zeros:
+            new = np.zeros((new_size, d1), a.dtype)
+        else:
+            new = np.empty((new_size, d1), a.dtype)
+        new[:d0, :] = a
+        return new
+    elif ndim == 3:
+        d0, d1, d2 = a.shape
+        if zeros:
+            new = np.zeros((new_size, d1, d2), a.dtype)
+        else:
+            new = np.empty((new_size, d1, d2), a.dtype)
+        new[:d0, :, :] = a
+        return new
     else:
-        print("y is not None")
-        print(x + y)
+        raise ValueError("ndim can only be 1, 2 or 3")
 
 
-@jit(void(uintp[::1], uintp[::1]), nopython=True, nogil=True, locals={"i": uintp,
-                                                                  "j": uintp})
-def sample_without_replacement(pool, out):
-    """Sample integers without replacement.
-
-    Select n_samples integers from the set [0, n_population) without
-    replacement.
-
-    Time complexity: O(n_population +  O(np.random.randint) * n_samples)
-
-    Space complexity of O(n_population + n_samples).
-
-
-    Parameters
-    ----------
-    n_population : int
-        The size of the set to sample from.
-
-    n_samples : int
-        The number of integer to sample.
-
-    random_state : int, RandomState instance or None, default=None
-        If int, random_state is the seed used by the random number generator;
-        If RandomState instance, random_state is the random number generator;
-        If None, the random number generator is the RandomState instance used
-        by `np.random`.
-
-    Returns
-    -------
-    out : ndarray of shape (n_samples,)
-        The sampled subsets of integer.
-    """
-
-    n_samples = out.shape[0]
-    n_population = pool.shape[0]
-
-    # rng = check_random_state(random_state)
-    # rng_randint = rng.randint
-
-    # Initialize the pool
-    for i in range(n_population):
-        pool[i] = i
-
-    for i in range(n_samples):
-        j = randint(n_population - i)
-        out[i] = pool[j]
-        pool[j] = pool[n_population - i - 1]
+np.set_printoptions(precision=3)
 
 
 @jit(nopython=True, nogil=True)
 def main():
-    pool = np.arange(0, 11).astype(np.uintp)
-    out = np.arange(0, 3).astype(np.uintp)
-    print(pool)
 
-    for _ in range(10):
-        print(32 * "=")
-        sample_without_replacement(pool, out)
-        print(pool)
-        print(out)
+    x = np.random.randn(3)
+    print(x)
+    y = resize(x, 5, zeros=True)
+    print(y)
+
+    x = np.random.randn(3, 4)
+    print(x)
+    y = resize(x, 5, zeros=True)
+    print(y)
+
+    x = np.random.randn(3, 2, 2)
+    print(x)
+    y = resize(x, 5, zeros=True)
+    print(y)
+
+    # x = np.random.randn(3, 4, 5, 6)
+    # print(x)
+    # y = my_resize(x, 5, zeros=True)
+    # print(y)
+
+    # pool = np.arange(0, 11).astype(np.uintp)
+    # out = np.arange(0, 3).astype(np.uintp)
+    # print(pool)
+    #
+    # for _ in range(10):
+    #     print(32 * "=")
+    #     sample_without_replacement(pool, out)
+    #     print(pool)
+    #     print(out)
 
 
 main()
@@ -128,7 +283,6 @@ main()
 from numba import float32
 
 
-
 # import numba
 #
 # @numba.jit(nopython=True, nogil=True, fastmath=True, locals={"x": numba.float32})
@@ -138,10 +292,6 @@ from numba import float32
 #     print(np.isnan(x))
 #
 # main2()
-
-
-
-
 
 
 #
@@ -165,7 +315,6 @@ from numba import float32
 from cffi import FFI
 
 from numba.core.typing import cffi_utils
-
 
 
 # file "example_build.py"
@@ -634,10 +783,6 @@ from numba import cfunc, types, carray
 #
 #
 #
-
-
-
-
 
 
 # # >>> struct_dtype = np.dtype([('row', np.float64), ('col', np.float64)])
