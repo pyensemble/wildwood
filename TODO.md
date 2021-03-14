@@ -1,41 +1,4 @@
 
-# Bilan 2021 / 01 / 25
-
-- Dans les splits (le long d'une feature) on fait attention a ce que les childs aient au
- moins 1 train et 1 valid
- 
-- Normalement impurity est OK dans les noeuds. On ne splitte pas un noeud pur
-
-
-# TODO
-
-- Ensuite nettoyer _tree_context.py
-
-- La loss de validation n'est pas divisee par le nombre de samples...
-
-- Finish to clean the _grow.py module
-
-- Faut prendre un parametre Dirichlet beaucoup plus petit que dans le cas en ligne ?!?
-
-- dans check_forest reprendre la fonction de plot de playground_forest
-
-- Y'a un bug quand step > 1.0 ? Bizarre ? overflow ou autre chose ?
-
-- Il se passe quoi si on change un de ces parametres apres le fit ?
-
-- Verifier tout ca dans streamlit
-
-- On dirait que Le calcul des poids d'aggregation marche avec numba mais pas python
- ?!? Et ca a l'air plutôt OK ?!?
-
-- Y'a vraiment un bug bizarre avec ssize_t et la facon dont je fais les tests
- -> mettre un flag pour dire si un noeud est une feuille ou pas... OK
-
-- Use jit everywhere with spec and correct options
-
-- Y'a aussi le feature bootstrap a mettre !
-
-- Faire marcher le parametre dirichlet -> OK a priori
 
 - Faire marcher predict avec threshold sans bin_threshold
 
@@ -57,13 +20,6 @@
 - Le code numba est compile pour les n_jobs threads, faudrait forcer la compilation
  avant... 
 
-- J'ai juste utilise random_state + tree_idx pour
-   avoir des samples differents, je ne comprends pas comment ils font dans scikit
-
-- faire de progression TQDM sur les arbres entraines
-
-- Coder l'aggregation
-
 - Quand on trouve plusieurs splits avec meme gain_proxy on prefere celui qui met
  autant de valid samples des deux cotes 
  
@@ -82,8 +38,6 @@
 - Gestion des features categorielles : #modalites >= 255
 
 - Gestion des NAN: split vers la gauche et la droite
-
-- Histogram binning : pour l'instant on utilise le truc de sklearn.ensemble.experimental
 
 - ForestBinaryClassifier : properties et options 
 
