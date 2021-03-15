@@ -44,7 +44,7 @@ np.set_printoptions(precision=2)
 
 random_state = 42
 
-iris = datasets.load_iris()
+# iris = datasets.load_iris()
 
 
 covtype = datasets.fetch_covtype(download_if_missing=True)
@@ -63,11 +63,13 @@ y = covtype.target
 clf_kwargs = {
     "n_estimators": 5,
     "min_samples_split": 2,
+    "max_features": 24,
     "random_state": random_state,
     "n_jobs": -1,
     "dirichlet": 1e-5,
     "step": 2.0,
-    "aggregation": True
+    "aggregation": True,
+    "verbose": True
 }
 
 clf = ForestBinaryClassifier(**clf_kwargs)

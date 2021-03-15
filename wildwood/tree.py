@@ -160,6 +160,7 @@ class TreeBinaryClassifier(ClassifierMixin, TreeBase):
             self.aggregation,
             self.dirichlet,
             self.step,
+            self.random_state.randint(self.max_features*2)  # generate a random seed, might be better way to do so
         )
 
         node_context = NodeContext(tree_context)

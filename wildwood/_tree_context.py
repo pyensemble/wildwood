@@ -53,6 +53,7 @@ spec_tree_context = [
     ("dirichlet", float32),
     # Step-size used in the aggregation weights
     ("step", float32),
+    ("random_seed", intp),
     ("partition_train", uintp[::1]),
     ("partition_valid", uintp[::1]),
     ("left_buffer", uintp[::1]),
@@ -80,6 +81,7 @@ class TreeContext:
         aggregation,
         dirichlet,
         step,
+        random_seed,
     ):
         self.X = X
         self.y = y
@@ -95,6 +97,7 @@ class TreeContext:
         self.step = step
         self.partition_train = train_indices.copy()
         self.partition_valid = valid_indices.copy()
+        self.random_seed = random_seed
 
         n_samples, n_features = X.shape
         self.n_samples = n_samples

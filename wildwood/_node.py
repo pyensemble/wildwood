@@ -120,6 +120,7 @@ node_context_type = [
     ("y_sum", float32[:, :, ::1]),
     # Prediction produced by the node using the training data it contains
     ("y_pred", float32[::1]),
+    ("random_seed", intp),
 ]
 
 
@@ -193,6 +194,9 @@ class NodeContext:
 
     y_pred : ndarray
         Prediction produced by the node using the training data it contains
+
+    random_seed : int
+        Random seed as int, used to generate subsampling of features
     """
 
     def __init__(self, tree_context):
@@ -217,6 +221,7 @@ class NodeContext:
         )
         self.y_sum = np.empty((max_features, max_bins, n_classes), dtype=np.float32)
         self.y_pred = np.empty(n_classes, dtype=np.float32)
+        self.random_seed = tree_context.random_seed
 
 
 NodeContextType = get_type(NodeContext)
@@ -293,7 +298,7 @@ def compute_node_context(
     # If necessary, sample the features
     if node_context.sample_features:
         sample_without_replacement(
-            node_context.features_pool, node_context.features_sampled
+            node_context.features_pool, node_context.features_sampled, node_context.random_seed
         )
 
     features = node_context.features_sampled

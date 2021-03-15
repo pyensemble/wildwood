@@ -1,6 +1,7 @@
 from math import log, exp
 import numpy as np
 from numpy.random import randint
+from sklearn.utils import check_random_state
 from numba import (
     jit,
     void,
@@ -162,12 +163,12 @@ def get_type(class_):
 
 
 @jit(
-    void(uintp[::1], uintp[::1]),
+    void(uintp[::1], uintp[::1], uintp),
     nopython=True,
     nogil=True,
     locals={"i": uintp, "j": uintp},
 )
-def sample_without_replacement(pool, out):
+def sample_without_replacement(pool, out, random_seed):
     """Samples integers without replacement from pool into out inplace.
 
     Parameters
@@ -177,13 +178,16 @@ def sample_without_replacement(pool, out):
 
     out : ndarray of size n_samples
         The sampled subsets of integer
+
+    random_seed : int
     """
-    # TODO: faudra verifier que les arbres n'utilisent pas tous les meme
-    #  permutations... faudra peut etre avoir a gerer le random_state ici ?
     # We sample n_samples elements from the pool
     n_samples = out.shape[0]
     population_size = pool.shape[0]
     # Initialize the pool
+
+    np.random.seed(random_seed)
+
     for i in range(population_size):
         pool[i] = i
 

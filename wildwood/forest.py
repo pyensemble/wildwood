@@ -54,7 +54,7 @@ def _generate_train_valid_samples(random_state, n_samples):
 
     Returns
     -------
-    output : tuple of theer numpy arrays
+    output : tuple of three numpy arrays
         * output[0] contains the indices of the training samples
         * output[1] contains the indices of the validation samples
         * output[2] contains the counts of the training samples
@@ -451,6 +451,7 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         return self
 
     def get_nodes(self, tree_idx):
+        # TODO: this method does not work for now
         return self.trees[tree_idx].get_nodes()
 
     def _validate_y_class_weight(self, y):
