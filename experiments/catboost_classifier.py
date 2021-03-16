@@ -9,9 +9,11 @@ from catboost import CatBoostClassifier
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', type=str, default="Moons")
-parser.add_argument('--dataset-filename', type=str, default=None)
+parser.add_argument('--normalize-intervals', type=bool, default=False)
+parser.add_argument('--one-hot-categorical', type=bool, default=False)
+parser.add_argument('--dataset-path', type=str, default="data")
 parser.add_argument('--dataset-subsample', type=int, default=100000)
-parser.add_argument('--n-trees', type=int, default=10)
+parser.add_argument('--n-estimators', type=int, default=100)
 parser.add_argument('--random-state', type=int, default=0)
 
 
@@ -25,7 +27,7 @@ dataset = datasets.load_dataset(args)
 print("Training CatBoost classifier ...")
 tic = time()
 
-clf = CatBoostClassifier(n_estimators=args.n_trees, random_seed=args.random_state)
+clf = CatBoostClassifier(n_estimators=args.n_estimators, random_seed=args.random_state)
 clf.fit(dataset.data_train, dataset.target_train, verbose=False)
 toc = time()
 

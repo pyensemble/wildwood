@@ -12,7 +12,9 @@ from sklearn.linear_model import LogisticRegression
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', type=str, default="Moons")
-parser.add_argument('--dataset-filename', type=str, default=None)
+parser.add_argument('--normalize-intervals', type=bool, default=False)
+parser.add_argument('--one-hot-categorical', type=bool, default=False)
+parser.add_argument('--dataset-path', type=str, default="data")
 parser.add_argument('--dataset-subsample', type=int, default=100000)
 parser.add_argument('--random-state', type=int, default=0)
 
@@ -23,6 +25,9 @@ args = parser.parse_args()
 print("Running sklearn Logistic Regression with training set {}".format(args.dataset))
 
 dataset = datasets.load_dataset(args)
+
+print("class proportions : ")
+print(dataset.get_class_proportions())
 
 print("Training Scikit Learn Logistic regression classifier ...")
 tic = time()
