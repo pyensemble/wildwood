@@ -9,6 +9,11 @@ import zipfile
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 
+def onehotencode(y):
+    encoded = np.zeros((len(y), np.max(y).astype(int)+1))
+    encoded[np.arange(len(y)), y] = 1
+    return encoded
+
 class Datasets:
 
     def __init__(self):
@@ -29,8 +34,13 @@ class Datasets:
         else:
             raise ValueError("test split should be positive integer number or float proportion, got " + str(test_split))
 
-    def get_class_proportions(self):
-        return np.bincount(self.target.astype(int))/self.size
+    def get_class_proportions(self, data=None):
+        if data is None:
+            data = self.target
+        return np.bincount(data)/len(data)
+
+    def get_train_sample_weights(self):
+        return (1/(self.n_classes * self.get_class_proportions(self.target_train)))[self.target_train]
 
 
 class Higgs(Datasets):#binary
@@ -118,15 +128,14 @@ class Adult(Datasets):#binary
         if one_hot_categoricals:
             X_discrete = pd.get_dummies(data[discrete], prefix_sep="#").values
         else:
-            X_discrete = data[discrete].apply(lambda x: pd.factorize(x)[0]).values
+            X_discrete = data[discrete].apply(lambda x: pd.factorize(x)[0]).values.astype(int)
 
         self.binary = True
+        self.n_classes = 2
         self.target = pd.get_dummies(y).values[:, 1]
-        self.data = np.hstack((X_continuous, X_discrete)).astype("float32")
-        if normalize_intervals:
-            self.data = MinMaxScaler().fit_transform(self.data)
+        self.data = np.hstack((X_continuous, X_discrete))
 
-        self.size, self.n_features = self.data.shape
+        self.size, self.n_features = data.shape
         self.nb_continuous_features = X_continuous.shape[1]
         self.split_train_test(test_split, random_state)
 
@@ -161,10 +170,11 @@ class Bank(Datasets):#binary
             X_discrete = data[discrete].apply(lambda x: pd.factorize(x)[0]).values
 
         self.binary = True
+        self.n_classes = 2
         self.target = pd.get_dummies(y).values[:, 1]
-        self.data = np.hstack((X_continuous, X_discrete)).astype("float32")
+        self.data = np.hstack((X_continuous, X_discrete))#.astype("float32")
         self.size, self.n_features = self.data.shape
-        self.nb_continuous_features = X_continuous.shape[0]
+        self.nb_continuous_features = X_continuous.shape[1]
         #X = MinMaxScaler().fit_transform(X) # Why normalize again after adding discrete features ??
         self.split_train_test(test_split, random_state)
 
@@ -176,11 +186,12 @@ class Car(Datasets):#multiclass
         y = data.pop(6)
         self.binary = False
         self.target = np.argmax(pd.get_dummies(y).values, axis=1)
+        self.n_classes = np.max(self.target).astype(int)+1
 
         if one_hot_categoricals:
             self.data = pd.get_dummies(data, prefix_sep="#").values.astype("float32")
         else:
-            self.data = data.apply(lambda x: pd.factorize(x)[0]).values.astype("float32")
+            self.data = data.apply(lambda x: pd.factorize(x)[0]).values#.astype("float32")
 
         if normalize_intervals:
             self.data = MinMaxScaler().fit_transform(self.data)
@@ -260,6 +271,7 @@ class Cardio(Datasets):#multiclass
         self.data = np.hstack((X_continuous, X_discrete)).astype("float32")
         self.target = y_nsp
         self.binary = False
+        self.n_classes = np.max(self.target).astype(int)+1
 
         self.size, self.n_features = data.shape
         self.nb_continuous_features = len(continuous)
@@ -298,6 +310,7 @@ class Churn(Datasets):#binary
         ]
         self.target = pd.get_dummies(y).values[:, 1]
         self.binary = True
+        self.n_classes = 2
 
         X_continuous = data[continuous].astype("float32")
 
@@ -354,6 +367,7 @@ class Default_cb(Datasets):#binary
         y = data.pop("default payment next month")
         self.target = pd.get_dummies(y).values[:, 1]
         self.binary = True
+        self.n_classes = 2
 
         X_continuous = data[continuous].astype("float32")
 
@@ -383,6 +397,7 @@ class Letter(Datasets):#multiclass
         self.target = data.pop("y").values
         self.data = data.values.astype("float32")
         self.binary = False
+        self.n_classes = np.max(self.target).astype(int)+1
 
         if normalize_intervals:
             self.data = MinMaxScaler().fit_transform(self.data)
@@ -401,6 +416,7 @@ class Satimage(Datasets):#multiclass
         self.target = data.pop("y").values
         self.data = data.values.astype("float32")
         self.binary = False
+        self.n_classes = np.max(self.target).astype(int)+1
 
         if normalize_intervals:
             self.data = MinMaxScaler().fit_transform(self.data)
@@ -420,6 +436,7 @@ class Sensorless(Datasets):#multiclass
 
         self.target = y
         self.binary = False
+        self.n_classes = np.max(self.target).astype(int)+1
         self.data = data.values.astype("float32")
 
         if normalize_intervals:
@@ -439,6 +456,7 @@ class Spambase(Datasets):#binary
 
         self.target = y
         self.binary = True
+        self.n_classes = 2
         self.data = data.values.astype("float32")
 
         if normalize_intervals:
