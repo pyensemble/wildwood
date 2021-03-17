@@ -10,7 +10,7 @@ import xgboost as xgb
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', type=str, default="Moons")
 parser.add_argument('--normalize-intervals', type=bool, default=False)
-parser.add_argument('--one-hot-categorical', type=bool, default=False)
+parser.add_argument('--one-hot-categoricals', type=bool, default=False)
 parser.add_argument('--dataset-path', type=str, default="data")
 parser.add_argument('--dataset-subsample', type=int, default=100000)
 parser.add_argument('--n-estimators', type=int, default=100)
