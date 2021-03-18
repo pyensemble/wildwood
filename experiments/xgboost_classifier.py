@@ -9,8 +9,8 @@ import xgboost as xgb
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', type=str, default="Moons")
-parser.add_argument('--normalize-intervals', type=bool, default=False)
-parser.add_argument('--one-hot-categoricals', type=bool, default=False)
+parser.add_argument('--normalize-intervals', action="store_true", default=False)
+parser.add_argument('--one-hot-categoricals', action="store_true", default=False)
 parser.add_argument('--dataset-path', type=str, default="data")
 parser.add_argument('--dataset-subsample', type=int, default=None)
 parser.add_argument('--n-estimators', type=int, default=100)
@@ -26,18 +26,20 @@ args = parser.parse_args()
 print("Running XGBoost classifier with training set {}".format(args.dataset))
 
 dataset = datasets.load_dataset(args)
+sample_weights = dataset.get_train_sample_weights()
 
 print("Training XGBoost classifier ...")
 tic = time()
 
 clf = xgb.XGBClassifier(random_state=args.random_state, use_label_encoder=False, n_estimators=args.n_estimators, n_jobs=args.n_jobs, max_depth=args.max_depth)
 print("Running XGBClassifier with use_label_encoder=False")
-clf.fit(dataset.data_train, dataset.target_train, verbose=bool(args.verbose), sample_weight=dataset.get_train_sample_weights())
+clf.fit(dataset.data_train, dataset.target_train, verbose=bool(args.verbose), sample_weight=sample_weights)
 toc = time()
 
 print(f"done in {toc - tic:.3f}s")
 
-
+datasets.evaluate_classifier(clf, dataset.data_test, dataset.target_test, binary=dataset.binary)
+"""
 predicted_proba_test = clf.predict_proba(dataset.data_test)
 predicted_test = np.argmax(predicted_proba_test, axis=1)
 
@@ -58,3 +60,4 @@ print("ROC AUC computed with multi_class='ovo' (see sklearn docs)")
 print(f"Log loss: {log_loss_value :.4f}")
 
 print(f"Average precision score: {avg_precision_score :.4f}")
+"""

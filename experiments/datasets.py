@@ -7,7 +7,33 @@ import numpy as np
 import pandas as pd
 import zipfile
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, roc_auc_score, log_loss, average_precision_score
+
 from sklearn.preprocessing import MinMaxScaler
+
+def evaluate_classifier(clf, test_data, test_target, binary=True):
+    predicted_proba_test = clf.predict_proba(test_data)
+
+    predicted_test = np.argmax(predicted_proba_test, axis=1)
+
+    if binary:
+        roc_auc = roc_auc_score(test_target, predicted_proba_test[:, 1], multi_class="ovo")
+        avg_precision_score = average_precision_score(test_target, predicted_proba_test[:, 1])
+    else:
+        onehot_target_test = onehotencode(test_target)
+
+        roc_auc = roc_auc_score(onehot_target_test, predicted_proba_test, multi_class="ovo")
+        avg_precision_score = average_precision_score(onehot_target_test, predicted_proba_test)
+
+    acc = accuracy_score(test_target, predicted_test)
+    log_loss_value = log_loss(test_target, predicted_proba_test)
+    print(f"ROC AUC: {roc_auc:.4f}, ACC: {acc :.4f}")
+    print("ROC AUC computed with multi_class='ovo' (see sklearn docs)")
+
+    print(f"Log loss: {log_loss_value :.4f}")
+
+    print(f"Average precision score: {avg_precision_score :.4f}")
+
 
 def onehotencode(y):
     encoded = np.zeros((len(y), np.max(y).astype(int)+1))
@@ -476,34 +502,34 @@ def load_dataset(args):
         return Adult(path=args.dataset_path, random_state=args.random_state,
                      normalize_intervals=args.normalize_intervals)
     elif args.dataset == "Higgs":
-        return Higgs(filename=args.dataset_filename, subsample=args.dataset_subsample, random_state=args.random_state, normalize_intervals=args.normalize_intervals)
+        return Higgs(filename=args.dataset_path, subsample=args.dataset_subsample, random_state=args.random_state, normalize_intervals=args.normalize_intervals)
     elif args.dataset == "Adult":
-        return Adult(random_state=args.random_state, normalize_intervals=args.normalize_intervals, one_hot_categoricals=args.one_hot_categoricals)
+        return Adult(path=args.dataset_path, random_state=args.random_state, normalize_intervals=args.normalize_intervals, one_hot_categoricals=args.one_hot_categoricals)
     elif args.dataset == "Bank":
-        return Bank(random_state=args.random_state, normalize_intervals=args.normalize_intervals, one_hot_categoricals=args.one_hot_categoricals)
+        return Bank(path=args.dataset_path, random_state=args.random_state, normalize_intervals=args.normalize_intervals, one_hot_categoricals=args.one_hot_categoricals)
     elif args.dataset == "Car":
-        return Car(random_state=args.random_state, normalize_intervals=args.normalize_intervals,
+        return Car(path=args.dataset_path, random_state=args.random_state, normalize_intervals=args.normalize_intervals,
                      one_hot_categoricals=args.one_hot_categoricals)
     elif args.dataset == "Cardio":
-        return Cardio(random_state=args.random_state, normalize_intervals=args.normalize_intervals,
+        return Cardio(path=args.dataset_path, random_state=args.random_state, normalize_intervals=args.normalize_intervals,
                    one_hot_categoricals=args.one_hot_categoricals)
     elif args.dataset == "Churn":
-        return Churn(random_state=args.random_state, normalize_intervals=args.normalize_intervals,
+        return Churn(path=args.dataset_path, random_state=args.random_state, normalize_intervals=args.normalize_intervals,
                           one_hot_categoricals=args.one_hot_categoricals)
     elif args.dataset == "Default_cb":
-        return Default_cb(random_state=args.random_state, normalize_intervals=args.normalize_intervals,
+        return Default_cb(path=args.dataset_path, random_state=args.random_state, normalize_intervals=args.normalize_intervals,
                       one_hot_categoricals=args.one_hot_categoricals)
     elif args.dataset == "Letter":
-        return Letter(random_state=args.random_state, normalize_intervals=args.normalize_intervals,
+        return Letter(path=args.dataset_path, random_state=args.random_state, normalize_intervals=args.normalize_intervals,
                         one_hot_categoricals=args.one_hot_categoricals)
     elif args.dataset == "Satimage":
-        return Satimage(random_state=args.random_state, normalize_intervals=args.normalize_intervals,
+        return Satimage(path=args.dataset_path, random_state=args.random_state, normalize_intervals=args.normalize_intervals,
                           one_hot_categoricals=args.one_hot_categoricals)
     elif args.dataset == "Sensorless":
-        return Sensorless(random_state=args.random_state, normalize_intervals=args.normalize_intervals,
+        return Sensorless(path=args.dataset_path, random_state=args.random_state, normalize_intervals=args.normalize_intervals,
                         one_hot_categoricals=args.one_hot_categoricals)
     elif args.dataset == "Spambase":
-        return Spambase(random_state=args.random_state, normalize_intervals=args.normalize_intervals,
+        return Spambase(path=args.dataset_path, random_state=args.random_state, normalize_intervals=args.normalize_intervals,
                     one_hot_categoricals=args.one_hot_categoricals)
 
     else:
