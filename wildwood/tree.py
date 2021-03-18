@@ -79,8 +79,11 @@ class TreeBase(MultiOutputMixin, BaseEstimator, metaclass=ABCMeta):
         self.tree_.max_depth : int
             The maximum depth of the tree.
         """
-        check_is_fitted(self)
-        return self.tree_.max_depth
+        # check_is_fitted(self)
+        if self._tree is None:
+            raise ValueError("This %(name)s instance is not fitted yet. Call 'fit' with "
+               "appropriate arguments before using this estimator." % {'name': type(self).__name__})
+        return self._tree.max_depth
 
     def get_n_leaves(self):
         """Return the number of leaves of the decision tree.
@@ -166,6 +169,7 @@ class TreeBinaryClassifier(ClassifierMixin, TreeBase):
         grow(tree, tree_context, node_context)
         self._tree = tree
         self._tree_context = tree_context
+        self._node_context = node_context
         return self
 
     def predict_proba(self, X):

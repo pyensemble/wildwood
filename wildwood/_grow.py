@@ -168,7 +168,7 @@ def has_records(records):
     output : bool
         Returns True if there are remaining records in the stack, False otherwise
     """
-    return records.top <= 0
+    return records.top > 0
 
 
 @jit(
@@ -297,7 +297,7 @@ def grow(tree, tree_context, node_context):
     # TODO: this option will come for the forest later
     min_samples_split = 2
 
-    while not has_records(records):
+    while has_records(records):
         # Get information about the current node
         (
             parent,

@@ -235,6 +235,7 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         features to consider when looking for the best split at each node
         (if ``max_features < n_features``).
         See :term:`Glossary <random_state>` for details.
+        # TODO: OK for int or None, not work for RandomState for now
 
     verbose : int, default=0
         Controls the verbosity when fitting and predicting.

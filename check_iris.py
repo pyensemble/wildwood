@@ -44,7 +44,7 @@ np.set_printoptions(precision=2)
 
 random_state = 42
 
-iris = datasets.load_iris()
+# iris = datasets.load_iris()
 
 
 covtype = datasets.fetch_covtype(download_if_missing=True)

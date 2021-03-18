@@ -199,7 +199,7 @@ class TestForestBinaryClassifier(object):
         with pytest.raises(
                 ValueError, match="step must be positive"
         ):
-            clf.step = -1
+            clf.step = -1.
         with pytest.raises(
                 ValueError, match="step must be positive"
         ):
@@ -255,6 +255,20 @@ class TestForestBinaryClassifier(object):
             _ = ForestBinaryClassifier(loss="other")
 
     # TODO: test for random_state
+    def test_random_state(self):
+        np.random.seed(42)
+        X = np.random.randn(10, 3)
+        y = np.array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
+
+        # clf1 = ForestBinaryClassifier(n_estimators=2, random_state=np.random.RandomState(42))
+        clf1 = ForestBinaryClassifier(n_estimators=2, random_state=42)
+        clf1.fit(X, y)
+
+        clf2 = ForestBinaryClassifier(n_estimators=2, random_state=42)
+        clf2.fit(X, y)
+
+        assert clf1.trees[0].get_nodes().shape[0] == clf2.trees[0].get_nodes().shape[0]
+        assert clf1.trees[1].get_nodes().shape[0] == clf2.trees[1].get_nodes().shape[0]
 
 
 
