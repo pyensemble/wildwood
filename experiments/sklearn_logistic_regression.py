@@ -35,10 +35,8 @@ print(args)
 print ("")
 
 dataset = datasets.load_dataset(args)
+dataset.info()
 sample_weights = dataset.get_train_sample_weights()
-
-print("class proportions : ")
-print(dataset.get_class_proportions())
 
 print("Training Scikit Learn Logistic regression classifier ...")
 tic = time()

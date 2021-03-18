@@ -68,6 +68,14 @@ class Datasets:
     def get_train_sample_weights(self):
         return (1/(self.n_classes * self.get_class_proportions(self.target_train)))[self.target_train]
 
+    def info(self):
+        print("Dataset info : ")
+        print("sample count (train + test) : {} with {} for training".format(self.size, len(self.data_train)))
+        print("number of features : {} of which continuous : {}".format(self.n_features, self.nb_continuous_features))
+        print("number of classes : {}".format(self.n_classes))
+        print("class proportions : ")
+        print(self.get_class_proportions())
+        print("")
 
 class Higgs(Datasets):#binary
     
