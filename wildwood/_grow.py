@@ -477,4 +477,4 @@ def grow(tree, tree_context, node_context):
                     weight, log_weight_tree_left + log_weight_tree_right
                 )
 
-            node_idx -= 1
+            # node_idx -= 1

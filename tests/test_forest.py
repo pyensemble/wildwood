@@ -255,20 +255,40 @@ class TestForestBinaryClassifier(object):
             _ = ForestBinaryClassifier(loss="other")
 
     # TODO: test for random_state
+
+    def test_generate_train_valid_samples(self):
+        # in particular test random_state works properly in `_generate_train_valid_samples`
+        from wildwood.forest import _generate_train_valid_samples
+        t1, v1, t1_count = _generate_train_valid_samples(random_state=42, n_samples=100)
+        np.random.seed(0)
+        t2, v2, t2_count = _generate_train_valid_samples(random_state=42, n_samples=100)
+        assert np.array_equal(t1, t2) and np.array_equal(v1, v2) and np.array_equal(t1_count, t2_count)
+
+        t3, v3, t3_count = _generate_train_valid_samples(random_state=41, n_samples=100)
+        assert (not np.array_equal(t2, t3)) or (not np.array_equal(t2_count, t3_count))
+
     def test_random_state(self):
-        np.random.seed(42)
         X = np.random.randn(10, 3)
         y = np.array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
 
         # clf1 = ForestBinaryClassifier(n_estimators=2, random_state=np.random.RandomState(42))
-        clf1 = ForestBinaryClassifier(n_estimators=2, random_state=42)
+        clf1 = ForestBinaryClassifier(n_estimators=3, random_state=42)
         clf1.fit(X, y)
 
-        clf2 = ForestBinaryClassifier(n_estimators=2, random_state=42)
+        clf2 = ForestBinaryClassifier(n_estimators=3, random_state=42)
         clf2.fit(X, y)
 
-        assert clf1.trees[0].get_nodes().shape[0] == clf2.trees[0].get_nodes().shape[0]
-        assert clf1.trees[1].get_nodes().shape[0] == clf2.trees[1].get_nodes().shape[0]
+        assert (clf1.trees[0].get_nodes().shape[0] == clf2.trees[0].get_nodes().shape[0]) \
+               and (clf1.trees[1].get_nodes().shape[0] == clf2.trees[1].get_nodes().shape[0]) \
+               and (clf1.trees[2].get_nodes().shape[0] == clf2.trees[2].get_nodes().shape[0]) \
+               and (np.array_equal(clf1.predict_proba(X), clf2.predict_proba(X)))
+
+        clf3 = ForestBinaryClassifier(n_estimators=3, random_state=41)
+        clf3.fit(X, y)
+        assert (clf1.trees[0].get_nodes().shape[0] != clf3.trees[0].get_nodes().shape[0]) \
+               or (clf1.trees[1].get_nodes().shape[0] != clf3.trees[1].get_nodes().shape[0]) \
+               or (clf1.trees[2].get_nodes().shape[0] != clf3.trees[2].get_nodes().shape[0]) \
+               or (not np.array_equal(clf1.predict_proba(X), clf2.predict_proba(X)))
 
 
 

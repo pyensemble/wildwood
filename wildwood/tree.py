@@ -116,7 +116,7 @@ class TreeBinaryClassifier(ClassifierMixin, TreeBase):
         min_samples_leaf=1,
         categorical_features=None,
         max_features="auto",
-        random_state=None,
+        random_state=None,  # random_state of a Tree is only for (samples) bootstrap use
         verbose=0,
     ):
         super().__init__(
@@ -169,7 +169,6 @@ class TreeBinaryClassifier(ClassifierMixin, TreeBase):
         grow(tree, tree_context, node_context)
         self._tree = tree
         self._tree_context = tree_context
-        self._node_context = node_context
         return self
 
     def predict_proba(self, X):

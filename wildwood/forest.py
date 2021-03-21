@@ -7,6 +7,7 @@ from warnings import warn
 import threading
 import numpy as np
 from joblib import Parallel, effective_n_jobs
+from numba import _helperlib
 
 from tqdm import tqdm
 
@@ -54,7 +55,7 @@ def _generate_train_valid_samples(random_state, n_samples):
 
     Returns
     -------
-    output : tuple of theer numpy arrays
+    output : tuple of three numpy arrays
         * output[0] contains the indices of the training samples
         * output[1] contains the indices of the validation samples
         * output[2] contains the counts of the training samples
@@ -235,7 +236,7 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         features to consider when looking for the best split at each node
         (if ``max_features < n_features``).
         See :term:`Glossary <random_state>` for details.
-        # TODO: OK for int or None, not work for RandomState for now
+        # TODO: OK for int or None, not work for RandomState actually
 
     verbose : int, default=0
         Controls the verbosity when fitting and predicting.
@@ -416,6 +417,8 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
             for _ in range(self.n_estimators)
         ]
 
+        self._set_random_state()
+
         # Parallel loop: use threading since all the numba code releases the GIL
         if self.verbose:
             trees = Parallel(
@@ -443,6 +446,7 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
                 )
                 for tree in trees
             )
+        self._put_back_random_state()
 
         self.trees = trees
         self._fitted = True
@@ -710,7 +714,6 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         # ]
 
         all_proba = np.zeros((X_binned.shape[0], self.n_classes_))
-
         lock = threading.Lock()
         Parallel(
             n_jobs=n_jobs,
@@ -880,6 +883,27 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
             # The number of features is checked regardless of `check_input`
             self._check_n_features(X, reset=False)
         return X
+
+    def _set_random_state(self):
+        # TODO: are random states (of bootstrap and features subsampling decoupled??)
+        # This is inspired by a trick by Alexandre Gramfort,
+        #   see https://github.com/numba/numba/issues/3249
+        if (self._random_state is not None) and (self._random_state >= 0):
+            r = np.random.RandomState(self._random_state)
+            ptr = _helperlib.rnd_get_np_state_ptr()  # here set up random state in numba
+            ints, index = r.get_state()[1:3]
+            _helperlib.rnd_set_state(ptr, (index, [int(x) for x in ints]))
+            self._ptr = ptr
+            self._r = r
+
+    def _put_back_random_state(self):
+        # This is inspired by a trick by Alexandre Gramfort,
+        #   see https://github.com/numba/numba/issues/3249
+        if (self._random_state is not None) and (self._random_state >= 0):
+            ptr = self._ptr
+            r = self._r
+            index, ints = _helperlib.rnd_get_state(ptr)
+            r.set_state(("MT19937", ints, index, 0, 0.0))
 
     # # # # # # # # # # # # # # # # # # # #
     # Below are all the class properties  #
