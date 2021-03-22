@@ -713,6 +713,8 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         #     for j in np.atleast_1d(self.n_classes_)
         # ]
 
+        # self._set_random_state()
+
         all_proba = np.zeros((X_binned.shape[0], self.n_classes_))
         lock = threading.Lock()
         Parallel(
@@ -723,6 +725,7 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
             delayed(_accumulate_prediction)(e.predict_proba, X_binned, all_proba, lock)
             for e in self.trees
         )
+        # self._put_back_random_state()
 
         # for proba in all_proba:
         #     proba /= len(self.trees)
