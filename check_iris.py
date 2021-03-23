@@ -63,15 +63,15 @@ y = covtype.target
 
 clf_kwargs = {
     "n_estimators": 3,
-    # "min_samples_split": 2,
+    "min_samples_split": 2,
     "random_state": 42,
-    # "n_jobs": -1,
-    # "dirichlet": 1e-5,
-    # "step": 2.0,
-    # "aggregation": True,
+    "n_jobs": 1,
+    "dirichlet": 1e-5,
+    "step": 2.0,
+    "aggregation": True,
     "max_features": 5
 }
-# TODO: by doing so, seed is fixed and training is well seeded, but some other alea in commented argument??
+# TODO: reproduicibility only granted for n_jobs=1
 
 clf = ForestBinaryClassifier(**clf_kwargs)
 

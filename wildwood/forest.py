@@ -91,6 +91,7 @@ def _parallel_build_trees(tree, X, y, sample_weight):
         sample_weight = sample_weight.astype(np.float32)
 
     # TODO: all trees have the same train and valid indices...
+    # actually not, experimentally train and valid indices are different in different trees (why??)
     train_indices, valid_indices, train_indices_count = _generate_train_valid_samples(
         tree.random_state, n_samples
     )
@@ -99,6 +100,9 @@ def _parallel_build_trees(tree, X, y, sample_weight):
     # validation data
     sample_weight[train_indices] *= train_indices_count
     tree.fit(X, y, train_indices, valid_indices, sample_weight)
+    tree._train_indices = train_indices
+    tree._valid_indices = valid_indices
+    tree._train_indices_count = train_indices_count
     return tree
 
 
@@ -888,7 +892,6 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         return X
 
     def _set_random_state(self):
-        # TODO: are random states (of bootstrap and features subsampling decoupled??)
         # This is inspired by a trick by Alexandre Gramfort,
         #   see https://github.com/numba/numba/issues/3249
         if (self._random_state is not None) and (self._random_state >= 0):

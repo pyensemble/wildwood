@@ -268,10 +268,10 @@ class TestForestBinaryClassifier(object):
     def test_random_state(self):
         X = np.random.randn(10, 5)
         y = np.array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
-        clf1 = ForestBinaryClassifier(n_estimators=3, random_state=42, max_features=3)
+        clf1 = ForestBinaryClassifier(n_estimators=3, random_state=42, max_features=3, n_jobs=1)
         clf1.fit(X, y)
 
-        clf2 = ForestBinaryClassifier(n_estimators=3, random_state=42, max_features=3)
+        clf2 = ForestBinaryClassifier(n_estimators=3, random_state=42, max_features=3, n_jobs=1)
         clf2.fit(X, y)
 
         assert (clf1.trees[0].get_nodes().shape[0] == clf2.trees[0].get_nodes().shape[0]) \
@@ -279,7 +279,7 @@ class TestForestBinaryClassifier(object):
                and (clf1.trees[2].get_nodes().shape[0] == clf2.trees[2].get_nodes().shape[0]) \
                and (np.array_equal(clf1.predict_proba(X), clf2.predict_proba(X)))
 
-        clf3 = ForestBinaryClassifier(n_estimators=3, random_state=41, max_features=3)
+        clf3 = ForestBinaryClassifier(n_estimators=3, random_state=41, max_features=3, n_jobs=1)
         clf3.fit(X, y)
         assert (clf1.trees[0].get_nodes().shape[0] != clf3.trees[0].get_nodes().shape[0]) \
                or (clf1.trees[1].get_nodes().shape[0] != clf3.trees[1].get_nodes().shape[0]) \
