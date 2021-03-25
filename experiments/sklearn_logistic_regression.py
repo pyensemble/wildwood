@@ -19,8 +19,8 @@ parser.add_argument('--dataset-subsample', type=int, default=100000)
 parser.add_argument('--penalty', type=str, default='l2')
 parser.add_argument('--dual', action="store_true", default=False)
 parser.add_argument('--random-state', type=int, default=0)
-parser.add_argument('--n-jobs', type=int, default=None)
-parser.add_argument('--solver', type=str, default='lbfgs')
+parser.add_argument('--n-jobs', type=int, default=-1)
+parser.add_argument('--solver', type=str, default='lbfgs')# use Saga ?
 parser.add_argument('--verbose', type=int, default=0)
 parser.add_argument('--max-iter', type=int, default=100)
 
@@ -34,20 +34,20 @@ print("with arguments")
 print(args)
 print ("")
 
-dataset = datasets.load_dataset(args)
+dataset = datasets.load_dataset(args, as_pandas=True)
 dataset.info()
 sample_weights = dataset.get_train_sample_weights()
 
 print("Training Scikit Learn Logistic regression classifier ...")
 tic = time()
+### Using class_weights="balanced" instead of sample_weights to dodge LogisticRegression bug when n_jobs > 1 and dataset is too big
+clf = LogisticRegression(penalty=args.penalty, dual = args.dual, n_jobs=args.n_jobs, solver=args.solver, verbose=args.verbose, max_iter=args.max_iter, class_weight="balanced")
 
-clf = LogisticRegression(penalty=args.penalty, dual = args.dual, n_jobs=args.n_jobs, solver=args.solver, verbose=args.verbose, max_iter=args.max_iter)
 
-
-clf.fit(dataset.data_train, dataset.target_train, sample_weight=sample_weights)
+clf.fit(dataset.data_train, dataset.target_train)#, sample_weight=sample_weights)
 toc = time()
 
-print(f"done in {toc - tic:.3f}s")
+print(f"fitted in {toc - tic:.3f}s")
 
 datasets.evaluate_classifier(clf, dataset.data_test, dataset.target_test, binary=dataset.binary)
 """

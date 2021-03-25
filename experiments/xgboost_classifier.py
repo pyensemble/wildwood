@@ -12,10 +12,10 @@ parser.add_argument('--dataset', type=str, default="Moons")
 parser.add_argument('--normalize-intervals', action="store_true", default=False)
 parser.add_argument('--one-hot-categoricals', action="store_true", default=False)
 parser.add_argument('--dataset-path', type=str, default="data")
-parser.add_argument('--dataset-subsample', type=int, default=None)
+parser.add_argument('--dataset-subsample', type=int, default=100000)
 parser.add_argument('--n-estimators', type=int, default=100)
 parser.add_argument('--random-state', type=int, default=0)
-parser.add_argument('--n-jobs', type=int, default=None)
+parser.add_argument('--n-jobs', type=int, default=-1)
 parser.add_argument('--max-depth', type=int, default=None)
 parser.add_argument('--verbose', type=int, default=0)
 
@@ -36,7 +36,7 @@ print("Running XGBClassifier with use_label_encoder=False")
 clf.fit(dataset.data_train, dataset.target_train, verbose=bool(args.verbose), sample_weight=sample_weights)
 toc = time()
 
-print(f"done in {toc - tic:.3f}s")
+print(f"fitted in {toc - tic:.3f}s")
 
 datasets.evaluate_classifier(clf, dataset.data_test, dataset.target_test, binary=dataset.binary)
 """

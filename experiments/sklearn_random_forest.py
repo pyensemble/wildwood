@@ -17,6 +17,7 @@ parser.add_argument('--one-hot-categoricals', action="store_true", default=False
 parser.add_argument('--dataset-path', type=str, default="data")
 parser.add_argument('--dataset-subsample', type=int, default=100000)
 parser.add_argument('--n-estimators', type=int, default=100)
+parser.add_argument('--n-jobs', type=int, default=-1)
 parser.add_argument('--criterion', type=str, default='gini')
 parser.add_argument('--random-state', type=int, default=0)
 
@@ -32,11 +33,11 @@ train_sample_weights = dataset.get_train_sample_weights()
 print("Training Scikit Learn Random forest classifier ...")
 tic = time()
 
-clf = RandomForestClassifier(n_estimators=args.n_estimators, criterion=args.criterion, random_state=args.random_state)
+clf = RandomForestClassifier(n_estimators=args.n_estimators, criterion=args.criterion, random_state=args.random_state, n_jobs=args.n_jobs)
 clf.fit(dataset.data_train, dataset.target_train, sample_weight=train_sample_weights)
 toc = time()
 
-print(f"done in {toc - tic:.3f}s")
+print(f"fitted in {toc - tic:.3f}s")
 
 datasets.evaluate_classifier(clf, dataset.data_test, dataset.target_test, binary=dataset.binary)
 
