@@ -35,6 +35,10 @@ print(args)
 print ("")
 
 dataset = datasets.load_dataset(args, as_pandas=True)
+
+if dataset.task != "classification":
+    print("The loaded dataset is not for classification ... exiting")
+    exit()
 dataset.info()
 sample_weights = dataset.get_train_sample_weights()
 

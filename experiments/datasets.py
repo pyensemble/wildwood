@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import zipfile
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, roc_auc_score, log_loss, average_precision_score
+from sklearn.metrics import accuracy_score, roc_auc_score, log_loss, average_precision_score, mean_squared_error
 
 from sklearn.preprocessing import MinMaxScaler
 
@@ -45,6 +45,18 @@ def evaluate_classifier(clf, test_data, test_target, binary=True):
 
     print(f"Average precision score: {avg_precision_score :.4f}")
 
+def evaluate_regressor(reg, test_data, test_target):
+    tic = time()
+
+    predicted_test = reg.predict(test_data)
+    toc = time()
+
+    print(f"predicted in {toc - tic:.3f}s")
+
+    mse = mean_squared_error(test_target, predicted_test)
+
+    print(f"Mean squared error: {mse :.4f}")
+
 
 def onehotencode(y):
     encoded = np.zeros((len(y), np.max(y).astype(int)+1))
@@ -81,12 +93,15 @@ class Datasets:
 
     def info(self):
         print("Dataset info : ")
+        print("task : {}".format(self.task))
         print("sample count (train + test) : {} with {} for training".format(self.size, len(self.data_train)))
-        print("number of features : {} of which continuous : {}".format(self.n_features, self.nb_continuous_features))
-        print("One hot encoded features : {}".format(self.one_hot_categoricals))
-        print("number of classes : {}".format(self.n_classes))
-        print("class proportions : ")
-        print(self.get_class_proportions())
+        print("number of features : {} ".format(self.n_features))
+        if self.task =="classification":
+            print(" of which continuous : {}".format(self.nb_continuous_features))
+            print("One hot encoded features : {}".format(self.one_hot_categoricals))
+            print("number of classes : {}".format(self.n_classes))
+            print("class proportions : ")
+            print(self.get_class_proportions())
         print("")
 
 class Higgs(Datasets):#binary
@@ -125,6 +140,7 @@ class Higgs(Datasets):#binary
             self.data = np.ascontiguousarray(self.data.values)
 
         self.binary = True
+        self.task = "classification"
         self.n_classes = 2
         self.one_hot_categoricals = False
         self.size, self.n_features = self.data.shape
@@ -151,6 +167,7 @@ class Moons(Datasets):#binary
             self.data = MinMaxScaler.fit_transform(self.data)
 
         self.binary = True
+        self.task = "classification"
         self.n_classes = 2
         self.one_hot_categoricals = False
         self.size = n_samples
@@ -188,6 +205,8 @@ class Adult(Datasets):#binary
 
 
         self.binary = True
+        self.task = "classification"
+
         self.n_classes = 2
         self.nb_continuous_features = len(continuous)#X_continuous.shape[1]
         self.target = pd.get_dummies(y).values[:, 1]
@@ -237,6 +256,8 @@ class Bank(Datasets):#binary
             X_discrete = data[discrete].apply(lambda x: pd.factorize(x)[0]).astype(int)
 
         self.binary = True
+        self.task = "classification"
+
         self.n_classes = 2
         self.target = pd.get_dummies(y).values[:, 1]
         if as_pandas:
@@ -259,6 +280,8 @@ class Car(Datasets):#multiclass
         data = data[:subsample]
         y = data.pop(6)
         self.binary = False
+        self.task = "classification"
+
         self.target = np.argmax(pd.get_dummies(y).values, axis=1)
         self.n_classes = np.max(self.target).astype(int)+1
 
@@ -358,6 +381,8 @@ class Cardio(Datasets):#multiclass
 
         self.target = y_nsp
         self.binary = False
+        self.task = "classification"
+
         self.n_classes = np.max(self.target).astype(int)+1
 
         self.one_hot_categoricals = one_hot_categoricals
@@ -399,6 +424,8 @@ class Churn(Datasets):#binary
         ]
         self.target = pd.get_dummies(y).values[:, 1]
         self.binary = True
+        self.task = "classification"
+
         self.n_classes = 2
 
         X_continuous = data[continuous].astype("float32")
@@ -413,7 +440,7 @@ class Churn(Datasets):#binary
 
         if as_pandas:
             self.data = X_continuous.join(X_discrete)
-            self.data.columns = list(range(len(discrete)+len(continuous)))
+            self.data.columns = list(range(self.data.shape[1]))#len(discrete)+len(continuous)))
         else:
             self.data = np.hstack((X_continuous, X_discrete)).astype("float32")
 
@@ -461,6 +488,8 @@ class Default_cb(Datasets):#binary
         _ = data.pop("ID")
         y = data.pop("default payment next month")
         self.target = pd.get_dummies(y).values[:, 1]
+        self.task = "classification"
+
         self.binary = True
         self.n_classes = 2
 
@@ -504,6 +533,8 @@ class Letter(Datasets):#multiclass
         if not as_pandas:
             self.data = self.data.values
         self.binary = False
+        self.task = "classification"
+
         self.n_classes = np.max(self.target).astype(int)+1
 
         self.one_hot_categoricals = one_hot_categoricals
@@ -527,6 +558,8 @@ class Satimage(Datasets):#multiclass
         if not as_pandas:
             self.data = self.data.values
         self.binary = False
+        self.task = "classification"
+
         self.n_classes = np.max(self.target).astype(int)+1
 
         self.one_hot_categoricals = one_hot_categoricals
@@ -546,6 +579,8 @@ class Sensorless(Datasets):#multiclass
 
         self.target = y
         self.binary = False
+        self.task = "classification"
+
         self.n_classes = np.max(self.target).astype(int)+1
         self.data = data.astype("float32")
         if normalize_intervals:
@@ -572,6 +607,8 @@ class Spambase(Datasets):#binary
 
         self.target = y
         self.binary = True
+        self.task = "classification"
+
         self.n_classes = 2
         self.data = data.astype("float32")
         if normalize_intervals:
@@ -599,6 +636,8 @@ class Covtype(Datasets):#multiclass
 
         self.target = target.astype(int) - 1#.values
         self.binary = False
+        self.task = "classification"
+
         self.n_classes = 7
 
         self.data = data#.astype("float32")
@@ -649,6 +688,8 @@ class KDDCup(Datasets):#multiclass
         dummies.columns = list(range(len(dummies.columns)))
         self.target = dummies.idxmax(axis=1)#.values
         self.binary = False
+        self.task = "classification"
+
         self.n_classes = self.target.max()+1#23
 
 
@@ -690,6 +731,8 @@ class BreastCancer(Datasets):#binary
         self.data = data
         self.target = target
         self.binary = True
+        self.task = "classification"
+
         self.n_classes = 2
 
 
@@ -711,6 +754,85 @@ class BreastCancer(Datasets):#binary
 
         self.split_train_test(test_split, random_state)
 
+
+class CaliforniaHousing(Datasets):#regression
+    def __init__(self, path=None, test_split=0.3, random_state=0, normalize_intervals=False, as_pandas=False, subsample=None):
+        from sklearn.datasets import fetch_california_housing
+
+        data, target = fetch_california_housing(return_X_y=True, as_frame = True)#as_pandas)
+
+        data = data[:subsample]
+        target = target[:subsample]
+
+        self.data = data
+        self.target = target
+        self.task = "regression"
+
+        if normalize_intervals:
+            mins = self.data.min()
+            self.data = (self.data - mins)/(self.data.max() - mins)
+
+        if not as_pandas:
+            self.data = self.data.values
+            self.target = self.target.values
+
+        self.size, self.n_features = self.data.shape
+        self.nb_continuous_features = self.n_features
+
+        self.split_train_test(test_split, random_state)
+
+class Boston(Datasets):#regression
+    def __init__(self, path=None, test_split=0.3, random_state=0, normalize_intervals=False, as_pandas=False, subsample=None):
+        from sklearn.datasets import load_boston
+
+        data, target = load_boston(return_X_y=True)
+
+        data = data[:subsample]
+        target = target[:subsample]
+
+        self.data = data
+        self.target = target
+        self.task = "regression"
+
+        if normalize_intervals:
+            self.data = MinMaxScaler.fit_transform(self.data)
+
+        if as_pandas:
+            self.data = pd.DataFrame(self.data)
+            self.target = pd.Series(self.target)
+
+        self.size, self.n_features = self.data.shape
+        self.nb_continuous_features = self.n_features
+
+        self.split_train_test(test_split, random_state)
+
+
+
+class Diabetes(Datasets):#regression
+    def __init__(self, path=None, test_split=0.3, random_state=0, normalize_intervals=False, as_pandas=False, subsample=None):
+        from sklearn.datasets import load_diabetes
+
+        data, target = load_diabetes(return_X_y=True, as_frame=True)
+
+        data = data[:subsample]
+        target = target[:subsample]
+
+        self.data = data
+        self.target = target
+        self.task = "regression"
+
+        if normalize_intervals:
+            mins = self.data.min()
+            self.data = (self.data - mins)/(self.data.max() - mins)
+
+        if not as_pandas:
+            self.data = self.data.values
+            self.target = self.target.values
+
+        self.size, self.n_features = self.data.shape
+        self.nb_continuous_features = self.n_features
+
+        self.split_train_test(test_split, random_state)
 
 
 
@@ -763,6 +885,16 @@ def load_dataset(args, as_pandas=False):
                       normalize_intervals=args.normalize_intervals,
                       one_hot_categoricals=args.one_hot_categoricals, as_pandas=as_pandas,
                       subsample=args.dataset_subsample)
+    elif args.dataset == "CaliforniaHousing":
+        return CaliforniaHousing(path=args.dataset_path, random_state=args.random_state, normalize_intervals=args.normalize_intervals, as_pandas=as_pandas,
+                     subsample=args.dataset_subsample)
+    elif args.dataset == "Boston":
+        return Boston(path=args.dataset_path, random_state=args.random_state, normalize_intervals=args.normalize_intervals, as_pandas=as_pandas,
+                     subsample=args.dataset_subsample)
+    elif args.dataset == "Diabetes":
+        return Diabetes(path=args.dataset_path, random_state=args.random_state, normalize_intervals=args.normalize_intervals, as_pandas=as_pandas,
+                     subsample=args.dataset_subsample)
+
     else:
         raise ValueError("unknown dataset " + args.dataset)
 

@@ -26,6 +26,10 @@ args = parser.parse_args()
 print("Running XGBoost classifier with training set {}".format(args.dataset))
 
 dataset = datasets.load_dataset(args)
+
+if dataset.task != "classification":
+    print("The loaded dataset is not for classification ... exiting")
+    exit()
 sample_weights = dataset.get_train_sample_weights()
 
 print("Training XGBoost classifier ...")
