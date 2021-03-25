@@ -719,6 +719,39 @@ class KDDCup(Datasets):#multiclass
 
         self.split_train_test(test_split, random_state)
 
+class NewsGroups(Datasets):#multiclass
+    def __init__(self, path=None, test_split=0.3, random_state=0, normalize_intervals=False, one_hot_categoricals=False, as_pandas=False, subsample=None):
+        from sklearn.datasets import fetch_20newsgroups_vectorized
+
+        data, target = fetch_20newsgroups_vectorized(return_X_y=True, as_frame = True)#as_pandas)
+
+        if subsample is not None:
+            print("Subsampling dataset with subsample={}".format(subsample))
+
+        data = data[:subsample]
+        target = target[:subsample]
+
+        self.target = target
+        self.binary = False
+        self.task = "classification"
+
+        self.n_classes = self.target.max()+1
+
+        if normalize_intervals:
+            mins = data.min()
+            data = (data - mins)/(data.max() - mins)
+
+        self.data = data
+
+        if not as_pandas:
+            self.data = self.data.values
+            self.target = self.target.values
+
+        self.size, self.n_features = self.data.shape
+        self.nb_continuous_features = self.n_features
+
+        self.split_train_test(test_split, random_state)
+
 class BreastCancer(Datasets):#binary
     def __init__(self, path=None, test_split=0.3, random_state=0, normalize_intervals=False, one_hot_categoricals=False, as_pandas=False, subsample=None):
         from sklearn.datasets import load_breast_cancer
@@ -880,6 +913,11 @@ def load_dataset(args, as_pandas=False):
     elif args.dataset == "KDDCup":
         return KDDCup(path=args.dataset_path, random_state=args.random_state, normalize_intervals=args.normalize_intervals,
                    one_hot_categoricals=args.one_hot_categoricals, as_pandas=as_pandas, subsample=args.dataset_subsample)
+    elif args.dataset == "NewsGroups":
+        return NewsGroups(path=args.dataset_path, random_state=args.random_state,
+                      normalize_intervals=args.normalize_intervals,
+                      one_hot_categoricals=args.one_hot_categoricals, as_pandas=as_pandas,
+                      subsample=args.dataset_subsample)
     elif args.dataset == "BreastCancer":
         return BreastCancer(path=args.dataset_path, random_state=args.random_state,
                       normalize_intervals=args.normalize_intervals,
