@@ -348,7 +348,7 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         self._n_classes_ = n_classes_
         # only 1 tree for binary classification.
         # TODO: For multiclass classification, we build 1 tree per class.
-        self.n_trees_per_iteration_ = 1 if n_classes_ <= 2 else n_classes_
+        self.n_trees_per_iteration_ = 1 if n_classes_ <= 2 else n_classes_  # where self.n_trees_per_iteration_ is used??
         encoded_y = np.ascontiguousarray(encoded_y, dtype=np.float32)
         return encoded_y
 

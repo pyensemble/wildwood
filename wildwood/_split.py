@@ -269,7 +269,7 @@ def find_best_split_along_feature(tree_context, node_context, feature, f, best_s
 
     # We go from left to right and compute the information gain proxy of all possible
     # splits in order to find the best one
-    for bin in range(n_bins):
+    for bin in range(n_bins):  # TODO HERE HERE sort y_sum_in_bins[:, 0]
         # On the left we accumulate the counts
         w_samples_train_left += w_samples_train_in_bins[bin]
         w_samples_valid_left += w_samples_valid_in_bins[bin]

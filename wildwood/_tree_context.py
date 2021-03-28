@@ -53,6 +53,8 @@ spec_tree_context = [
     ("dirichlet", float32),
     # Step-size used in the aggregation weights
     ("step", float32),
+    # categorical features indicator
+    ("categorical_features", float32),  # TODO
     ("partition_train", uintp[::1]),
     ("partition_valid", uintp[::1]),
     ("left_buffer", uintp[::1]),
@@ -80,6 +82,7 @@ class TreeContext:
         aggregation,
         dirichlet,
         step,
+        categorical_features,
     ):
         self.X = X
         self.y = y
@@ -95,6 +98,7 @@ class TreeContext:
         self.step = step
         self.partition_train = train_indices.copy()
         self.partition_valid = valid_indices.copy()
+        self.categorical_features = categorical_features
 
         n_samples, n_features = X.shape
         self.n_samples = n_samples

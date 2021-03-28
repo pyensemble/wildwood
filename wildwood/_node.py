@@ -208,6 +208,7 @@ class NodeContext:
         # This array will contain the features sampled uniformly at random (without
         # replacement) to be considered for splits
         self.features_sampled = np.arange(0, max_features, dtype=np.uintp)
+        self.categorical_features = tree_context.categorical_features
 
         self.w_samples_train_in_bins = np.empty(
             (max_features, max_bins), dtype=np.float32
@@ -336,10 +337,15 @@ def compute_node_context(
             if f == 0:
                 w_samples_train += sample_weight
                 y_pred[label] += sample_weight
+            # TODO check where the feature is categorcal here
+            #  if yes then
             # One more sample in this bin for the current feature
             w_samples_train_in_bins[f, bin] += sample_weight
             # One more sample in this bin for the current feature with this label
             y_sum[f, bin, label] += sample_weight
+            # TODO otherwise..
+            #  we compute in the compute_node_context the y_sum which contains,
+            #  for each feature and each bin, the sum of the labels per class
 
         # The prediction is given by the formula
         #   y_k = (n_k + dirichlet) / (n_samples + dirichlet * n_classes)

@@ -163,6 +163,7 @@ class TreeBinaryClassifier(ClassifierMixin, TreeBase):
             self.aggregation,
             self.dirichlet,
             self.step,
+            self.categorical_features
         )
 
         node_context = NodeContext(tree_context)

@@ -69,7 +69,8 @@ clf_kwargs = {
     "dirichlet": 1e-5,
     "step": 2.0,
     "aggregation": True,
-    "max_features": 5
+    "max_features": 5,
+    "verbose": True
 }
 # TODO: reproduicibility only granted for n_jobs=1
 
