@@ -414,6 +414,7 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
                 min_samples_split=self.min_samples_split,
                 min_samples_leaf=self.min_samples_leaf,
                 categorical_features=self.categorical_features,
+                is_categorical = self.is_categorical_,
                 max_features=max_features_,
                 random_state=random_state_,
                 verbose=self.verbose,

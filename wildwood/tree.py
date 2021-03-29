@@ -115,6 +115,7 @@ class TreeBinaryClassifier(ClassifierMixin, TreeBase):
         min_samples_split=2,
         min_samples_leaf=1,
         categorical_features=None,
+        is_categorical=None,
         max_features="auto",
         random_state=None,  # random_state of a Tree is only for (samples) bootstrap use
         verbose=0,
@@ -135,6 +136,7 @@ class TreeBinaryClassifier(ClassifierMixin, TreeBase):
             verbose=verbose,
         )
         self.n_classes = n_classes
+        self.is_categorical = is_categorical
 
     def fit(self, X, y, train_indices, valid_indices, sample_weights):
         n_classes = self.n_classes
@@ -163,7 +165,7 @@ class TreeBinaryClassifier(ClassifierMixin, TreeBase):
             self.aggregation,
             self.dirichlet,
             self.step,
-            self.categorical_features
+            self.is_categorical
         )
 
         node_context = NodeContext(tree_context)

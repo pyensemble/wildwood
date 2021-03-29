@@ -208,7 +208,6 @@ class NodeContext:
         # This array will contain the features sampled uniformly at random (without
         # replacement) to be considered for splits
         self.features_sampled = np.arange(0, max_features, dtype=np.uintp)
-        self.categorical_features = tree_context.categorical_features
 
         self.w_samples_train_in_bins = np.empty(
             (max_features, max_bins), dtype=np.float32
@@ -241,6 +240,7 @@ NodeContextType = get_type(NodeContext)
         "partition_valid": uintp[::1],
         "n_classes": uintp,
         "dirichlet": float32,
+        "is_categorical": boolean[::1],
         "train_indices": uintp[::1],
         "valid_indices": uintp[::1],
         "w_samples_train": float32,
@@ -311,6 +311,7 @@ def compute_node_context(
     partition_valid = tree_context.partition_valid
     n_classes = tree_context.n_classes
     dirichlet = tree_context.dirichlet
+    is_categorical = tree_context.is_categorical
 
     # The indices of the training samples contained in the node
     train_indices = partition_train[start_train:end_train]
@@ -337,20 +338,25 @@ def compute_node_context(
             if f == 0:
                 w_samples_train += sample_weight
                 y_pred[label] += sample_weight
-            # TODO check where the feature is categorcal here
-            #  if yes then
-            # One more sample in this bin for the current feature
-            w_samples_train_in_bins[f, bin] += sample_weight
-            # One more sample in this bin for the current feature with this label
-            y_sum[f, bin, label] += sample_weight
-            # TODO otherwise..
-            #  we compute in the compute_node_context the y_sum which contains,
-            #  for each feature and each bin, the sum of the labels per class
+            # check whether the feature is categorical
+            if not is_categorical[f]:
+                # One more sample in this bin for the current feature
+                w_samples_train_in_bins[f, bin] += sample_weight
+                # One more sample in this bin for the current feature with this label
+                y_sum[f, bin, label] += sample_weight
+            else:  # is_categorical[f]
+                # pass
+                # TODO Yiyang otherwise..
+                #  we compute in the compute_node_context the y_sum which contains,
+                #  for each feature and each bin, the sum of the labels per class
+                w_samples_train_in_bins[f, bin] += sample_weight
+                # One more sample in this bin for the current feature with this label
+                y_sum[f, bin, label] += sample_weight
 
         # The prediction is given by the formula
         #   y_k = (n_k + dirichlet) / (n_samples + dirichlet * n_classes)
         # where n_k is the number of samples with label class k
-        if f == 0:
+        if f == 0:  # TODO Question Yiyang: why only do this when f==0??
             for k in range(n_classes):
                 y_pred[k] = (y_pred[k] + dirichlet) / (
                     w_samples_train + n_classes * dirichlet

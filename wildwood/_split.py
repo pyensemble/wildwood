@@ -196,6 +196,7 @@ def copy_split(from_split, to_split):
         "w_samples_valid_in_bins": float32[::1],
         # TODO: put back this
         # "y_sum_in_bins": float32[::1],
+        "order_index": uint8[:],
         "n_samples_train_left": uintp,
         "n_samples_train_right": uintp,
         "w_samples_train_left": float32,
@@ -267,9 +268,15 @@ def find_best_split_along_feature(tree_context, node_context, feature, f, best_s
     # Did we find a split ? Not for now
     best_split.found_split = False
 
+    if tree_context.is_categorical[f]:
+        # sort y_sum_in_bins[:, 0]
+        order_index = np.argsort(y_sum_in_bins[:, 0]).astype(np.uint8)
+    else:
+        order_index = np.arange(n_bins, dtype=np.uint8)
     # We go from left to right and compute the information gain proxy of all possible
     # splits in order to find the best one
-    for bin in range(n_bins):  # TODO HERE HERE sort y_sum_in_bins[:, 0]
+    for i in range(n_bins):
+        bin = order_index[i]
         # On the left we accumulate the counts
         w_samples_train_left += w_samples_train_in_bins[bin]
         w_samples_valid_left += w_samples_valid_in_bins[bin]
