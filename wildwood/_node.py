@@ -339,24 +339,15 @@ def compute_node_context(
                 w_samples_train += sample_weight
                 y_pred[label] += sample_weight
             # check whether the feature is categorical
-            if not is_categorical[f]:
-                # One more sample in this bin for the current feature
-                w_samples_train_in_bins[f, bin] += sample_weight
-                # One more sample in this bin for the current feature with this label
-                y_sum[f, bin, label] += sample_weight
-            else:  # is_categorical[f]
-                # pass
-                # TODO Yiyang otherwise..
-                #  we compute in the compute_node_context the y_sum which contains,
-                #  for each feature and each bin, the sum of the labels per class
-                w_samples_train_in_bins[f, bin] += sample_weight
-                # One more sample in this bin for the current feature with this label
-                y_sum[f, bin, label] += sample_weight
+            w_samples_train_in_bins[f, bin] += sample_weight
+            # One more sample in this bin for the current feature with this label
+            y_sum[f, bin, label] += sample_weight
+            # trier ici selon bin
 
         # The prediction is given by the formula
         #   y_k = (n_k + dirichlet) / (n_samples + dirichlet * n_classes)
         # where n_k is the number of samples with label class k
-        if f == 0:  # TODO Question Yiyang: why only do this when f==0??
+        if f == 0:
             for k in range(n_classes):
                 y_pred[k] = (y_pred[k] + dirichlet) / (
                     w_samples_train + n_classes * dirichlet

@@ -269,14 +269,15 @@ def find_best_split_along_feature(tree_context, node_context, feature, f, best_s
     best_split.found_split = False
 
     if tree_context.is_categorical[f]:
-        # sort y_sum_in_bins[:, 0]
-        order_index = np.argsort(y_sum_in_bins[:, 0]).astype(np.uint8)
+        # sort y_sum_in_bins[:, 0] in descending order
+        order_index = np.argsort(y_sum_in_bins[:, 0])[::-1].astype(np.uint8)
     else:
         order_index = np.arange(n_bins, dtype=np.uint8)
     # We go from left to right and compute the information gain proxy of all possible
     # splits in order to find the best one
-    for i in range(n_bins):
-        bin = order_index[i]
+    # for i in range(n_bins):
+    #    bin = order_index[i]
+    for bin in order_index:
         # On the left we accumulate the counts
         w_samples_train_left += w_samples_train_in_bins[bin]
         w_samples_valid_left += w_samples_valid_in_bins[bin]
@@ -313,7 +314,6 @@ def find_best_split_along_feature(tree_context, node_context, feature, f, best_s
         gain_proxy = information_gain_proxy(
             impurity_left, impurity_right, w_samples_train_left, w_samples_train_right,
         )
-
         if gain_proxy > best_gain_proxy:
             # We've found a split better than the current one, so we save it
             best_gain_proxy = gain_proxy

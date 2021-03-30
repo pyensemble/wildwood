@@ -317,6 +317,7 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         self.min_samples_leaf = min_samples_leaf
         self.max_bins = max_bins
         self.categorical_features = categorical_features
+        self.is_categorical_ = None
         self.max_features = max_features
         self.n_jobs = n_jobs
         self.random_state = random_state
@@ -360,7 +361,7 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         y = self._encode_y(y)
         check_consistent_length(X, y)
         # TODO: deal properly with categorical features. What if these are specified ?
-        self.is_categorical_, known_categories = self._check_categories(X)
+        is_categorical, known_categories = self._check_categories(X)
 
         n_samples, n_features = X.shape
         n_classes = self._n_classes_
@@ -388,12 +389,19 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         #  binned by test for dtype=='uint8' for instance
         self._bin_mapper = Binner(
             n_bins=n_bins,
-            is_categorical=self.is_categorical_,
+            is_categorical=is_categorical,
             known_categories=known_categories,
         )
+        if is_categorical is None:
+            self.is_categorical_ = np.zeros(X.shape[1], dtype=np.bool)
+        else:
+            self.is_categorical_ = np.asarray(is_categorical,
+                                              dtype=np.bool)
+
         X_binned = self._bin_data(X, is_training_data=True)
 
         # TODO: Deal with categorical data
+        # TODO: deal with missing data
         # Uses binned data to check for missing values
         has_missing_values = (
             (X_binned == self._bin_mapper.missing_values_bin_idx_)
@@ -414,7 +422,7 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
                 min_samples_split=self.min_samples_split,
                 min_samples_leaf=self.min_samples_leaf,
                 categorical_features=self.categorical_features,
-                is_categorical = self.is_categorical_,
+                is_categorical=self.is_categorical_,
                 max_features=max_features_,
                 random_state=random_state_,
                 verbose=self.verbose,
