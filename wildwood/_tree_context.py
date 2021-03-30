@@ -54,7 +54,7 @@ spec_tree_context = [
     # Step-size used in the aggregation weights
     ("step", float32),
     # categorical features indicator
-    ("is_categorical", boolean[::1]),  # TODO Yiyang check this type
+    ("is_categorical", boolean[::1]),
     ("partition_train", uintp[::1]),
     ("partition_valid", uintp[::1]),
     ("left_buffer", uintp[::1]),

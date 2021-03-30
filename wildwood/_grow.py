@@ -26,6 +26,7 @@ from ._split import (
 from ._tree import (
     add_node_tree,
     resize_tree,
+    resize_tree_permutations,
     TREE_UNDEFINED,
 )
 

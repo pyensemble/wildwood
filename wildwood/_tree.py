@@ -48,6 +48,10 @@ tree_type = [
     ("nodes", node_type[::1]),
     # The predictions of each node in the tree with shape (n_nodes, n_classes)
     ("y_pred", float32[:, ::1]),
+    # A big table to store bins indices, used in splits on categorical features
+    ("permutations", uint8[:]),
+    # Size of permutations ("big table")
+    ("permutations_capacity", uintp),
 ]
 
 
@@ -85,8 +89,14 @@ class Tree(object):
 
     y_pred : ndarray
         The predictions of each node in the tree with shape (n_nodes, n_classes)
-    """
 
+    permutations : ndarrau
+        bins buffer ("big table")
+
+    permutations_capacity:
+        size of permutations ("big table")
+
+    """
     def __init__(self, n_features, n_classes):
         self.n_features = n_features
         self.n_classes = n_classes
@@ -98,6 +108,10 @@ class Tree(object):
         # later when we know the initial capacity required for the tree
         self.nodes = np.empty(0, dtype=node_dtype)
         self.y_pred = np.empty((0, self.n_classes), dtype=float32)
+
+        # for categorical features, bins buffer ("big table")
+        self.permutations = np.empty(0, dtype=np.uint8)
+        self.permutations_capacity = 0
 
 
 # Numba type for a Tree
@@ -115,11 +129,14 @@ def get_nodes(tree):
         "left_child",
         "right_child",
         "is_leaf",
+        "is_left",
         "depth",
         "feature",
         "threshold",
         "bin_threshold",
         "impurity",
+        "loss_valid",
+        "log_weight_tree",
         "n_samples_train",
         "n_samples_valid",
         "w_samples_train",
@@ -128,9 +145,10 @@ def get_nodes(tree):
         "end_train",
         "start_valid",
         "end_valid",
-        "is_left",
-        "loss_valid",
-        "log_weight_tree",
+        "is_split_categorical",
+        "permutation_start",
+        "permutation_end",
+        "is_perm_left"
     ]
 
     # columns = [col_name for col_name, _ in np_node_tree]
@@ -164,6 +182,22 @@ def resize_tree_(tree, capacity):
     tree.capacity = capacity
 
 
+@jit(void(TreeType, uintp), nopython=True, nogil=True)
+def resize_tree_permutations_(tree, capacity):
+    """Resizes and updates permutations big table of tree attribute
+
+    Parameters
+    ----------
+    tree : TreeType
+        The tree
+
+    capacity : int
+        The new desired capacity (maximum number of nodes it can contain) of the tree.
+    """
+    tree.permutations = resize(tree.permutations, capacity)
+    tree.permutations_capacity = capacity
+
+
 @jit(void(TreeType, optional(uintp)), nopython=True, nogil=True)
 def resize_tree(tree, capacity=None):
     """Resizes and updates the tree to have the required capacity. By default,
@@ -193,6 +227,36 @@ def resize_tree(tree, capacity=None):
         else:
             # Otherwise, we resize using the specified capacity
             resize_tree_(tree, capacity)
+
+
+@jit(void(TreeType, optional(uintp)), nopython=True, nogil=True)
+def resize_tree_permutations(tree, capacity=None):
+    """Resizes and updates the permutations big table
+
+    Parameters
+    ----------
+    tree : TreeType
+        The tree
+
+    capacity : int or None
+        The new desired capacity (maximum number of nodes it can contain) of the tree.
+        If None, then it doubles the capacity of the tree.
+    """
+    if capacity is None:
+        if tree.permutations_capacity == 0:
+            # If no capacity is specified and there is no node in the tree yet,
+            # we set it to 3
+            resize_tree_permutations_(tree, 256)
+        else:
+            # If no capacity is specified we double the current capacity
+            resize_tree_permutations_(tree, 2 * tree.permutations_capacity)
+    else:
+        if capacity <= tree.permutations_capacity and tree.permutations.size > 0:
+            # If the capacity of the tree is already large enough, we no nothing
+            return
+        else:
+            # Otherwise, we resize using the specified capacity
+            resize_tree_permutations_(tree, capacity)
 
 
 @jit(
@@ -348,18 +412,20 @@ def add_node_tree(
 
 
 @jit(
-    uintp(node_type[::1], uint8[::1]),
+    uintp(TreeType, uint8[::1]),
     nopython=True,
     nogil=True,
-    locals={"idx_leaf": uintp, "node": node_type},
+    locals={"nodes": node_type[::1],
+            "idx_leaf": uintp,
+            "node": node_type},
 )
-def find_leaf(nodes, xi):
+def find_leaf(tree, xi):
     """Find the leaf index containing the given features vector.
 
     Parameters
     ----------
-    nodes : ndarray
-        Array of nodes with shape (n_nodes,) with node_dtype dtype
+    tree : TreeType
+        The tree
 
     xi : ndarray
         Input features vector of shape (n_features,) with uint8 dtype
@@ -369,13 +435,27 @@ def find_leaf(nodes, xi):
     output : uintp
         Index of the leaf node containing the input features vector
     """
+    nodes = tree.nodes
     idx_leaf = 0
     node = nodes[idx_leaf]
+    permutations = tree.permutations
     while not node["is_leaf"]:
-        if xi[node["feature"]] <= node["bin_threshold"]:
-            idx_leaf = node["left_child"]
-        else:
-            idx_leaf = node["right_child"]
+        if node["is_split_categorical"]:   # the split is on a categorical feature
+            pass
+            perm = permutations[node["permutation_start"]:node["permutation_start"]]
+            xi_f = xi[node["feature"]]
+            # TODO use np.searchsorted()
+            xif_in_perm = xi_f in perm
+            if (xif_in_perm and node["is_perm_left"]) or (not xif_in_perm and not node["is_perm_left"]):
+                idx_leaf = node["left_child"]
+            else:
+                idx_leaf = node["right_child"]
+        else:  # the split is on a non-categorical / numeric feature
+            if xi[node["feature"]] <= node["bin_threshold"]:
+                idx_leaf = node["left_child"]
+            else:
+                idx_leaf = node["right_child"]
+
         node = nodes[idx_leaf]
 
     return idx_leaf
@@ -408,7 +488,7 @@ def tree_apply(tree, X):
     n_samples = X.shape[0]
     out = np.zeros((n_samples,), dtype=uintp)
     for i in range(n_samples):
-        idx_leaf = find_leaf(tree.nodes, X[i])
+        idx_leaf = find_leaf(tree, X[i])
         out[i] = idx_leaf
 
     return out
@@ -461,7 +541,7 @@ def tree_predict_proba(tree, X, aggregation, step):
     y_pred = tree.y_pred
     out = np.zeros((n_samples, n_classes), dtype=float32)
     for i in range(n_samples):
-        idx_current = find_leaf(nodes, X[i])
+        idx_current = find_leaf(tree, X[i])
         # Array of predictions for sample i
         pred_i = out[i]
         # First, we get the prediction of the leaf

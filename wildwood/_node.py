@@ -70,6 +70,18 @@ node_dtype = np.dtype(
         ("start_valid", np.uintp),
         # End-index of the slice containing the node's validation samples indexes
         ("end_valid", np.uintp),
+        # If the split is on a categorical feature?
+        ("is_split_categorical", np.bool),
+        # In case that the split is on a categorical feature,
+        #    index of start of index of bins
+        ("permutation_start", np.uint8),
+        # In case that the split is on a categorical feature,
+        #    index of end of index of bins
+        ("permutation_end", np.uint8),
+        # In case that the split is on a categorical feature,
+        #    is bins within [start, end] go to left child?
+        #    False means bins within [start, end] go to right child
+        ("is_perm_left", np.bool),
     ]
 )
 
@@ -101,15 +113,15 @@ node_context_type = [
     # Index of the first training sample in the node. We have that
     #   partition_train[start_train:end_train] contains the indexes of the node's
     #   training samples
-    ("start_train", intp),
+    # ("start_train", intp),
     # End-index of the slice containing the node's training samples indexes
-    ("end_train", intp),
+    # ("end_train", intp),
     # Index of the first validation (out-of-the-bag) sample in the node. We have
     #   that partition_valid[start_valid:end_valid] contains the indexes of the
     #   node's validation samples
-    ("start_valid", intp),
+    # ("start_valid", intp),
     # End-index of the slice containing the node's validation samples indexes
-    ("end_valid", intp),
+    # ("end_valid", intp),
     # Validation loss of the node, computed on validation (out-of-the-bag) samples
     ("loss_valid", float32),
     # Weighted number of training samples for each (feature, bin) in the node
