@@ -254,6 +254,7 @@ def find_best_split_along_feature(tree_context, node_context, feature, f, best_s
     n_bins = tree_context.max_bins
 
     n_samples_train = node_context.n_samples_train
+    print("n_samples_train=", n_samples_train)
     w_samples_train = node_context.w_samples_train
     w_samples_valid = node_context.w_samples_valid
     # Weighed number of training samples in each bin for the feature
@@ -328,6 +329,8 @@ def find_best_split_along_feature(tree_context, node_context, feature, f, best_s
         )
 
         if gain_proxy > best_gain_proxy:
+            print("update best split")
+            print("i=", i, "order_index[:(i+1)]=", order_index[:(i+1)])
             # We've found a split better than the current one, so we save it
             best_gain_proxy = gain_proxy
             best_split.found_split = True
@@ -336,22 +339,27 @@ def find_best_split_along_feature(tree_context, node_context, feature, f, best_s
             best_split.bin_threshold = bin
             best_split.impurity_left = impurity_left
             best_split.impurity_right = impurity_right
-            best_split.n_samples_train_left = n_samples_train_left
+            best_split.n_samples_train_left = n_samples_train_left  # TODO this variable has not been updated
             best_split.n_samples_train_right = n_samples_train_right
             best_split.w_samples_train_left = w_samples_train_left
             best_split.w_samples_train_right = w_samples_train_right
             best_split.y_sum_left[:] = y_sum_left
             best_split.y_sum_right[:] = y_sum_right
+            print("w_samples_train_left", w_samples_train_left,
+                  "w_samples_train_right", w_samples_train_right)
+            print("w_samples_valid_left", w_samples_valid_left,
+                  "w_samples_valid_right", w_samples_valid_right)
 
             best_split.is_split_categorical = tree_context.is_categorical[f]
             if tree_context.is_categorical[f]:
+
                 if i < 128:  # n_bins = 256 TODO make this changeable
-                    best_split.permutation[:i] = order_index[:i]
+                    best_split.permutation[:(i+1)] = order_index[:(i+1)]
                     # TODO where i/bin goes actually
-                    best_split.permutation_index = i
+                    best_split.permutation_index = i+1
                 else:
-                    best_split.permutation[:(128-i)] = order_index[i:]
-                    best_split.permutation_index = 128-i
+                    best_split.permutation[:(255-i)] = order_index[i:]
+                    best_split.permutation_index = 255-i
             else:
                 best_split.permutation = np.empty(128, dtype=np.uint8)
                 best_split.permutation_index = 0
@@ -401,6 +409,7 @@ def find_node_split(tree_context, node_context):
     f = 0
     for feature in features:
         # Compute the best bin and gain proxy obtained for the feature
+        print("f=", f)
         find_best_split_along_feature(
             tree_context, node_context, feature, f, candidate_split
         )
@@ -411,6 +420,9 @@ def find_node_split(tree_context, node_context):
                 # Then we replace the best current split
                 copy_split(candidate_split, best_split)
                 best_gain_proxy = candidate_split.gain_proxy
+                # TODO assign them
+                print("best_split.w_samples_valid_left=", best_split.w_samples_valid_left,
+                      "best_split.w_samples_valid_right=", best_split.w_samples_valid_right)
         f += 1
 
     # TODO: Compute the true information gain and save it somewhere ? But it's only
@@ -498,6 +510,7 @@ def split_indices(tree_context, split, start_train, end_train, start_valid, end_
 
     # TODO: pourquoi on fait la transposition ici ?
     Xf = tree_context.X.T[feature]
+    print("Xf=", Xf)
 
     left_buffer = tree_context.left_buffer
     right_buffer = tree_context.right_buffer
@@ -518,14 +531,19 @@ def split_indices(tree_context, split, start_train, end_train, start_valid, end_
             else:
                 right_buffer[n_samples_train_right] = i
                 n_samples_train_right += 1
-    else:
+    else:  # split.is_split_categorical
+        print("permutation", split.permutation[:split.permutation_index], "train")
+        print("partition_train[start_train:end_train]", partition_train[start_train:end_train])
         for i in partition_train[start_train:end_train]:
-            if Xf[i] in split.permutation[:split.permutation_index]:  # TODO check this, optimize
+            print("Xf[i]=", Xf[i])
+            if Xf[i] in split.permutation[:split.permutation_index]:  # TODO check this, then optimize
                 left_buffer[n_samples_train_left] = i
                 n_samples_train_left += 1
             else:
                 right_buffer[n_samples_train_right] = i
                 n_samples_train_right += 1
+        print("n_samples_train_left=", n_samples_train_left,
+              "n_samples_train_right=", n_samples_train_right)
 
     pos_train = start_train + n_samples_train_left
     partition_train[start_train:pos_train] = left_buffer[:n_samples_train_left]
@@ -543,14 +561,21 @@ def split_indices(tree_context, split, start_train, end_train, start_valid, end_
             else:
                 right_buffer[n_samples_valid_right] = i
                 n_samples_valid_right += 1
-    else:
-        for i in partition_train[start_valid:end_valid]:
+    else:  # split.is_split_categorical
+        print("permutation=", split.permutation[:split.permutation_index], "valid")
+        print("partition_valid[start_valid:end_valid]=", partition_valid[start_valid:end_valid])
+        for i in partition_valid[start_valid:end_valid]:
+            print("Xf[i]=", Xf[i])
             if Xf[i] in split.permutation[:split.permutation_index]:  # TODO check this, optimize
                 left_buffer[n_samples_valid_left] = i
                 n_samples_valid_left += 1
+                print("go left")
             else:
                 right_buffer[n_samples_valid_right] = i
                 n_samples_valid_right += 1
+                print("go right")
+        print("n_samples_valid_left=", n_samples_valid_left,
+              "n_samples_valid_right=", n_samples_valid_right)
 
     pos_valid = start_valid + n_samples_valid_left
     partition_valid[start_valid:pos_valid] = left_buffer[:n_samples_valid_left]

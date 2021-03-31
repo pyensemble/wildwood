@@ -327,7 +327,9 @@ def compute_node_context(
 
     # The indices of the training samples contained in the node
     train_indices = partition_train[start_train:end_train]
+    print('train_indices=', train_indices)
     valid_indices = partition_valid[start_valid:end_valid]
+    print("valid_indices=", valid_indices)
 
     # Weighted number of training and validation samples
     w_samples_train = 0.0
@@ -350,11 +352,10 @@ def compute_node_context(
             if f == 0:
                 w_samples_train += sample_weight
                 y_pred[label] += sample_weight
-            # check whether the feature is categorical
+            # One more sample in this bin for the current feature
             w_samples_train_in_bins[f, bin] += sample_weight
             # One more sample in this bin for the current feature with this label
             y_sum[f, bin, label] += sample_weight
-            # trier ici selon bin
 
         # The prediction is given by the formula
         #   y_k = (n_k + dirichlet) / (n_samples + dirichlet * n_classes)
@@ -385,3 +386,7 @@ def compute_node_context(
     node_context.loss_valid = loss_valid / node_context.n_samples_valid
     node_context.w_samples_train = w_samples_train
     node_context.w_samples_valid = w_samples_valid
+    print("node_context: w_samples_train=", w_samples_train,
+          "w_samples_valid=", w_samples_valid,
+          "n_samples_train=", node_context.n_samples_train,
+          "n_samples_valid=", node_context.n_samples_valid)

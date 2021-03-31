@@ -11,7 +11,7 @@ aggregation.
 """
 
 import numpy as np
-from numba import jit, from_dtype, void, boolean, uint8, intp, uintp, float32
+from numba import jit, from_dtype, void, boolean, uint8, intp, uintp, float32, optional
 from numba.types import Tuple
 from numba.experimental import jitclass
 
@@ -250,6 +250,9 @@ def pop_node_record(records):
         "bin": uint8,
         "feature": uintp,
         "found_split": boolean,
+        "is_split_categorical": boolean,
+        "permutation": optional(uint8[::1]),
+        "permutation_index": uint8,
         "threshold": float32,
         "weighted_n_samples_valid": float32,
         "pos_train": uintp,
@@ -257,6 +260,7 @@ def pop_node_record(records):
         "aggregation": boolean,
         "step": float32,
         "node_count": intp,
+        "node_id": intp,
         "node_idx": intp,
         "node": node_type,
         "weight": float32,
@@ -310,6 +314,7 @@ def grow(tree, tree_context, node_context):
             start_valid,
             end_valid,
         ) = pop_node_record(records)
+        print("New node")
 
         # Initialize the node context, this computes the node statistics
         compute_node_context(
@@ -347,11 +352,11 @@ def grow(tree, tree_context, node_context):
             bin = split.bin_threshold
             feature = split.feature
             found_split = split.found_split
+            print("found_split=", found_split)
             is_split_categorical = split.is_split_categorical
             permutation = split.permutation
             permutation_index = split.permutation_index
-
-
+            print("permutation[:permutation_index]=", permutation[:permutation_index])
 
         # If we did not find a split then the node is a leaf, since we can't split it
         is_leaf = is_leaf or not found_split
@@ -440,6 +445,8 @@ def grow(tree, tree_context, node_context):
                 # end_valid of the left child is as the split's position
                 pos_valid,
             )
+            print("enfant gauche:", "start_train=", start_train, "end_train=", pos_train,
+                  "start_valid=", start_valid, "end_valid=", pos_valid)
 
             # This adds the right child
             push_record(
@@ -462,6 +469,8 @@ def grow(tree, tree_context, node_context):
                 # end_valid of the right child is the same as the parent's
                 end_valid,
             )
+            print("enfant droite:", "start_train=", pos_train, "end_train=", end_train,
+                  "start_valid=", pos_valid, "end_valid=", end_valid)
 
     # We finished to grow the tree. Now, we can compute the tree's aggregation weights.
     aggregation = tree_context.aggregation
