@@ -43,7 +43,7 @@ np.random.seed(0)
 # X = data.drop('PRICE', axis=1)
 # y = data['PRICE']
 
-X = np.random.randint(0, 200, (10, 5))
+X = np.random.randint(0, 250, (10, 5))
 y = np.array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
 categorical_features = [i for i in range(5)]
 clf1 = ForestBinaryClassifier(n_estimators=3, random_state=42, categorical_features=categorical_features)

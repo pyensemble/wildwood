@@ -339,11 +339,19 @@ def grow(tree, tree_context, node_context):
             feature = 0
             found_split = False
             # TODO: pourquoi on mettrai impurity = infini ici ?
+            is_split_categorical = False
+            permutation = None
+            permutation_index = 0
         else:
             split = find_node_split(tree_context, node_context)
             bin = split.bin_threshold
             feature = split.feature
             found_split = split.found_split
+            is_split_categorical = split.is_split_categorical
+            permutation = split.permutation
+            permutation_index = split.permutation_index
+
+
 
         # If we did not find a split then the node is a leaf, since we can't split it
         is_leaf = is_leaf or not found_split
@@ -389,6 +397,12 @@ def grow(tree, tree_context, node_context):
             end_valid,
             # Validation loss of the node, computed on validation samples
             node_context.loss_valid,
+            #
+            is_split_categorical,
+            #
+            permutation,
+            #
+            permutation_index,
         )
 
         # Save in the tree the predictions of the node

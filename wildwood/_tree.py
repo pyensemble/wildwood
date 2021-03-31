@@ -50,8 +50,10 @@ tree_type = [
     ("y_pred", float32[:, ::1]),
     # A big table to store bins indices, used in splits on categorical features
     ("permutations", uint8[:]),
-    # Size of permutations ("big table")
+    # Size of permutations
     ("permutations_capacity", uintp),
+    # Actual size of permutations
+    ("permutations_end_idx", uintp),
 ]
 
 
@@ -90,11 +92,14 @@ class Tree(object):
     y_pred : ndarray
         The predictions of each node in the tree with shape (n_nodes, n_classes)
 
-    permutations : ndarrau
+    permutations : ndarray
         bins buffer ("big table")
 
     permutations_capacity:
-        size of permutations ("big table")
+        size of permutations
+
+    permutations_end_idx:
+        actual size pf permutations
 
     """
     def __init__(self, n_features, n_classes):
@@ -112,6 +117,7 @@ class Tree(object):
         # for categorical features, bins buffer ("big table")
         self.permutations = np.empty(0, dtype=np.uint8)
         self.permutations_capacity = 0
+        self.permutations_end_idx = 0
 
 
 # Numba type for a Tree
@@ -279,10 +285,18 @@ def resize_tree_permutations(tree, capacity=None):
         uintp,
         uintp,
         float32,
+        boolean,
+        optional(uint8[::1]),
+        uint8,
     ),
     nopython=True,
     nogil=True,
-    locals={"node_idx": uintp, "nodes": node_type[::1], "node": node_type},
+    locals={"node_idx": uintp,
+            "nodes": node_type[::1],
+            "node": node_type,
+            "start": uintp,
+            "end": uintp
+            },
 )
 def add_node_tree(
     tree,
@@ -303,6 +317,9 @@ def add_node_tree(
     start_valid,
     end_valid,
     loss_valid,
+    is_split_categorical,
+    permutation,
+    permutation_index,
 ):
     """Adds a node in the tree.
 
@@ -366,6 +383,11 @@ def add_node_tree(
     loss_valid : float
         Validation loss of the node, computed on validation (out-of-the-bag) samples
 
+    is_split_categorical: boolean
+
+    permutation: ndarray of int
+
+    permutation_index: int
     """
     # New node index is given by the current number of nodes in the tree
     node_idx = tree.node_count
@@ -406,6 +428,21 @@ def add_node_tree(
         node["feature"] = feature
         node["threshold"] = threshold
         node["bin_threshold"] = bin_threshold
+
+    node["is_split_categorical"] = is_split_categorical
+    if is_split_categorical:
+        # TODO check indexes!!
+        start = tree.permutations_end_idx
+        if start + 256 >= tree.permutations_capacity:
+            resize_tree_permutations(tree, None)
+        node["permutation_start"] = start
+        end = start + permutation_index
+        tree.permutations[start:end] = permutation[:permutation_index]
+        node["permutation_end"] = end
+        tree.permutations_end_idx = end
+    else:
+        node["permutation_start"] = 0
+        node["permutation_end"] = 0
 
     tree.node_count += 1
     return node_idx
