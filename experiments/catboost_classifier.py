@@ -54,27 +54,3 @@ print(f"fitted in {toc - tic:.3f}s")
 
 datasets.evaluate_classifier(clf, dataset.data_test, dataset.target_test, binary=dataset.binary)
 
-"""
-predicted_proba_test = clf.predict_proba(test_pool)
-predicted_test = np.argmax(predicted_proba_test, axis=1)
-
-
-if dataset.binary:
-    roc_auc = roc_auc_score(dataset.target_test ,predicted_proba_test[:,1] , multi_class="ovo")
-    avg_precision_score = average_precision_score(dataset.target_test, predicted_proba_test[:, 1])
-else:
-    onehot_target_test = datasets.onehotencode(dataset.target_test)
-
-    roc_auc = roc_auc_score(onehot_target_test , predicted_proba_test, multi_class="ovo")
-    avg_precision_score = average_precision_score(onehot_target_test, predicted_proba_test)
-
-acc = accuracy_score(dataset.target_test, predicted_test)
-log_loss_value = log_loss(dataset.target_test, predicted_proba_test)
-print(f"ROC AUC: {roc_auc:.4f}, ACC: {acc :.4f}")
-print("ROC AUC computed with multi_class='ovo' (see sklearn docs)")
-
-print(f"Log loss: {log_loss_value :.4f}")
-
-print(f"Average precision score: {avg_precision_score :.4f}")
-
-"""

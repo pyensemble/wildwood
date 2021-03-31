@@ -37,8 +37,10 @@ if dataset.task != "classification":
     exit()
 train_sample_weights = dataset.get_train_sample_weights()
 
+
+
 print("Training Wildwood classifier ...")
-clf = ForestBinaryClassifier(n_estimators=args.n_estimators, random_state=args.random_state, n_jobs=args.n_jobs)#, criterion=args.criterion
+clf = ForestBinaryClassifier(n_estimators=args.n_estimators, random_state=args.random_state, n_jobs=args.n_jobs, criterion=args.criterion)
 clf.fit(dataset.data_train[:100], dataset.target_train[:100])#, sample_weight=train_sample_weights)
 
 tic = time()
@@ -46,6 +48,8 @@ clf.fit(dataset.data_train, dataset.target_train)#, sample_weight=train_sample_w
 toc = time()
 
 print(f"fitted in {toc - tic:.3f}s")
+
+clf.predict((dataset.data_test[:100]))
 
 datasets.evaluate_classifier(clf, dataset.data_test, dataset.target_test, binary=dataset.binary)
 

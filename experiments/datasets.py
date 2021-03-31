@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import zipfile
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, roc_auc_score, log_loss, average_precision_score, mean_squared_error
+from sklearn.metrics import accuracy_score, roc_auc_score, log_loss, average_precision_score, mean_squared_error, classification_report
 
 from sklearn.preprocessing import MinMaxScaler
 
@@ -18,7 +18,7 @@ def evaluate_classifier(clf, test_data, test_target, binary=True):
     toc = time()
 
     print(f"predicted in {toc - tic:.3f}s")
-
+    predict_time = toc - tic
 
     predicted_test = np.argmax(predicted_proba_test, axis=1)
 
@@ -45,6 +45,9 @@ def evaluate_classifier(clf, test_data, test_target, binary=True):
 
     print(f"Average precision score: {avg_precision_score :.4f}")
 
+    print(classification_report(test_target, predicted_test))
+    return {"auc" : roc_auc, "acc" : acc, "avg_precision_score" : avg_precision_score, "log_loss" : log_loss_value, "predict_time" : predict_time}
+
 def evaluate_regressor(reg, test_data, test_target):
     tic = time()
 
@@ -70,7 +73,7 @@ class Datasets:
 
     def split_train_test(self, test_split, random_state):
         self.data_train, self.data_test, self.target_train, self.target_test = train_test_split(
-            self.data, self.target, test_size=test_split, random_state=random_state)
+            self.data, self.target, test_size=test_split, random_state=random_state, stratify=self.target)
 
     
     #def get_test_size(self, test_split):
@@ -201,7 +204,7 @@ class Adult(Datasets):#binary
             X_discrete = pd.get_dummies(data[discrete], prefix_sep="#")#.values
         else:
             #X_discrete = data[discrete].apply(lambda x: pd.factorize(x)[0]).values.astype(int)
-            X_discrete = data[discrete].apply(lambda x: pd.factorize(x)[0]).astype(int)
+            X_discrete = data[discrete].apply(lambda x: pd.factorize(x)[0]).astype(np.int32)
 
 
         self.binary = True
@@ -212,7 +215,7 @@ class Adult(Datasets):#binary
         self.target = pd.get_dummies(y).values[:, 1]
         if as_pandas:
             self.data = X_continuous.join(X_discrete)
-            self.data.columns = list(range(13))
+            self.data.columns = list(range(self.data.shape[1]))
         else:
             self.data = np.hstack((X_continuous, X_discrete))
 
@@ -262,7 +265,7 @@ class Bank(Datasets):#binary
         self.target = pd.get_dummies(y).values[:, 1]
         if as_pandas:
             self.data = X_continuous.join(X_discrete)
-            self.data.columns = list(range(len(discrete)+len(continuous)))
+            self.data.columns = list(range(self.data.shape[1]))
         else:
             self.data = np.hstack((X_continuous, X_discrete))
 
@@ -285,15 +288,15 @@ class Car(Datasets):#multiclass
         self.target = np.argmax(pd.get_dummies(y).values, axis=1)
         self.n_classes = np.max(self.target).astype(int)+1
 
+        #if normalize_intervals:
+        #    mins = self.data.min()
+        #    self.data = (self.data - mins)/(self.data.max() - mins)
+
         if one_hot_categoricals:
             self.data = pd.get_dummies(data, prefix_sep="#").astype("float32")
         else:
             self.data = data.apply(lambda x: pd.factorize(x)[0]).astype(int)#.values#.astype("float32")
 
-
-        if normalize_intervals:
-            mins = self.data.min()
-            self.data = (self.data - mins)/(self.data.max() - mins)
 
         if not as_pandas:
             self.data = self.data.values
@@ -375,7 +378,7 @@ class Cardio(Datasets):#multiclass
 
         if as_pandas:
             self.data = X_continuous.join(X_discrete)
-            self.data.columns = list(range(len(discrete)+len(continuous)))
+            self.data.columns = list(range(self.data.shape[1]))
         else:
             self.data = np.hstack((X_continuous, X_discrete)).astype("float32")
 
@@ -386,7 +389,7 @@ class Cardio(Datasets):#multiclass
         self.n_classes = np.max(self.target).astype(int)+1
 
         self.one_hot_categoricals = one_hot_categoricals
-        self.size, self.n_features = data.shape
+        self.size, self.n_features = self.data.shape
         self.nb_continuous_features = len(continuous)
 
         self.split_train_test(test_split, random_state)
@@ -506,7 +509,7 @@ class Default_cb(Datasets):#binary
 
         if as_pandas:
             self.data = X_continuous.join(X_discrete)
-            self.data.columns = list(range(len(discrete)+len(continuous)))
+            self.data.columns = list(range(self.data.shape[1]))
         else:
             self.data = np.hstack((X_continuous, X_discrete)).astype("float32")
 
@@ -671,9 +674,9 @@ class Covtype(Datasets):#multiclass
 class KDDCup(Datasets):#multiclass
     def __init__(self, path=None, test_split=0.3, random_state=0, normalize_intervals=False, one_hot_categoricals=False, as_pandas=False, subsample=None):
         from sklearn.datasets import fetch_kddcup99
-        print("WARNING : loading only 10 percent of KDDCdup dataset (default) give percent10=False parameter to change this")
+        print("Loading full KDDCdup dataset (percent10=False)")
         print("")
-        data, target = fetch_kddcup99(return_X_y=True, random_state=random_state, as_frame = True)#as_pandas)
+        data, target = fetch_kddcup99(percent10=False, return_X_y=True, random_state=random_state, as_frame = True)#as_pandas)
 
         if subsample is not None:
             print("Subsampling dataset with subsample={}".format(subsample))
@@ -770,7 +773,7 @@ class BreastCancer(Datasets):#binary
 
 
         if normalize_intervals:
-            self.data = self.data.min()
+            mins = self.data.min()
             self.data = (self.data - mins)/(self.data.max() - mins)
 
         self.one_hot_categoricals = False
@@ -870,7 +873,7 @@ class Diabetes(Datasets):#regression
 
 
 
-def load_dataset(args, as_pandas=False):
+def load_dataset(args, as_pandas=True):
     print("Loading dataset {}".format(args.dataset))
     if args.dataset == "Moons":
         return Moons(random_state=args.random_state, normalize_intervals=args.normalize_intervals)
