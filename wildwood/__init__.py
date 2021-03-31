@@ -1,2 +1,2 @@
 
-from .forest import ForestBinaryClassifier
+from .forest import ForestClassifier

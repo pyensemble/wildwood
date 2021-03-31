@@ -7,6 +7,8 @@ This contains the data structure and type for a tree context.
 
 import numpy as np
 from numba import (
+    jit,
+    void,
     boolean,
     uint8,
     intp,
@@ -17,11 +19,15 @@ from numba.experimental import jitclass
 from ._utils import get_type
 
 
+# TODO: X is uint8[:, :] while it could be uint8[::1, :] namely forced F-major,
+#  but if X has shape (n_samples, 1) (only one feature) then it is both F and C and
+#  this raises a numba compulation error. But, it should not affect performance
+
 # A pure data class which contains global context information, such as the dataset,
 # training and validation indices, etc.
-spec_tree_context = [
+tree_context_type = [
     # The binned matrix of features
-    ("X", uint8[::1, :]),
+    ("X", uint8[:, :]),
     # The vector of labels
     ("y", float32[::1]),
     # Sample weights
@@ -38,19 +44,13 @@ spec_tree_context = [
     ("n_samples_valid", uintp),
     # The total number of features
     ("n_features", uintp),
-    # The number of classes
-    ("n_classes", uintp),
     # Maximum number of bins
     ("max_bins", intp),
     # Actual number of bins used for each feature
     ("n_bins_per_feature", intp[::1]),
     # Maximum number of features to try for splitting
     ("max_features", uintp),
-    # TODO: only for classification
-    # Dirichlet parameter
     ("aggregation", boolean),
-    # Dirichlet parameter
-    ("dirichlet", float32),
     # Step-size used in the aggregation weights
     ("step", float32),
     ("partition_train", uintp[::1]),
@@ -60,8 +60,21 @@ spec_tree_context = [
 ]
 
 
-@jitclass(spec_tree_context)
-class TreeContext:
+tree_classifier_context_type = [
+    *tree_context_type,
+    # The number of classes
+    ("n_classes", uintp),
+    # Dirichlet parameter
+    ("dirichlet", float32),
+]
+
+tree_regressor_context_type = [
+    *tree_context_type,
+]
+
+
+@jitclass(tree_classifier_context_type)
+class TreeClassifierContext:
     """
     The splitting context holds all the useful data for splitting
     """
@@ -81,30 +94,125 @@ class TreeContext:
         dirichlet,
         step,
     ):
-        self.X = X
-        self.y = y
-        self.sample_weights = sample_weights
+        init_tree_context(
+            self,
+            X,
+            y,
+            sample_weights,
+            train_indices,
+            valid_indices,
+            max_bins,
+            n_bins_per_feature,
+            max_features,
+            aggregation,
+            step,
+        )
         self.n_classes = n_classes
-        self.max_bins = max_bins
-        self.n_bins_per_feature = n_bins_per_feature
-        self.max_features = max_features
-        self.train_indices = train_indices
-        self.valid_indices = valid_indices
-        self.aggregation = aggregation
         self.dirichlet = dirichlet
-        self.step = step
-        self.partition_train = train_indices.copy()
-        self.partition_valid = valid_indices.copy()
-
-        n_samples, n_features = X.shape
-        self.n_samples = n_samples
-        self.n_features = n_features
-        self.n_samples_train = train_indices.shape[0]
-        self.n_samples_valid = valid_indices.shape[0]
-
-        # Two buffers used in the split_indices function
-        self.left_buffer = np.empty(n_samples, dtype=uintp)
-        self.right_buffer = np.empty(n_samples, dtype=uintp)
 
 
-TreeContextType = get_type(TreeContext)
+@jitclass(tree_regressor_context_type)
+class TreeRegressorContext:
+    """
+    The splitting context holds all the useful data for splitting
+    """
+
+    def __init__(
+        self,
+        X,
+        y,
+        sample_weights,
+        train_indices,
+        valid_indices,
+        max_bins,
+        n_bins_per_feature,
+        max_features,
+        aggregation,
+        step,
+    ):
+        init_tree_context(
+            self,
+            X,
+            y,
+            sample_weights,
+            train_indices,
+            valid_indices,
+            max_bins,
+            n_bins_per_feature,
+            max_features,
+            aggregation,
+            step,
+        )
+
+
+TreeClassifierContextType = get_type(TreeClassifierContext)
+TreeRegressorContextType = get_type(TreeRegressorContext)
+
+
+@jit(
+    [
+        void(
+            TreeClassifierContextType,
+            uint8[:, :],
+            float32[::1],
+            float32[::1],
+            uintp[::1],
+            uintp[::1],
+            intp,
+            intp[::1],
+            uintp,
+            boolean,
+            float32,
+        ),
+        void(
+            TreeRegressorContextType,
+            uint8[:, :],
+            float32[::1],
+            float32[::1],
+            uintp[::1],
+            uintp[::1],
+            intp,
+            intp[::1],
+            uintp,
+            boolean,
+            float32,
+        ),
+    ],
+    nopython=True,
+    nogil=True,
+)
+def init_tree_context(
+    tree_context,
+    X,
+    y,
+    sample_weights,
+    train_indices,
+    valid_indices,
+    max_bins,
+    n_bins_per_feature,
+    max_features,
+    aggregation,
+    step,
+):
+    tree_context.X = X
+    tree_context.y = y
+    tree_context.sample_weights = sample_weights
+    tree_context.max_bins = max_bins
+    tree_context.n_bins_per_feature = n_bins_per_feature
+    tree_context.max_features = max_features
+    tree_context.train_indices = train_indices
+    tree_context.valid_indices = valid_indices
+    tree_context.aggregation = aggregation
+    tree_context.step = step
+    tree_context.partition_train = train_indices.copy()
+    tree_context.partition_valid = valid_indices.copy()
+
+    n_samples, n_features = X.shape
+    tree_context.n_samples = n_samples
+    tree_context.n_features = n_features
+    tree_context.n_samples_train = train_indices.shape[0]
+    tree_context.n_samples_valid = valid_indices.shape[0]
+
+    # Two buffers used in the split_indices function
+    tree_context.left_buffer = np.empty(n_samples, dtype=np.uintp)
+    tree_context.right_buffer = np.empty(n_samples, dtype=np.uintp)

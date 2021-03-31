@@ -23,7 +23,7 @@ from sklearn.metrics import roc_auc_score, log_loss
 
 sys.path.extend([".", ".."])
 
-from wildwood.forest import ForestBinaryClassifier
+from wildwood.forest import ForestClassifier
 
 
 @st.cache
@@ -155,8 +155,9 @@ def fit_forest(
         "n_jobs": n_jobs,
         "step": step,
         "dirichlet": dirichlet,
+        "max_features": 2,
     }
-    clf = ForestBinaryClassifier(**clf_kwargs)
+    clf = ForestClassifier(**clf_kwargs)
     clf.fit(X_train, y_train)
     return clf
 
@@ -319,9 +320,8 @@ aggregation = st.sidebar.checkbox("aggregation", value=True)
 dirichlet = st.sidebar.selectbox(
     "dirichlet", [1e-8, 0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 100], index=3
 )
-step = st.sidebar.selectbox(
-    "step", [1e-2, 1e-1, 0.5, 1.0, 2.0, 3.0, 5.0, 10.0, 50.0], index=3
-)
+step = st.sidebar.text_input(label="step", value=1.0)
+step = float(step)
 show_data = st.sidebar.checkbox("Show data", value=True)
 normalize = st.sidebar.checkbox("Normalize colors", value=True)
 

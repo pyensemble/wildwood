@@ -49,6 +49,11 @@ def information_gain_proxy(
     return -w_samples_left * impurity_left - w_samples_right * impurity_right
 
 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# Gini impurity                                                                       #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+
 @jit(
     float32(float32, float32, float32, float32, float32, float32, float32),
     nopython=True,
@@ -195,3 +200,79 @@ def gini_childs(n_classes, w_samples_left, w_samples_right, y_sum_left, y_sum_ri
     gini_left = 1.0 - y_sum_left_sq / w_samples_left_sq
     gini_right = 1.0 - y_sum_right_sq / w_samples_right_sq
     return gini_left, gini_right
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# Mean-squared error impurity                                                         #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+
+@jit(float32(float32, float32, float32), nopython=True, nogil=True)
+def mse_node(w_samples, y_sum, y_sq_sum):
+    """Computes the variance of the labels in the node
+
+    Parameters
+    ----------
+    w_samples : float
+        Weighted number of samples in the node
+
+    y_sum : float
+        Weighted sum of the label in the node
+
+    y_sq_sum : float
+        Weighted sum of the squared labels in the node
+
+    Returns
+    -------
+    output : float
+        Variance of the labels in the node
+    """
+    return y_sq_sum / w_samples - (y_sum / w_samples) ** 2
+
+
+@jit(
+    Tuple((float32, float32))(float32, float32, float32, float32, float32, float32),
+    nopython=True,
+    nogil=True,
+)
+def mse_childs(
+    w_samples_left,
+    w_samples_right,
+    y_sum_left,
+    y_sum_right,
+    y_sq_sum_left,
+    y_sq_sum_right,
+):
+    """Computes the variance of the labels in both the left and right nodes of a
+    parent node
+
+    Parameters
+    ----------
+    w_samples_left : float
+        Weighted number of samples in the left child node
+
+    w_samples_right : float
+        Weighted number of samples in the right child node
+
+    y_sum_left : float
+        Weighted sum of the label in the left child node
+
+    y_sum_right : float
+        Weighted sum of the label in the right child node
+
+    y_sq_sum_left : float
+        Weighted sum of the squared labels in the left child node
+
+    y_sq_sum_right : float
+        Weighted sum of the squared labels in the right child node
+
+    Returns
+    -------
+    output : tuple
+        A tuple with two float elements containing the variances of the label in
+        the left and right child nodes
+    """
+    return (
+        mse_node(w_samples_left, y_sum_left, y_sq_sum_left),
+        mse_node(w_samples_right, y_sum_right, y_sq_sum_right),
+    )

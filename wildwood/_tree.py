@@ -21,7 +21,7 @@ from numba import (
 )
 from numba.experimental import jitclass
 
-from ._utils import get_type, resize, resize2d
+from ._utils import get_type, resize
 from ._node import node_type, node_dtype
 
 
@@ -36,8 +36,6 @@ TREE_UNDEFINED = intp(-2)
 tree_type = [
     # Number of features
     ("n_features", uintp),
-    # Number of classes
-    ("n_classes", uintp),
     # Maximum depth allowed in the tree
     ("max_depth", uintp),
     # Number of nodes in the tree
@@ -46,14 +44,28 @@ tree_type = [
     ("capacity", uintp),
     # A numpy array containing the nodes data
     ("nodes", node_type[::1]),
+]
+
+tree_classifier_type = [
+    *tree_type,
+    # Number of classes
+    ("n_classes", uintp),
     # The predictions of each node in the tree with shape (n_nodes, n_classes)
     ("y_pred", float32[:, ::1]),
 ]
 
 
-@jitclass(tree_type)
-class Tree(object):
-    """A tree containing an array of nodes and an array for its predictions
+tree_regressor_type = [
+    *tree_type,
+    # The predictions of each node in the tree with shape (n_nodes,)
+    ("y_pred", float32[::1]),
+]
+
+
+@jitclass(tree_classifier_type)
+class _TreeClassifier(object):
+    """A tree for classification containing an array of nodes and an array for its
+    predictions
 
     Parameters
     ----------
@@ -90,18 +102,60 @@ class Tree(object):
     def __init__(self, n_features, n_classes):
         self.n_features = n_features
         self.n_classes = n_classes
-        # TODO: is this useful ?
         self.max_depth = 0
         self.node_count = 0
         self.capacity = 0
         # Both node and prediction arrays have zero on the first axis and are resized
         # later when we know the initial capacity required for the tree
         self.nodes = np.empty(0, dtype=node_dtype)
-        self.y_pred = np.empty((0, self.n_classes), dtype=float32)
+        self.y_pred = np.empty((0, self.n_classes), dtype=np.float32)
 
 
-# Numba type for a Tree
-TreeType = get_type(Tree)
+@jitclass(tree_regressor_type)
+class _TreeRegressor(object):
+    """A tree for regression containing an array of nodes and an array for its
+    predictions
+
+    Parameters
+    ----------
+    n_features : int
+        Number of input features
+
+    Attributes
+    ----------
+    n_features : int
+        Number of input features
+
+    max_depth :
+        Maximum depth allowed in the tree (not used for now)
+
+    node_count :
+        Number of nodes in the tree
+
+    capacity :
+        Maximum number of nodes storable in the tree
+
+    nodes : ndarray
+        A numpy array containing the nodes data
+
+    y_pred : ndarray
+        The predictions of each node in the tree with shape (n_nodes,)
+    """
+
+    def __init__(self, n_features):
+        self.n_features = n_features
+        self.max_depth = 0
+        self.node_count = 0
+        self.capacity = 0
+        # Both node and prediction arrays have zero on the first axis and are resized
+        # later when we know the initial capacity required for the tree
+        self.nodes = np.empty(0, dtype=node_dtype)
+        self.y_pred = np.empty(0, dtype=np.float32)
+
+
+# Numba types for Trees
+TreeClassifierType = get_type(_TreeClassifier)
+TreeRegressorType = get_type(_TreeRegressor)
 
 
 def get_nodes(tree):
@@ -122,8 +176,8 @@ def get_nodes(tree):
         "impurity",
         "n_samples_train",
         "n_samples_valid",
-        "weighted_n_samples_train",
-        "weighted_n_samples_valid",
+        "w_samples_train",
+        "w_samples_valid",
         "start_train",
         "end_train",
         "start_valid",
@@ -132,9 +186,6 @@ def get_nodes(tree):
         "loss_valid",
         "log_weight_tree",
     ]
-
-    # columns = [col_name for col_name, _ in np_node_tree]
-    # columns = ["left_child"]
 
     return pd.DataFrame.from_records(
         (
@@ -146,33 +197,57 @@ def get_nodes(tree):
     )
 
 
-@jit(void(TreeType, uintp), nopython=True, nogil=True)
+def get_nodes_regressor(tree):
+    nodes = get_nodes(tree)
+    y_pred = tree.y_pred[: tree.node_count]
+    nodes["y_pred"] = y_pred
+    return nodes
+
+
+def get_nodes_classifier(tree):
+    nodes = get_nodes(tree)
+    return nodes
+
+
+@jit(
+    [void(TreeClassifierType, uintp), void(TreeRegressorType, uintp)],
+    nopython=True,
+    nogil=True,
+)
 def resize_tree_(tree, capacity):
     """Resizes and updates the tree to have the required capacity. This functions
     resizes the tree no matter what (no test is performed here).
 
     Parameters
     ----------
-    tree : TreeType
-        The tree
+    tree : TreeClassifier or TreeRegressor
+        The tree to be resized
 
     capacity : int
-        The new desired capacity (maximum number of nodes it can contain) of the tree.
+        The new desired capacity (maximum number of nodes it can contain) of the tree
     """
     tree.nodes = resize(tree.nodes, capacity)
-    tree.y_pred = resize2d(tree.y_pred, capacity, zeros=True)
+    tree.y_pred = resize(tree.y_pred, capacity, zeros=True)
     tree.capacity = capacity
 
 
-@jit(void(TreeType, optional(uintp)), nopython=True, nogil=True)
+@jit(
+    [
+        void(TreeClassifierType, optional(uintp)),
+        void(TreeRegressorType, optional(uintp)),
+    ],
+    nopython=True,
+    nogil=True,
+)
 def resize_tree(tree, capacity=None):
-    """Resizes and updates the tree to have the required capacity. By default,
-    it doubles the current capacity of the tree if no capacity is specified.
+    """Resizes and updates the tree to have the required capacity if necessary. By
+    default, it doubles the current capacity of the tree if no capacity is specified
+    and set it to 3 if the tree is empty.
 
     Parameters
     ----------
-    tree : TreeType
-        The tree
+    tree : TreeClassifier or TreeRegressor
+        The tree to be resized
 
     capacity : int or None
         The new desired capacity (maximum number of nodes it can contain) of the tree.
@@ -196,26 +271,48 @@ def resize_tree(tree, capacity=None):
 
 
 @jit(
-    uintp(
-        TreeType,
-        intp,
-        uintp,
-        boolean,
-        boolean,
-        uintp,
-        float32,
-        uint8,
-        float32,
-        uintp,
-        uintp,
-        float32,
-        float32,
-        uintp,
-        uintp,
-        uintp,
-        uintp,
-        float32,
-    ),
+    [
+        uintp(
+            TreeClassifierType,
+            intp,
+            uintp,
+            boolean,
+            boolean,
+            uintp,
+            float32,
+            uint8,
+            float32,
+            uintp,
+            uintp,
+            float32,
+            float32,
+            uintp,
+            uintp,
+            uintp,
+            uintp,
+            float32,
+        ),
+        uintp(
+            TreeRegressorType,
+            intp,
+            uintp,
+            boolean,
+            boolean,
+            uintp,
+            float32,
+            uint8,
+            float32,
+            uintp,
+            uintp,
+            float32,
+            float32,
+            uintp,
+            uintp,
+            uintp,
+            uintp,
+            float32,
+        ),
+    ],
     nopython=True,
     nogil=True,
     locals={"node_idx": uintp, "nodes": node_type[::1], "node": node_type},
@@ -244,8 +341,8 @@ def add_node_tree(
 
     Parameters
     ----------
-    tree : TreeType
-        The tree
+    tree : TreeClassifier or TreeRegressor
+        The tree in which we want to add a node
 
     parent : int
         Index of the parent node
@@ -301,7 +398,6 @@ def add_node_tree(
 
     loss_valid : float
         Validation loss of the node, computed on validation (out-of-the-bag) samples
-
     """
     # New node index is given by the current number of nodes in the tree
     node_idx = tree.node_count
@@ -348,7 +444,7 @@ def add_node_tree(
 
 
 @jit(
-    uintp(node_type[::1], uint8[::1]),
+    uintp(node_type[::1], uint8[:]),
     nopython=True,
     nogil=True,
     locals={"idx_leaf": uintp, "node": node_type},
@@ -382,7 +478,10 @@ def find_leaf(nodes, xi):
 
 
 @jit(
-    uintp[::1](TreeType, uint8[:, ::1]),
+    [
+        uintp[::1](TreeClassifierType, uint8[:, :]),
+        uintp[::1](TreeRegressorType, uint8[:, :]),
+    ],
     nopython=True,
     nogil=True,
     locals={"n_samples": uintp, "out": uintp[::1], "i": uintp, "idx_leaf": uintp},
@@ -393,7 +492,7 @@ def tree_apply(tree, X):
 
     Parameters
     ----------
-    tree : TreeType
+    tree : TreeClassifier or TreeRegressor
         The tree
 
     X : ndarray
@@ -415,7 +514,7 @@ def tree_apply(tree, X):
 
 
 @jit(
-    float32[:, ::1](TreeType, uint8[:, ::1], boolean, float32),
+    float32[:, ::1](TreeClassifierType, uint8[:, :], boolean, float32),
     nopython=True,
     nogil=True,
     locals={
@@ -426,15 +525,20 @@ def tree_apply(tree, X):
         "out": float32[:, ::1],
         "i": uintp,
         "idx_current": uintp,
+        "pred_i": float32[::1],
         "node": node_type,
+        "node_pred": float32[::1],
+        "loss": float32,
+        "log_weight_tree": float32,
+        "alpha": float32,
     },
 )
-def tree_predict_proba(tree, X, aggregation, step):
+def tree_classifier_predict_proba(tree, X, aggregation, step):
     """Predicts class probabilities for the input matrix of features.
 
     Parameters
     ----------
-    tree : TreeType
+    tree : TreeClassifier
         The tree
 
     X : ndarray
@@ -461,30 +565,162 @@ def tree_predict_proba(tree, X, aggregation, step):
     y_pred = tree.y_pred
     out = np.zeros((n_samples, n_classes), dtype=float32)
     for i in range(n_samples):
+        # FInd the leaf containing X[i]
         idx_current = find_leaf(nodes, X[i])
-        # Array of predictions for sample i
+        # Get a view to save the prediction for X[i]
         pred_i = out[i]
         # First, we get the prediction of the leaf
         pred_i[:] = y_pred[idx_current]
         if aggregation:
-            # Then, we go up in the tree
-            idx_current = nodes[idx_current]["parent"]
-            # Now, we follow the path going up to the tree to compute the aggregated
-            # prediction
             while idx_current != 0:
-                # Get the current node
+                # Get the parent node
+                idx_current = nodes[idx_current]["parent"]
                 node = nodes[idx_current]
-                # Get the prediction given by the current node
+                # Prediction of this node
                 node_pred = y_pred[idx_current]
-                # Get the aggregation weights of the current node
-                log_weight = step * node["loss_valid"]
-                # Get the aggregation weight of the subtree rooted at the current node
+                # logarithm of the aggregation weight
+                loss = -step * node["loss_valid"]
+                log_weight_tree = node["log_weight_tree"]
+                alpha = 0.5 * exp(loss - log_weight_tree)
+                # Context tree weighting dark magic
+                pred_i[:] = alpha * node_pred + (1 - alpha) * pred_i
+
+    return out
+
+
+@jit(
+    float32[:](TreeRegressorType, uint8[:, :], boolean, float32),
+    nopython=True,
+    nogil=True,
+    locals={
+        "n_samples": uintp,
+        "nodes": node_type[::1],
+        "y_pred": float32[::1],
+        "out": float32[::1],
+        "i": uintp,
+        "idx_current": uintp,
+        "pred_i": float32,
+        "node": node_type,
+        "node_pred": float32,
+        "loss": float32,
+        "log_weight_tree": float32,
+        "alpha": float32,
+    },
+)
+def tree_regressor_predict(tree, X, aggregation, step):
+    """Predicts the labels for the input matrix of features.
+
+    Parameters
+    ----------
+    tree : TreeRegressor
+        The tree
+
+    X : ndarray
+        Input matrix of features with shape (n_samples, n_features) and uint8 dtype
+
+    aggregation : bool
+        If True we predict the labels using the aggregation algorithm.
+        Otherwise, we simply use the prediction given by the leaf node containing the
+        input features.
+
+    step : float
+        Step-size used for the computation of the aggregation weights. Used only if
+        aggregation=True
+
+    Returns
+    -------
+    output : ndarray
+        An array of shape (n_samples,) and float32 dtype containing the
+        predicted labels
+    """
+    n_samples = X.shape[0]
+    nodes = tree.nodes
+    y_pred = tree.y_pred
+    out = np.zeros(n_samples, dtype=float32)
+
+    for i in range(n_samples):
+        idx_current = find_leaf(nodes, X[i])
+        # First, we get the prediction of the leaf
+        pred_i = y_pred[idx_current]
+        if aggregation:
+            while idx_current != 0:
+                # Get the parent node
+                idx_current = nodes[idx_current]["parent"]
+                node = nodes[idx_current]
+                # Prediction of this node
+                node_pred = y_pred[idx_current]
+                # logarithm of the aggregation weight
+                loss = -step * node["loss_valid"]
                 log_weight_tree = node["log_weight_tree"]
                 # Compute the aggregation weight for this subtree
-                w = exp(log_weight - log_weight_tree)
-                # Apply the context tree weighting dark magic
-                pred_i[:] = 0.5 * w * node_pred + (1 - 0.5 * w) * pred_i
-                # Go up in the tree
-                idx_current = node["parent"]
+                alpha = 0.5 * exp(loss - log_weight_tree)
+                # Context tree weighting dark magic
+                pred_i = alpha * node_pred + (1 - alpha) * pred_i
+
+        out[i] = pred_i
+
+    return out
+
+
+# TODO: code also a tree_classifier_weighted_depth or change the apply function with
+#  an aggregation option
+
+
+@jit(
+    float32[:](TreeRegressorType, uint8[:, :], float32),
+    nopython=True,
+    nogil=True,
+    locals={
+        "n_samples": uintp,
+        "nodes": node_type[::1],
+        "out": float32[::1],
+        "i": uintp,
+        "idx_current": uintp,
+        "node": node_type,
+        "weighted_depth": float32,
+        "node_pred": float32,
+        "loss": float32,
+        "log_weight_tree": float32,
+        "alpha": float32,
+    },
+)
+def tree_regressor_weighted_depth(tree, X, step):
+    """Compute the weighted depth used by the aggregation algorithm for the
+    input matrix of features.
+
+    Parameters
+    ----------
+    tree : TreeRegressor
+        The tree
+
+    X : ndarray
+        Input matrix of features with shape (n_samples, n_features) and uint8 dtype
+
+    step : float
+        Step-size used for the computation of the aggregation weights. Used only if
+        aggregation=True
+
+    Returns
+    -------
+    output : ndarray
+        An array of shape (n_samples,) and float32 dtype containing the
+        predicted labels
+    """
+    n_samples = X.shape[0]
+    nodes = tree.nodes
+    out = np.zeros(n_samples, dtype=float32)
+    for i in range(n_samples):
+        idx_current = find_leaf(nodes, X[i])
+        node = nodes[idx_current]
+        weighted_depth = float32(node["depth"])
+        while idx_current != 0:
+            idx_current = nodes[idx_current]["parent"]
+            node = nodes[idx_current]
+            depth_new = node["depth"]
+            loss = -step * node["loss_valid"]
+            log_weight_tree = node["log_weight_tree"]
+            alpha = 0.5 * exp(loss - log_weight_tree)
+            weighted_depth = alpha * depth_new + (1 - alpha) * weighted_depth
+        out[i] = weighted_depth
 
     return out

@@ -3,6 +3,7 @@
 """
 # License: BSD 3 clause
 
+from typing import Union
 from warnings import warn
 import threading
 import numpy as np
@@ -14,7 +15,7 @@ from scipy.sparse import issparse
 
 from sklearn.ensemble._base import _partition_estimators
 from sklearn.utils import check_random_state, compute_sample_weight, check_array
-from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
 from sklearn.utils.validation import check_consistent_length
 from sklearn.preprocessing import LabelEncoder
 
@@ -25,10 +26,10 @@ from sklearn.utils.validation import check_is_fitted
 from ._binning import Binner
 
 
-__all__ = ["ForestBinaryClassifier"]
+__all__ = ["ForestClassifier", "ForestRegressor"]
 
 
-from wildwood.tree import TreeBinaryClassifier
+from wildwood.tree import TreeClassifier, TreeRegressor
 
 
 # TODO: bootstrap with stratification for unbalanced data ?
@@ -113,173 +114,31 @@ def _accumulate_prediction(predict, X, out, lock):
         out += prediction
 
 
+def _compute_weighted_depth(weighted_depth, X, out, lock, tree_idx):
+    tree_weighted_depth = weighted_depth(X)
+    with lock:
+        out[tree_idx] = tree_weighted_depth
+
+
 def _get_tree_prediction(predict, X, out, lock, tree_idx):
     prediction = predict(X, check_input=False)
     with lock:
         out[tree_idx] = prediction
 
 
-class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
+class ForestBase(BaseEstimator):
     """
-    WildWood for binary classification.
-
-    It grows in parallel `n_estimator` trees using bootstrap samples and aggregates
-    their predictions (bagging). Each tree uses "in-the-bag" samples to grow itself
-    and "out-of-the-bag" samples to compute aggregation weights for all possible
-    subtrees of the whole tree.
-
-    The prediction function of each tree in WildWood is very different from the one
-    of a standard decision trees. Indeed, the predictions of a tree are computed here
-    as an aggregation with exponential weights of all the predictions given by all
-    possible subtrees (prunings) of the full tree. The required computations are
-    performed efficiently thanks to a variant of the context tree weighting algorithm.
-
-    Also, features are all binned with a maximum of 255 bins, following lightGBM's
-    binning strategy.
-
-
-    TODO: update doc link
-    Read more in the :ref:`User Guide <forest>`.
-
-    Parameters
-    ----------
-    n_estimators : int, default=100
-        The number of trees in the forest.
-
-    criterion : {"gini", "entropy"}, default="gini"
-        The impurity criterion used to measure the quality of a split. The supported
-        impurity criteria are "gini" for the Gini impurity and "entropy" for the
-        entropy impurity.
-
-    loss : {"log"}, default="log"
-        The loss used for the computation of the aggregation weights. Only "log"
-        is supported for now, namely the log-loss for classification.
-
-    step : float, default=1
-        Step-size for the aggregation weights. Default is 1 for classification with
-        the log-loss, which is usually the best choice. A larger value will lead to
-        aggregation weights with the best validation loss.
-
-    aggregation : bool, default=True
-        Controls if aggregation is used in the trees. It is highly recommended to
-        leave it as `True`.
-
-    dirichlet : float, default=0.5
-        Regularization level of the class frequencies used for predictions in each
-        node. A good default is dirichlet=0.5 for binary classification.
-
-    max_depth : int, default=None
-        The maximum depth of a tree. If None, then nodes from the tree are split until
-        they are "pure" (impurity is small enough) or until they contain
-        min_samples_split samples.
-
-    min_samples_split : int, default=2
-        The minimum number of training samples and out-of-the-bag samples required to
-        split a node. This must be >= 2.
-
-    min_samples_leaf : int, default=1
-        A split point is considered if it leaves at least ``min_samples_leaf``
-        training samples and out-of-the-bag samples in the left and right childs.
-        This must be >= 1.
-
-    max_bins : int, default=255
-        The maximum number of bins to use for non-missing values. Before
-        training, each feature of the input array `X` is binned into
-        integer-valued bins, which allows for a much faster training stage.
-        Features with a small number of unique values may use less than
-        ``max_bins`` bins. In addition to the ``max_bins`` bins, one more bin
-        is always reserved for missing values. Must be no larger than 255.
-
-    categorical_features : array-like of {bool, int} of shape (n_features) \
-            or shape (n_categorical_features,), default=None.
-        Indicates the categorical features.
-
-        - None : no feature will be considered categorical.
-        - boolean array-like : boolean mask indicating categorical features.
-        - integer array-like : integer indices indicating categorical
-          features.
-
-        For each categorical feature, there must be at most `max_bins` unique
-        categories, and each categorical value must be in [0, max_bins -1].
-
-        Read more in the :ref:`User Guide <categorical_support_gbdt>`.
-
-        .. versionadded:: 0.24
-
-    max_features : {"auto", "sqrt", "log2"}, int or float, default="auto"
-        The number of features to consider when looking for the best split:
-
-        - If int, then consider `max_features` features at each split.
-        - If float, then `max_features` is a fraction and
-          `round(max_features * n_features)` features are considered at each
-          split.
-        - If "auto", then `max_features=sqrt(n_features)`.
-        - If "sqrt", then `max_features=sqrt(n_features)` (same as "auto").
-        - If "log2", then `max_features=log2(n_features)`.
-        - If None, then `max_features=n_features`.
-
-        Note: the search for a split does not stop until at least one
-        valid partition of the node samples is found, even if it requires to
-        effectively inspect more than ``max_features`` features.
-        TODO: this is not true for now...
-
-    n_jobs : int, default=1
-        The number of jobs to run in parallel for :meth:`fit`, :meth:`predict`,
-        :meth:`predict_proba`, :meth:`decision_path` and :meth:`apply`. All
-        these methods are parallelized over the trees in the forets. ``n_jobs=-1``
-        means using all processors.
-
-    random_state : int, RandomState instance or None, default=None
-        Controls both the randomness of the bootstrapping of the samples used
-        when building trees (if ``bootstrap=True``) and the sampling of the
-        features to consider when looking for the best split at each node
-        (if ``max_features < n_features``).
-        See :term:`Glossary <random_state>` for details.
-
-    verbose : int, default=0
-        Controls the verbosity when fitting and predicting.
-
-    class_weight : {"balanced", "balanced_subsample"}, dict or list of dicts, \
-            default=None
-        Weights associated with classes in the form ``{class_label: weight}``.
-        If not given, all classes are supposed to have weight one. For
-        multi-output problems, a list of dicts can be provided in the same
-        order as the columns of y.
-
-        Note that for multioutput (including multilabel) weights should be
-        defined for each class of every column in its own dict. For example,
-        for four-class multilabel classification weights should be
-        [{0: 1, 1: 1}, {0: 1, 1: 5}, {0: 1, 1: 1}, {0: 1, 1: 1}] instead of
-        [{1:1}, {2:5}, {3:1}, {4:1}].
-
-        The "balanced" mode uses the values of y to automatically adjust
-        weights inversely proportional to class frequencies in the input data
-        as ``n_samples / (n_classes * np.bincount(y))``
-
-        The "balanced_subsample" mode is the same as "balanced" except that
-        weights are computed based on the bootstrap sample for every tree
-        grown.
-
-        For multi-output, the weights of each column of y will be multiplied.
-
-        Note that these weights will be multiplied with sample_weight (passed
-        through the fit method) if sample_weight is specified.
-
-    References
-    ----------
-    TODO: insert references
-
+    BLABLA
     """
 
     def __init__(
         self,
         *,
-        n_estimators=100,
-        criterion="gini",
-        loss="log",
+        n_estimators,
+        criterion,
+        loss,
         step=1.0,
         aggregation=True,
-        dirichlet=0.5,
         max_depth=None,
         min_samples_split=2,
         min_samples_leaf=1,
@@ -289,13 +148,10 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         n_jobs=1,
         random_state=None,
         verbose=False,
-        class_weight=None,
     ):
         self._fitted = False
         self._n_samples_ = None
         self._n_features_ = None
-        self._n_classes_ = None
-        self._n_outputs_ = None
         self.max_features_ = None
         self.n_jobs_ = None
 
@@ -305,7 +161,6 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         self.loss = loss
         self.step = step
         self.aggregation = aggregation
-        self.dirichlet = dirichlet
         self.max_depth = max_depth
         self.min_samples_split = min_samples_split
         self.min_samples_leaf = min_samples_leaf
@@ -315,61 +170,36 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         self.n_jobs = n_jobs
         self.random_state = random_state
         self.verbose = verbose
-        self.class_weight = class_weight
-
-    def _encode_y(self, y):
-        """
-        Encode classes into {0, ..., n_classes - 1} and sets attributes classes_,
-        n_classes_ and n_trees_per_iteration_
-
-        Parameters
-        ----------
-        y : ndarrray
-            Array of input labels
-
-        Returns
-        -------
-        output : ndarray
-            Encoded array of labels
-        """
-        #
-        # and n_trees_per_iteration_
-        check_classification_targets(y)
-        label_encoder = LabelEncoder()
-        encoded_y = label_encoder.fit_transform(y)
-        self.classes_ = label_encoder.classes_
-        n_classes_ = self.classes_.shape[0]
-        self._n_classes_ = n_classes_
-        # only 1 tree for binary classification.
-        # TODO: For multiclass classification, we build 1 tree per class.
-        self.n_trees_per_iteration_ = 1 if n_classes_ <= 2 else n_classes_
-        encoded_y = np.ascontiguousarray(encoded_y, dtype=np.float32)
-        return encoded_y
 
     def fit(self, X, y):
         """
         """
         # TODO: Why only float64 ? What if the data is already binned ?
-        X, y = self._validate_data(X, y, dtype=[np.float64], force_all_finite=False)
-        y = self._encode_y(y)
+        X, y = self._validate_data(
+            X, y, dtype=[np.float32], force_all_finite=False, order="F"
+        )
+
+        is_classifier = isinstance(self, ForestClassifier)
+        if is_classifier:
+            y = self._encode_y(y)
+        else:
+            y = np.ascontiguousarray(y, dtype=np.float32)
         check_consistent_length(X, y)
+
         # TODO: deal properly with categorical features. What if these are specified ?
         self.is_categorical_, known_categories = self._check_categories(X)
 
         n_samples, n_features = X.shape
-        n_classes = self._n_classes_
         # Let's get actual parameters based on the parameters passed by the user and
         # the data
         max_depth_ = self._get_max_depth_(self.max_depth)
         max_features_ = self._get_max_features_(self.max_features, n_features)
-
         self.max_features_ = max_features_
         n_jobs_ = self._get_n_jobs_(self.n_jobs, self.n_estimators)
         self.n_jobs_ = n_jobs_
         random_state_ = check_random_state(self.random_state)
 
         # TODO: deal with class_weight here
-
         # Everywhere in the code, the convention is that n_bins == max_bins + 1,
         # since max_bins is the maximum number of bins, without the eventual bin for
         # missing values (+ 1 is for the missing values bin)
@@ -395,25 +225,47 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
             .astype(np.uint8)
         )
 
-        trees = [
-            TreeBinaryClassifier(
-                n_bins=n_bins,
-                n_classes=n_classes,
-                criterion=self.criterion,
-                loss=self.loss,
-                step=self.step,
-                aggregation=self.aggregation,
-                dirichlet=self.dirichlet,
-                max_depth=max_depth_,
-                min_samples_split=self.min_samples_split,
-                min_samples_leaf=self.min_samples_leaf,
-                categorical_features=self.categorical_features,
-                max_features=max_features_,
-                random_state=random_state_,
-                verbose=self.verbose,
-            )
-            for _ in range(self.n_estimators)
-        ]
+        if is_classifier:
+            # We are training a classifier
+            n_classes = self._n_classes_
+            trees = [
+                TreeClassifier(
+                    n_bins=n_bins,
+                    n_classes=n_classes,
+                    criterion=self.criterion,
+                    loss=self.loss,
+                    step=self.step,
+                    aggregation=self.aggregation,
+                    dirichlet=self.dirichlet,
+                    max_depth=max_depth_,
+                    min_samples_split=self.min_samples_split,
+                    min_samples_leaf=self.min_samples_leaf,
+                    categorical_features=self.categorical_features,
+                    max_features=max_features_,
+                    random_state=random_state_,
+                    verbose=self.verbose,
+                )
+                for _ in range(self.n_estimators)
+            ]
+        else:
+            # We are training a regressor
+            trees = [
+                TreeRegressor(
+                    n_bins=n_bins,
+                    criterion=self.criterion,
+                    loss=self.loss,
+                    step=self.step,
+                    aggregation=self.aggregation,
+                    max_depth=max_depth_,
+                    min_samples_split=self.min_samples_split,
+                    min_samples_leaf=self.min_samples_leaf,
+                    categorical_features=self.categorical_features,
+                    max_features=max_features_,
+                    random_state=random_state_,
+                    verbose=self.verbose,
+                )
+                for _ in range(self.n_estimators)
+            ]
 
         # Parallel loop: use threading since all the numba code releases the GIL
         if self.verbose:
@@ -447,65 +299,51 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
         self._fitted = True
         self._n_samples_ = n_samples
         self._n_features_ = n_features
-        self._n_outputs_ = 1
         return self
 
-    def get_nodes(self, tree_idx):
-        return self.trees[tree_idx].get_nodes()
+    def apply(self, X):
+        """
+        Apply trees in the forest to X, return leaf indices.
 
-    def _validate_y_class_weight(self, y):
-        # TODO: c'est un copier / coller de scikit. Simplifier au cas classif binaire
-        check_classification_targets(y)
+        Parameters
+        ----------
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
+            The input samples. Internally, its dtype will be converted to
+            ``dtype=np.float32``. If a sparse matrix is provided, it will be
+            converted into a sparse ``csr_matrix``.
 
-        y = np.copy(y)
-        expanded_class_weight = None
+        Returns
+        -------
+        X_leaves : ndarray of shape (n_samples, n_estimators)
+            For each datapoint x in X and for each tree in the forest,
+            return the index of the leaf x ends up in.
+        """
+        X = self._validate_X_predict(X)
+        results = Parallel(
+            n_jobs=self.n_jobs,
+            verbose=self.verbose,
+            **_joblib_parallel_args(prefer="threads"),
+        )(delayed(tree.apply)(X, check_input=False) for tree in self.estimators_)
 
-        if self.class_weight is not None:
-            y_original = np.copy(y)
+        return np.array(results).T
 
-        self.classes_ = []
-        self.n_classes_ = []
+    def _validate_X_predict(self, X, check_input):
+        """Validate the training data on predict (probabilities)."""
+        if check_input:
 
-        y_store_unique_indices = np.zeros(y.shape, dtype=int)
-        for k in range(self.n_outputs_):
-            classes_k, y_store_unique_indices[:, k] = np.unique(
-                y[:, k], return_inverse=True
-            )
-            self.classes_.append(classes_k)
-            self.n_classes_.append(classes_k.shape[0])
-        y = y_store_unique_indices
-
-        if self.class_weight is not None:
-            valid_presets = ("balanced", "balanced_subsample")
-            if isinstance(self.class_weight, str):
-                if self.class_weight not in valid_presets:
-                    raise ValueError(
-                        "Valid presets for class_weight include "
-                        '"balanced" and "balanced_subsample".'
-                        'Given "%s".' % self.class_weight
-                    )
-                if self.warm_start:
-                    warn(
-                        'class_weight presets "balanced" or '
-                        '"balanced_subsample" are '
-                        "not recommended for warm_start if the fitted data "
-                        "differs from the full dataset. In order to use "
-                        '"balanced" weights, use compute_class_weight '
-                        '("balanced", classes, y). In place of y you can use '
-                        "a large enough sample of the full training set "
-                        "target to properly estimate the class frequency "
-                        "distributions. Pass the resulting weights as the "
-                        "class_weight parameter."
-                    )
-
-            if self.class_weight != "balanced_subsample" or not self.bootstrap:
-                if self.class_weight == "balanced_subsample":
-                    class_weight = "balanced"
-                else:
-                    class_weight = self.class_weight
-                expanded_class_weight = compute_sample_weight(class_weight, y_original)
-
-        return y, expanded_class_weight
+            X = check_array(X, accept_sparse="csr", dtype=np.float32)
+            # X = self._validate_data(X, dtype=DTYPE, accept_sparse="csr",
+            #                         reset=False)
+            if issparse(X) and (
+                X.indices.dtype != np.intc or X.indptr.dtype != np.intc
+            ):
+                raise ValueError(
+                    "No support for np.int64 index based " "sparse matrices"
+                )
+        else:
+            # The number of features is checked regardless of `check_input`
+            self._check_n_features(X, reset=False)
+        return X
 
     def _check_categories(self, X):
         """Check and validate categorical features in X
@@ -621,268 +459,8 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
 
         return X_binned
 
-    def predict(self, X):
-        """
-        Predict class for X.
-
-        The predicted class of an input sample is a vote by the trees in
-        the forest, weighted by their probability estimates. That is,
-        the predicted class is the one with highest mean probability
-        estimate across the trees.
-
-        Parameters
-        ----------
-        X : {array-like, sparse matrix} of shape (n_samples, n_features)
-            The input samples. Internally, its dtype will be converted to
-            ``dtype=np.float32``. If a sparse matrix is provided, it will be
-            converted into a sparse ``csr_matrix``.
-
-        Returns
-        -------
-        y : ndarray of shape (n_samples,) or (n_samples, n_outputs)
-            The predicted classes.
-        """
-
-        # TODO: c'est un copier / coller de scikit-learn. Simplifier au cas
-        #  classification binaire. Et il faut binner les features avant de predire
-
-        proba = self.predict_proba(X)
-
-        if self.n_outputs_ == 1:
-            return self.classes_.take(np.argmax(proba, axis=1), axis=0)
-
-        else:
-            n_samples = proba[0].shape[0]
-            # all dtypes should be the same, so just take the first
-            class_type = self.classes_[0].dtype
-            predictions = np.empty((n_samples, self.n_outputs_), dtype=class_type)
-
-            for k in range(self.n_outputs_):
-                predictions[:, k] = self.classes_[k].take(
-                    np.argmax(proba[k], axis=1), axis=0
-                )
-
-            return predictions
-
-    def predict_proba(self, X):
-        """
-        Predict class probabilities for X.
-
-        The predicted class probabilities of an input sample are computed as
-        the mean predicted class probabilities of the trees in the forest.
-        The class probability of a single tree is the fraction of samples of
-        the same class in a leaf.
-
-        Parameters
-        ----------
-        X : {array-like, sparse matrix} of shape (n_samples, n_features)
-            The input samples. Internally, its dtype will be converted to
-            ``dtype=np.float32``. If a sparse matrix is provided, it will be
-            converted into a sparse ``csr_matrix``.
-
-        Returns
-        -------
-        p : ndarray of shape (n_samples, n_classes), or a list of n_outputs
-            such arrays if n_outputs > 1.
-            The class probabilities of the input samples. The order of the
-            classes corresponds to that in the attribute :term:`classes_`.
-        """
-        # TODO: c'est un copier / coller de scikit-learn. Simplifier au cas
-        #  classification binaire. Et il faut binner les features avant de predire
-
-        check_is_fitted(self)
-        # Check data
-        X = self._validate_X_predict(X, check_input=True)
-
-        # TODO: we can also avoid data binning for predictions...
-        # Bin the data
-        X_binned = self._bin_data(X, is_training_data=False)
-
-        # Assign chunk of trees to jobs
-        n_jobs, _, _ = _partition_estimators(self.n_estimators, self.n_jobs)
-
-        # TODO: on ne gere pas encore le cas multi-output mais juste un label binaire
-        # avoid storing the output of every estimator by summing them here
-        # all_proba = [
-        #     np.zeros((X.shape[0], j), dtype=np.float64)
-        #     for j in np.atleast_1d(self.n_classes_)
-        # ]
-
-        all_proba = np.zeros((X_binned.shape[0], self.n_classes_))
-
-        lock = threading.Lock()
-        Parallel(
-            n_jobs=n_jobs,
-            verbose=self.verbose,
-            **_joblib_parallel_args(require="sharedmem"),
-        )(
-            delayed(_accumulate_prediction)(e.predict_proba, X_binned, all_proba, lock)
-            for e in self.trees
-        )
-
-        # for proba in all_proba:
-        #     proba /= len(self.trees)
-        all_proba /= len(self.trees)
-
-        # if len(all_proba) == 1:
-        #     return all_proba[0]
-        # else:
-        #     return all_proba
-        return all_proba
-
-    def predict_proba_trees(self, X):
-        check_is_fitted(self)
-        # Check data
-        X = self._validate_X_predict(X)
-        # TODO: we can also avoid data binning for predictions...
-        X_binned = self._bin_data(X, is_training_data=False)
-        n_samples, n_features = X.shape
-        n_estimators = len(self.trees)
-        n_jobs, _, _ = _partition_estimators(self.n_estimators, self.n_jobs)
-        probas = np.empty((n_estimators, n_samples, n_features))
-
-        lock = threading.Lock()
-        Parallel(
-            n_jobs=n_jobs,
-            verbose=self.verbose,
-            **_joblib_parallel_args(require="sharedmem"),
-        )(
-            delayed(_get_tree_prediction)(
-                e.predict_proba, X_binned, probas, lock, tree_idx
-            )
-            for tree_idx, e in enumerate(self.trees)
-        )
-        return probas
-        # return self.trees[tree_idx].predict_proba(X)
-
-    def predict_log_proba(self, X):
-        """
-        Predict class log-probabilities for X.
-
-        The predicted class log-probabilities of an input sample is computed as
-        the log of the mean predicted class probabilities of the trees in the
-        forest.
-
-        Parameters
-        ----------
-        X : {array-like, sparse matrix} of shape (n_samples, n_features)
-            The input samples. Internally, its dtype will be converted to
-            ``dtype=np.float32``. If a sparse matrix is provided, it will be
-            converted into a sparse ``csr_matrix``.
-
-        Returns
-        -------
-        p : ndarray of shape (n_samples, n_classes), or a list of n_outputs
-            such arrays if n_outputs > 1.
-            The class probabilities of the input samples. The order of the
-            classes corresponds to that in the attribute :term:`classes_`.
-        """
-        # TODO: c'est un copier / coller de scikit-learn. Simplifier au cas
-        #  classification binaire. Et il faut binner les features avant de predire
-
-        proba = self.predict_proba(X)
-
-        if self.n_outputs_ == 1:
-            return np.log(proba)
-
-        else:
-            for k in range(self.n_outputs_):
-                proba[k] = np.log(proba[k])
-
-            return proba
-
-    def apply(self, X):
-        """
-        Apply trees in the forest to X, return leaf indices.
-
-        Parameters
-        ----------
-        X : {array-like, sparse matrix} of shape (n_samples, n_features)
-            The input samples. Internally, its dtype will be converted to
-            ``dtype=np.float32``. If a sparse matrix is provided, it will be
-            converted into a sparse ``csr_matrix``.
-
-        Returns
-        -------
-        X_leaves : ndarray of shape (n_samples, n_estimators)
-            For each datapoint x in X and for each tree in the forest,
-            return the index of the leaf x ends up in.
-        """
-        X = self._validate_X_predict(X)
-        results = Parallel(
-            n_jobs=self.n_jobs,
-            verbose=self.verbose,
-            **_joblib_parallel_args(prefer="threads"),
-        )(delayed(tree.apply)(X, check_input=False) for tree in self.estimators_)
-
-        return np.array(results).T
-
-    # def decision_path(self, X):
-    #     """
-    #     Return the decision path in the forest.
-    #
-    #     .. versionadded:: 0.18
-    #
-    #     Parameters
-    #     ----------
-    #     X : {array-like, sparse matrix} of shape (n_samples, n_features)
-    #         The input samples. Internally, its dtype will be converted to
-    #         ``dtype=np.float32``. If a sparse matrix is provided, it will be
-    #         converted into a sparse ``csr_matrix``.
-    #
-    #     Returns
-    #     -------
-    #     indicator : sparse matrix of shape (n_samples, n_nodes)
-    #         Return a node indicator matrix where non zero elements indicates
-    #         that the samples goes through the nodes. The matrix is of CSR
-    #         format.
-    #
-    #     n_nodes_ptr : ndarray of shape (n_estimators + 1,)
-    #         The columns from indicator[n_nodes_ptr[i]:n_nodes_ptr[i+1]]
-    #         gives the indicator value for the i-th estimator.
-    #
-    #     """
-    #     X = self._validate_X_predict(X)
-    #     indicators = Parallel(
-    #         n_jobs=self.n_jobs,
-    #         verbose=self.verbose,
-    #         **_joblib_parallel_args(prefer="threads"),
-    #     )(
-    #         delayed(tree.decision_path)(X, check_input=False)
-    #         for tree in self.estimators_
-    #     )
-    #
-    #     n_nodes = [0]
-    #     n_nodes.extend([i.shape[1] for i in indicators])
-    #     n_nodes_ptr = np.array(n_nodes).cumsum()
-    #
-    #     return sparse_hstack(indicators).tocsr(), n_nodes_ptr
-
-    # def _validate_y_class_weight(self, y):
-    #     # Default implementation
-    #     return y, None
-
-    def _validate_X_predict(self, X, check_input):
-        """Validate the training data on predict (probabilities)."""
-        if check_input:
-
-            X = check_array(X, accept_sparse="csr", dtype=np.float32)
-            # X = self._validate_data(X, dtype=DTYPE, accept_sparse="csr",
-            #                         reset=False)
-            if issparse(X) and (
-                X.indices.dtype != np.intc or X.indptr.dtype != np.intc
-            ):
-                raise ValueError(
-                    "No support for np.int64 index based " "sparse matrices"
-                )
-        else:
-            # The number of features is checked regardless of `check_input`
-            self._check_n_features(X, reset=False)
-        return X
-
-    # # # # # # # # # # # # # # # # # # # #
-    # Below are all the class properties  #
-    # # # # # # # # # # # # # # # # # # # #
+    def get_nodes(self, tree_idx):
+        return self.trees[tree_idx].get_nodes()
 
     @property
     def n_estimators(self):
@@ -899,34 +477,6 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
                 raise ValueError("n_estimators must be >= 1")
             else:
                 self._n_estimators = val
-
-    @property
-    def criterion(self):
-        return self._criterion
-
-    @criterion.setter
-    def criterion(self, val):
-        if not isinstance(val, str):
-            raise ValueError("criterion must be a string")
-        else:
-            if val != "gini":
-                raise ValueError("Only criterion='gini' is supported for now")
-            else:
-                self._criterion = val
-
-    @property
-    def loss(self):
-        return self._loss
-
-    @loss.setter
-    def loss(self, val):
-        if not isinstance(val, str):
-            raise ValueError("loss must be a string")
-        else:
-            if val != "log":
-                raise ValueError("Only loss='log' is supported for now")
-            else:
-                self._loss = val
 
     @property
     def step(self):
@@ -951,20 +501,6 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
             raise ValueError("aggregation must be boolean")
         else:
             self._aggregation = val
-
-    @property
-    def dirichlet(self):
-        return self._dirichlet
-
-    @dirichlet.setter
-    def dirichlet(self, val):
-        if not isinstance(val, float):
-            raise ValueError("dirichlet must be a float")
-        else:
-            if val < 0.0:
-                raise ValueError("dirichlet must be positive")
-            else:
-                self._dirichlet = val
 
     @property
     def max_depth(self):
@@ -1048,8 +584,8 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
                     "or 'sqrt', 'log2' or 'auto'"
                 )
         elif isinstance(val, int):
-            if val < 2:
-                raise ValueError("max_features must be >= 2")
+            if val < 1:
+                raise ValueError("max_features must be >= 1")
             else:
                 self._max_features = val
         else:
@@ -1062,11 +598,11 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
     def _get_max_features_(max_features, n_features):
         if isinstance(max_features, str):
             if max_features == "auto":
-                return max(2, int(np.sqrt(n_features)))
+                return max(1, int(np.sqrt(n_features)))
             elif max_features == "sqrt":
-                return max(2, int(np.sqrt(n_features)))
+                return max(1, int(np.sqrt(n_features)))
             elif max_features == "log2":
-                return max(2, int(np.log2(n_features)))
+                return max(1, int(np.log2(n_features)))
             else:
                 raise ValueError(
                     "max_features can be either None, an integer "
@@ -1166,6 +702,421 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
     def n_features_(self, _):
         raise ValueError("n_features_ is a readonly attribute")
 
+
+class ForestClassifier(ForestBase, ClassifierMixin):
+    """
+    WildWood forest for classification.
+
+    It grows in parallel `n_estimator` trees using bootstrap samples and aggregates
+    their predictions (bagging). Each tree uses "in-the-bag" samples to grow itself
+    and "out-of-the-bag" samples to compute aggregation weights for all possible
+    subtrees of the whole tree.
+
+    The prediction function of each tree in WildWood is very different from the one
+    of a standard decision trees. Indeed, the predictions of a tree are computed here
+    as an aggregation with exponential weights of all the predictions given by all
+    possible subtrees (prunings) of the full tree. The required computations are
+    performed efficiently thanks to a variant of the context tree weighting algorithm.
+
+    Also, features are all binned with a maximum of 255 bins.
+
+    Parameters
+    ----------
+    n_estimators : int, default=100
+        The number of trees in the forest.
+
+    criterion : {"gini", "entropy"}, default="gini"
+        The impurity criterion used to measure the quality of a split. The supported
+        impurity criteria are "gini" for the Gini impurity and "entropy" for the
+        entropy impurity.
+
+    loss : {"log"}, default="log"
+        The loss used for the computation of the aggregation weights. Only "log"
+        is supported for now, namely the log-loss for classification.
+
+    step : float, default=1
+        Step-size for the aggregation weights. Default is 1 for classification with
+        the log-loss, which is usually the best choice. A larger value will lead to
+        aggregation weights with the best validation loss.
+
+    aggregation : bool, default=True
+        Controls if aggregation is used in the trees. It is highly recommended to
+        leave it as `True`.
+
+    dirichlet : float, default=0.5
+        Regularization level of the class frequencies used for predictions in each
+        node. A good default is dirichlet=0.5 for binary classification.
+
+    max_depth : int, default=None
+        The maximum depth of a tree. If None, then nodes from the tree are split until
+        they are "pure" (impurity is small enough) or until they contain
+        min_samples_split samples.
+
+    min_samples_split : int, default=2
+        The minimum number of training samples and out-of-the-bag samples required to
+        split a node. This must be >= 2.
+
+    min_samples_leaf : int, default=1
+        A split point is considered if it leaves at least ``min_samples_leaf``
+        training samples and out-of-the-bag samples in the left and right childs.
+        This must be >= 1.
+
+    max_bins : int, default=255
+        The maximum number of bins to use for non-missing values. Before
+        training, each feature of the input array `X` is binned into
+        integer-valued bins, which allows for a much faster training stage.
+        Features with a small number of unique values may use less than
+        ``max_bins`` bins. In addition to the ``max_bins`` bins, one more bin
+        is always reserved for missing values. Must be no larger than 255.
+
+    categorical_features : array-like of {bool, int} of shape (n_features) \
+            or shape (n_categorical_features,), default=None.
+        Indicates the categorical features.
+
+        - None : no feature will be considered categorical.
+        - boolean array-like : boolean mask indicating categorical features.
+        - integer array-like : integer indices indicating categorical
+          features.
+
+        For each categorical feature, there must be at most `max_bins` unique
+        categories, and each categorical value must be in [0, max_bins -1].
+
+        Read more in the :ref:`User Guide <categorical_support_gbdt>`.
+
+        .. versionadded:: 0.24
+
+    max_features : {"auto", "sqrt", "log2"} or int, default="auto"
+        The number of features to consider when looking for the best split:
+
+        - If int, then consider `max_features` features at each split.
+        - If "auto", then `max_features=sqrt(n_features)`.
+        - If "sqrt", then `max_features=sqrt(n_features)` (same as "auto").
+        - If "log2", then `max_features=log2(n_features)`.
+        - If None, then `max_features=n_features`.
+
+        Note: the search for a split does not stop until at least one
+        valid partition of the node samples is found, even if it requires to
+        effectively inspect more than ``max_features`` features.
+        TODO: this is not true for now...
+
+    n_jobs : int, default=1
+        The number of jobs to run in parallel for :meth:`fit`, :meth:`predict`,
+        :meth:`predict_proba`, :meth:`decision_path` and :meth:`apply`. All
+        these methods are parallelized over the trees in the forets. ``n_jobs=-1``
+        means using all processors.
+
+    random_state : int, RandomState instance or None, default=None
+        Controls both the randomness of the bootstrapping of the samples used
+        when building trees (if ``bootstrap=True``) and the sampling of the
+        features to consider when looking for the best split at each node
+        (if ``max_features < n_features``).
+        See :term:`Glossary <random_state>` for details.
+
+    verbose : int, default=0
+        Controls the verbosity when fitting and predicting.
+
+    class_weight : {"balanced", "balanced_subsample"}, dict or list of dicts, \
+            default=None
+        Weights associated with classes in the form ``{class_label: weight}``.
+        If not given, all classes are supposed to have weight one. For
+        multi-output problems, a list of dicts can be provided in the same
+        order as the columns of y.
+
+        Note that for multioutput (including multilabel) weights should be
+        defined for each class of every column in its own dict. For example,
+        for four-class multilabel classification weights should be
+        [{0: 1, 1: 1}, {0: 1, 1: 5}, {0: 1, 1: 1}, {0: 1, 1: 1}] instead of
+        [{1:1}, {2:5}, {3:1}, {4:1}].
+
+        The "balanced" mode uses the values of y to automatically adjust
+        weights inversely proportional to class frequencies in the input data
+        as ``n_samples / (n_classes * np.bincount(y))``
+
+        The "balanced_subsample" mode is the same as "balanced" except that
+        weights are computed based on the bootstrap sample for every tree
+        grown.
+
+        For multi-output, the weights of each column of y will be multiplied.
+
+        Note that these weights will be multiplied with sample_weight (passed
+        through the fit method) if sample_weight is specified.
+
+    References
+    ----------
+    TODO: insert references
+
+    """
+
+    def __init__(
+        self,
+        *,
+        n_estimators: int = 100,
+        criterion: str = "gini",
+        loss: str = "log",
+        step: float = 1.0,
+        aggregation: bool = True,
+        dirichlet: bool = 0.5,
+        max_depth: Union[None, int] = None,
+        min_samples_split: int = 2,
+        min_samples_leaf: int = 1,
+        max_bins: int = 255,
+        categorical_features=None,
+        max_features: Union[str, int] = "auto",
+        n_jobs: int = 1,
+        random_state=None,
+        verbose: bool = False,
+        class_weight=None,
+    ):
+        super(ForestClassifier, self).__init__(
+            n_estimators=n_estimators,
+            criterion=criterion,
+            loss=loss,
+            step=step,
+            aggregation=aggregation,
+            max_depth=max_depth,
+            min_samples_split=min_samples_split,
+            min_samples_leaf=min_samples_leaf,
+            max_bins=max_bins,
+            categorical_features=categorical_features,
+            max_features=max_features,
+            n_jobs=n_jobs,
+            random_state=random_state,
+            verbose=verbose,
+        )
+        self._n_classes_ = None
+        self.dirichlet = dirichlet
+        self.class_weight = class_weight
+
+    def _encode_y(self, y):
+        """
+        Encode classes into {0, ..., n_classes - 1} and sets attributes classes_,
+        n_classes_ and n_trees_per_iteration_
+
+        Parameters
+        ----------
+        y : ndarrray
+            Array of input labels
+
+        Returns
+        -------
+        output : ndarray
+            Encoded array of labels
+        """
+        #
+        # and n_trees_per_iteration_
+        check_classification_targets(y)
+        label_encoder = LabelEncoder()
+        encoded_y = label_encoder.fit_transform(y)
+        self.classes_ = label_encoder.classes_
+        n_classes_ = self.classes_.shape[0]
+        self._n_classes_ = n_classes_
+        # only 1 tree for binary classification.
+        # TODO: For multiclass classification, we build 1 tree per class.
+        self.n_trees_per_iteration_ = 1 if n_classes_ <= 2 else n_classes_
+        encoded_y = np.ascontiguousarray(encoded_y, dtype=np.float32)
+        return encoded_y
+
+    def _validate_y_class_weight(self, y):
+        # TODO: c'est un copier / coller de scikit. Simplifier au cas classif binaire
+        check_classification_targets(y)
+
+        y = np.copy(y)
+        expanded_class_weight = None
+
+        if self.class_weight is not None:
+            y_original = np.copy(y)
+
+        self.classes_ = []
+        self.n_classes_ = []
+
+        y_store_unique_indices = np.zeros(y.shape, dtype=int)
+        for k in range(self.n_outputs_):
+            classes_k, y_store_unique_indices[:, k] = np.unique(
+                y[:, k], return_inverse=True
+            )
+            self.classes_.append(classes_k)
+            self.n_classes_.append(classes_k.shape[0])
+        y = y_store_unique_indices
+
+        if self.class_weight is not None:
+            valid_presets = ("balanced", "balanced_subsample")
+            if isinstance(self.class_weight, str):
+                if self.class_weight not in valid_presets:
+                    raise ValueError(
+                        "Valid presets for class_weight include "
+                        '"balanced" and "balanced_subsample".'
+                        'Given "%s".' % self.class_weight
+                    )
+                if self.warm_start:
+                    warn(
+                        'class_weight presets "balanced" or '
+                        '"balanced_subsample" are '
+                        "not recommended for warm_start if the fitted data "
+                        "differs from the full dataset. In order to use "
+                        '"balanced" weights, use compute_class_weight '
+                        '("balanced", classes, y). In place of y you can use '
+                        "a large enough sample of the full training set "
+                        "target to properly estimate the class frequency "
+                        "distributions. Pass the resulting weights as the "
+                        "class_weight parameter."
+                    )
+
+            if self.class_weight != "balanced_subsample" or not self.bootstrap:
+                if self.class_weight == "balanced_subsample":
+                    class_weight = "balanced"
+                else:
+                    class_weight = self.class_weight
+                expanded_class_weight = compute_sample_weight(class_weight, y_original)
+
+        return y, expanded_class_weight
+
+    def predict(self, X):
+        """
+        Predict class for X.
+
+        The predicted class of an input sample is a vote by the trees in
+        the forest, weighted by their probability estimates. That is,
+        the predicted class is the one with highest mean probability
+        estimate across the trees.
+
+        Parameters
+        ----------
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
+            The input samples. Internally, its dtype will be converted to
+            ``dtype=np.float32``. If a sparse matrix is provided, it will be
+            converted into a sparse ``csr_matrix``.
+
+        Returns
+        -------
+        y : ndarray of shape (n_samples,) or (n_samples, n_outputs)
+            The predicted classes.
+        """
+
+        # TODO: c'est un copier / coller de scikit-learn. Simplifier au cas
+        #  classification binaire. Et il faut binner les features avant de predire
+
+        proba = self.predict_proba(X)
+        return self.classes_.take(np.argmax(proba, axis=1), axis=0)
+
+    def predict_proba(self, X):
+        """
+        Predict class probabilities for X.
+
+        The predicted class probabilities of an input sample are computed as
+        the mean predicted class probabilities of the trees in the forest.
+        The class probability of a single tree is the fraction of samples of
+        the same class in a leaf.
+
+        Parameters
+        ----------
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
+            The input samples. Internally, its dtype will be converted to
+            ``dtype=np.float32``. If a sparse matrix is provided, it will be
+            converted into a sparse ``csr_matrix``.
+
+        Returns
+        -------
+        p : ndarray of shape (n_samples, n_classes), or a list of n_outputs
+            such arrays if n_outputs > 1.
+            The class probabilities of the input samples. The order of the
+            classes corresponds to that in the attribute :term:`classes_`.
+        """
+        # TODO: c'est un copier / coller de scikit-learn. Simplifier au cas
+        #  classification binaire. Et il faut binner les features avant de predire
+
+        check_is_fitted(self)
+        # Check data
+        X = self._validate_X_predict(X, check_input=True)
+
+        # TODO: we can also avoid data binning for predictions...
+        # Bin the data
+        X_binned = self._bin_data(X, is_training_data=False)
+
+        # Assign chunk of trees to jobs
+        n_jobs, _, _ = _partition_estimators(self.n_estimators, self.n_jobs)
+
+        all_proba = np.zeros((X_binned.shape[0], self.n_classes_))
+
+        lock = threading.Lock()
+        Parallel(
+            n_jobs=n_jobs,
+            verbose=self.verbose,
+            **_joblib_parallel_args(require="sharedmem"),
+        )(
+            delayed(_accumulate_prediction)(e.predict_proba, X_binned, all_proba, lock)
+            for e in self.trees
+        )
+
+        all_proba /= len(self.trees)
+
+        return all_proba
+
+    def predict_proba_trees(self, X):
+        check_is_fitted(self)
+        # Check data
+        X = self._validate_X_predict(X)
+        # TODO: we can also avoid data binning for predictions...
+        X_binned = self._bin_data(X, is_training_data=False)
+        n_samples, n_features = X.shape
+        n_estimators = len(self.trees)
+        n_jobs, _, _ = _partition_estimators(self.n_estimators, self.n_jobs)
+        probas = np.empty((n_estimators, n_samples, n_features))
+
+        lock = threading.Lock()
+        Parallel(
+            n_jobs=n_jobs,
+            verbose=self.verbose,
+            **_joblib_parallel_args(require="sharedmem"),
+        )(
+            delayed(_get_tree_prediction)(
+                e.predict_proba, X_binned, probas, lock, tree_idx
+            )
+            for tree_idx, e in enumerate(self.trees)
+        )
+        return probas
+
+    @property
+    def criterion(self):
+        return self._criterion
+
+    @property
+    def loss(self):
+        return self._loss
+
+    @criterion.setter
+    def criterion(self, val):
+        if not isinstance(val, str):
+            raise ValueError("criterion must be a string")
+        else:
+            if val != "gini":
+                raise ValueError("Only criterion='gini' is supported for now")
+            else:
+                self._criterion = val
+
+    @loss.setter
+    def loss(self, val):
+        if not isinstance(val, str):
+            raise ValueError("loss must be a string")
+        else:
+            if val != "log":
+                raise ValueError("Only loss='log' is supported for now")
+            else:
+                self._loss = val
+
+    @property
+    def dirichlet(self):
+        return self._dirichlet
+
+    @dirichlet.setter
+    def dirichlet(self, val):
+        if not isinstance(val, float):
+            raise ValueError("dirichlet must be a float")
+        else:
+            if val < 0.0:
+                raise ValueError("dirichlet must be positive")
+            else:
+                self._dirichlet = val
+
     @property
     def n_classes_(self):
         if self._fitted:
@@ -1177,10 +1128,260 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
     def n_classes_(self, _):
         raise ValueError("n_classes_ is a readonly attribute")
 
-    @property
-    def n_outputs_(self):
-        return self._n_outputs_
 
-    @n_outputs_.setter
-    def n_outputs_(self, _):
-        raise ValueError("n_outputs_ is a readonly attribute")
+class ForestRegressor(ForestBase, RegressorMixin):
+    """
+    WildWood forest for regression.
+
+    It grows in parallel `n_estimator` trees using bootstrap samples and aggregates
+    their predictions (bagging). Each tree uses "in-the-bag" samples to grow itself
+    and "out-of-the-bag" samples to compute aggregation weights for all possible
+    subtrees of the whole tree.
+
+    The prediction function of each tree in WildWood is very different from the one
+    of a standard decision trees. Indeed, the predictions of a tree are computed here
+    as an aggregation with exponential weights of all the predictions given by all
+    possible subtrees (prunings) of the full tree. The required computations are
+    performed efficiently thanks to a variant of the context tree weighting algorithm.
+
+    Also, features are all binned with a maximum of 255 bins.
+
+    Parameters
+    ----------
+    n_estimators : int, default=100
+        The number of trees in the forest.
+
+    criterion : {"mse"}, default="mse"
+        The impurity criterion used to measure the quality of a split. The only
+        supported impurity criterion is "mse" for the least-squares impurity
+
+    loss : {"mse"}, default="mse"
+        The loss used for the computation of the aggregation weights. Only "mse"
+        is supported for now, namely the least-squares loss for regression
+
+    step : float, default=1
+        Step-size for the aggregation weights. Default is 1 for classification with
+        the log-loss, which is usually the best choice. A larger value will lead to
+        aggregation weights with the best validation loss.
+
+    aggregation : bool, default=True
+        Controls if aggregation is used in the trees. It is highly recommended to
+        leave it as `True`.
+
+    max_depth : int, default=None
+        The maximum depth of a tree. If None, then nodes from the tree are split until
+        they are "pure" (impurity is small enough) or until they contain
+        min_samples_split samples.
+
+    min_samples_split : int, default=2
+        The minimum number of training samples and out-of-the-bag samples required to
+        split a node. This must be >= 2.
+
+    min_samples_leaf : int, default=1
+        A split point is considered if it leaves at least ``min_samples_leaf``
+        training samples and out-of-the-bag samples in the left and right childs.
+        This must be >= 1.
+
+    max_bins : int, default=255
+        The maximum number of bins to use for non-missing values. Before
+        training, each feature of the input array `X` is binned into
+        integer-valued bins, which allows for a much faster training stage.
+        Features with a small number of unique values may use less than
+        ``max_bins`` bins. In addition to the ``max_bins`` bins, one more bin
+        is always reserved for missing values. Must be no larger than 255.
+
+    categorical_features : array-like of {bool, int} of shape (n_features) \
+            or shape (n_categorical_features,), default=None.
+        Indicates the categorical features.
+
+        - None : no feature will be considered categorical.
+        - boolean array-like : boolean mask indicating categorical features.
+        - integer array-like : integer indices indicating categorical
+          features.
+
+        For each categorical feature, there must be at most `max_bins` unique
+        categories, and each categorical value must be in [0, max_bins -1].
+
+        Read more in the :ref:`User Guide <categorical_support_gbdt>`.
+
+        .. versionadded:: 0.24
+
+    max_features : {"auto", "sqrt", "log2"} or int, default="auto"
+        The number of features to consider when looking for the best split:
+
+        - If int, then consider `max_features` features at each split.
+        - If "auto", then `max_features=sqrt(n_features)`.
+        - If "sqrt", then `max_features=sqrt(n_features)` (same as "auto").
+        - If "log2", then `max_features=log2(n_features)`.
+        - If None, then `max_features=n_features`.
+
+        Note: the search for a split does not stop until at least one
+        valid partition of the node samples is found, even if it requires to
+        effectively inspect more than ``max_features`` features.
+        TODO: this is not true for now...
+
+    n_jobs : int, default=1
+        The number of jobs to run in parallel for :meth:`fit`, :meth:`predict`,
+        :meth:`predict_proba`, :meth:`decision_path` and :meth:`apply`. All
+        these methods are parallelized over the trees in the forets. ``n_jobs=-1``
+        means using all processors.
+
+    random_state : int, RandomState instance or None, default=None
+        Controls both the randomness of the bootstrapping of the samples used
+        when building trees (if ``bootstrap=True``) and the sampling of the
+        features to consider when looking for the best split at each node
+        (if ``max_features < n_features``).
+        See :term:`Glossary <random_state>` for details.
+
+    verbose : int, default=0
+        Controls the verbosity when fitting and predicting.
+
+    References
+    ----------
+    TODO: insert references
+
+    """
+
+    def __init__(
+        self,
+        *,
+        n_estimators: int = 100,
+        criterion: str = "mse",
+        loss: str = "mse",
+        step: float = 1.0,
+        aggregation: bool = True,
+        max_depth: Union[None, int] = None,
+        min_samples_split: int = 2,
+        min_samples_leaf: int = 1,
+        max_bins: int = 255,
+        categorical_features=None,
+        max_features: Union[str, int] = "auto",
+        n_jobs: int = 1,
+        random_state=None,
+        verbose: bool = False,
+    ):
+        super(ForestRegressor, self).__init__(
+            n_estimators=n_estimators,
+            criterion=criterion,
+            loss=loss,
+            step=step,
+            aggregation=aggregation,
+            max_depth=max_depth,
+            min_samples_split=min_samples_split,
+            min_samples_leaf=min_samples_leaf,
+            max_bins=max_bins,
+            categorical_features=categorical_features,
+            max_features=max_features,
+            n_jobs=n_jobs,
+            random_state=random_state,
+            verbose=verbose,
+        )
+
+    def predict(self, X):
+        check_is_fitted(self)
+        # Check data
+        X = self._validate_X_predict(X, check_input=True)
+
+        # TODO: we can also avoid data binning for predictions...
+        # Bin the data
+        X_binned = self._bin_data(X, is_training_data=False)
+
+        # Assign chunk of trees to jobs
+        n_jobs, _, _ = _partition_estimators(self.n_estimators, self.n_jobs)
+
+        all_preds = np.zeros(X_binned.shape[0])
+
+        lock = threading.Lock()
+        Parallel(
+            n_jobs=n_jobs,
+            verbose=self.verbose,
+            **_joblib_parallel_args(require="sharedmem"),
+        )(
+            delayed(_accumulate_prediction)(e.predict, X_binned, all_preds, lock)
+            for e in self.trees
+        )
+
+        all_preds /= len(self.trees)
+
+        return all_preds
+
+    def weighted_depth(self, X):
+        check_is_fitted(self)
+        # Check data
+        X = self._validate_X_predict(X, check_input=True)
+
+        # TODO: we can also avoid data binning for predictions...
+        # Bin the data
+        X_binned = self._bin_data(X, is_training_data=False)
+
+        # Assign chunk of trees to jobs
+        n_jobs, _, _ = _partition_estimators(self.n_estimators, self.n_jobs)
+
+        all_weighted_depths = np.zeros(
+            (self.n_estimators, X_binned.shape[0]), dtype=np.float32
+        )
+
+        lock = threading.Lock()
+        Parallel(
+            n_jobs=n_jobs,
+            verbose=self.verbose,
+            **_joblib_parallel_args(require="sharedmem"),
+        )(
+            delayed(_compute_weighted_depth)(
+                e.weighted_depth, X_binned, all_weighted_depths, lock, tree_idx
+            )
+            for tree_idx, e in enumerate(self.trees)
+        )
+        return all_weighted_depths
+
+    def predict_trees(self, X):
+        check_is_fitted(self)
+        # Check data
+        X = self._validate_X_predict(X)
+        # TODO: we can also avoid data binning for predictions...
+        X_binned = self._bin_data(X, is_training_data=False)
+        n_samples, n_features = X.shape
+        n_estimators = len(self.trees)
+        n_jobs, _, _ = _partition_estimators(self.n_estimators, self.n_jobs)
+        probas = np.empty((n_estimators, n_samples, n_features))
+
+        lock = threading.Lock()
+        Parallel(
+            n_jobs=n_jobs,
+            verbose=self.verbose,
+            **_joblib_parallel_args(require="sharedmem"),
+        )(
+            delayed(_get_tree_prediction)(
+                e.predict_proba, X_binned, probas, lock, tree_idx
+            )
+            for tree_idx, e in enumerate(self.trees)
+        )
+        return probas
+
+    @property
+    def criterion(self):
+        return self._criterion
+
+    @property
+    def loss(self):
+        return self._loss
+
+    @criterion.setter
+    def criterion(self, val):
+        if not isinstance(val, str):
+            raise ValueError("criterion must be a string")
+        else:
+            if val != "mse":
+                raise ValueError("Only criterion='mse' is supported for now")
+            else:
+                self._criterion = val
+
+    @loss.setter
+    def loss(self, val):
+        if not isinstance(val, str):
+            raise ValueError("loss must be a string")
+        else:
+            if val != "mse":
+                raise ValueError("Only loss='mse' is supported for now")
+            else:
+                self._loss = val

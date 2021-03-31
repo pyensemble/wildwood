@@ -73,31 +73,8 @@ def get_numba_type(class_):
         return class_type.instance_type
 
 
-@jit(nopython=True, nogil=True, locals={"new_size": uintp})
-def resize(a, new_size, zeros=False):
-    # print("================ Begin resize ================")
-    # print("new_size: ", new_size)
-    if zeros:
-        new = np.zeros(new_size, a.dtype)
-    else:
-        new = np.empty(new_size, a.dtype)
-
-    new[: a.size] = a
-    # print("================ End   resize ================")
-    return new
-
-
-@jit(
-    nopython=True, nogil=True, locals={"new_size": uintp, "d0": uintp, "d1": uintp},
-)
-def resize2d(a, new_size, zeros=False):
-    d0, d1 = a.shape
-    if zeros:
-        new = np.zeros((new_size, d1), a.dtype)
-    else:
-        new = np.empty((new_size, d1), a.dtype)
-    new[:d0, :] = a
-    return new
+# TODO: specify signature for the resize function, it it used to resize arrays of
+#  records, node_dtype and floats. What about the return type ?
 
 
 @jit(
@@ -105,18 +82,37 @@ def resize2d(a, new_size, zeros=False):
     nogil=True,
     locals={"new_size": uintp, "d0": uintp, "d1": uintp, "d2": uintp},
 )
-def resize3d(a, new_size, zeros=False):
-    d0, d1, d2 = a.shape
-    if zeros:
-        new = np.zeros((new_size, d1, d2), a.dtype)
+def resize(a, new_size, zeros=False):
+    ndim = a.ndim
+    if ndim == 1:
+        if zeros:
+            new = np.zeros(new_size, a.dtype)
+        else:
+            new = np.empty(new_size, a.dtype)
+
+        new[: a.size] = a
+        return new
+    elif ndim == 2:
+        d0, d1 = a.shape
+        if zeros:
+            new = np.zeros((new_size, d1), a.dtype)
+        else:
+            new = np.empty((new_size, d1), a.dtype)
+        new[:d0, :] = a
+        return new
+    elif ndim == 3:
+        d0, d1, d2 = a.shape
+        if zeros:
+            new = np.zeros((new_size, d1, d2), a.dtype)
+        else:
+            new = np.empty((new_size, d1, d2), a.dtype)
+        new[:d0, :, :] = a
+        return new
     else:
-        new = np.empty((new_size, d1, d2), a.dtype)
-    new[:d0, :, :] = a
-    return new
+        raise ValueError("ndim can only be 1, 2 or 3")
 
 
-# @njit(nb_float32(np_float32, np_float32))
-@njit
+@jit(float32(float32, float32), nogil=True, nopython=True, fastmath=True)
 def log_sum_2_exp(a, b):
     """Computation of log( (e^a + e^b) / 2) in an overflow-proof way
 
@@ -162,10 +158,10 @@ def get_type(class_):
 
 
 @jit(
-    void(uintp[::1], uintp[::1]),
+    void(uintp[:], uintp[:]),
     nopython=True,
     nogil=True,
-    locals={"i": uintp, "j": uintp},
+    locals={"n_samples": uintp, "population_size": uintp, "i": uintp, "j": uintp},
 )
 def sample_without_replacement(pool, out):
     """Samples integers without replacement from pool into out inplace.

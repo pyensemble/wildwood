@@ -15,7 +15,7 @@ from sklearn.datasets import make_moons
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score
 
-from wildwood import ForestBinaryClassifier
+from wildwood import ForestClassifier
 
 
 #     def test_online_forest_n_features_differs(self):
@@ -56,9 +56,9 @@ from wildwood import ForestBinaryClassifier
 
 class TestForestBinaryClassifier(object):
     def test_min_samples_split(self):
-        clf = ForestBinaryClassifier()
+        clf = ForestClassifier()
         assert clf.min_samples_split == 2
-        clf = ForestBinaryClassifier(min_samples_split=17)
+        clf = ForestClassifier(min_samples_split=17)
         assert clf.min_samples_split == 17
         clf.min_samples_split = 5
         assert clf.min_samples_split == 5
@@ -81,9 +81,9 @@ class TestForestBinaryClassifier(object):
             clf.min_samples_split = -3
 
     def test_min_samples_leaf(self):
-        clf = ForestBinaryClassifier()
+        clf = ForestClassifier()
         assert clf.min_samples_leaf == 1
-        clf = ForestBinaryClassifier(min_samples_leaf=17)
+        clf = ForestClassifier(min_samples_leaf=17)
         assert clf.min_samples_leaf == 17
         clf.min_samples_leaf = 5
         assert clf.min_samples_leaf == 5
@@ -105,7 +105,7 @@ class TestForestBinaryClassifier(object):
             clf.min_samples_leaf = -3
 
     def test_n_features_(self):
-        clf = ForestBinaryClassifier(n_estimators=2)
+        clf = ForestClassifier(n_estimators=2)
         with pytest.raises(
                 ValueError, match="You must call fit before asking for n_features_"
         ):
@@ -117,9 +117,9 @@ class TestForestBinaryClassifier(object):
         assert clf.n_features_ == 3
 
     def test_n_estimators(self):
-        clf = ForestBinaryClassifier()
+        clf = ForestClassifier()
         assert clf.n_estimators == 100
-        clf = ForestBinaryClassifier(n_estimators=17)
+        clf = ForestClassifier(n_estimators=17)
         assert clf.n_estimators == 17
         clf.n_estimators = 42
         assert clf.n_estimators == 42
@@ -140,7 +140,7 @@ class TestForestBinaryClassifier(object):
         with pytest.raises(ValueError, match="n_estimators must be >= 1"):
             clf.n_estimators = -3
 
-        clf = ForestBinaryClassifier()
+        clf = ForestClassifier()
         # Check that  the properties checks the _fitted flag
         clf._fitted = True
         with pytest.raises(
@@ -151,9 +151,9 @@ class TestForestBinaryClassifier(object):
     def test_n_jobs(self):
         # TODO: test that n_jobs=1 is slower than n_jobs=4 for instance ? indeed
         # TODO: test that n_jobs=-1 indeed uses all physical cores
-        clf = ForestBinaryClassifier()
+        clf = ForestClassifier()
         assert clf.n_jobs == 1
-        clf = ForestBinaryClassifier(n_jobs=17)
+        clf = ForestClassifier(n_jobs=17)
         assert clf.n_jobs == 17
         clf.n_jobs = 42
         assert clf.n_jobs == 42
@@ -180,9 +180,9 @@ class TestForestBinaryClassifier(object):
             clf.n_jobs = 0
 
     def test_step(self):
-        clf = ForestBinaryClassifier()
+        clf = ForestClassifier()
         assert clf.step == 1.0
-        clf = ForestBinaryClassifier(step=0.17)
+        clf = ForestClassifier(step=0.17)
         assert clf.step == 0.17
         clf.step = 0.42
         assert clf.step == 0.42
@@ -206,9 +206,9 @@ class TestForestBinaryClassifier(object):
             clf.step = -0.42
 
     def test_aggregation(self):
-        clf = ForestBinaryClassifier()
+        clf = ForestClassifier()
         assert clf.aggregation
-        clf = ForestBinaryClassifier(aggregation=False)
+        clf = ForestClassifier(aggregation=False)
         assert not clf.aggregation
         clf.aggregation = True
         assert clf.aggregation
@@ -222,9 +222,9 @@ class TestForestBinaryClassifier(object):
             clf.aggregation = 1
 
     def test_verbose(self):
-        clf = ForestBinaryClassifier()
+        clf = ForestClassifier()
         assert not clf.verbose
-        clf = ForestBinaryClassifier(verbose=True)
+        clf = ForestClassifier(verbose=True)
         assert clf.verbose
         clf.verbose = False
         assert not clf.verbose
@@ -238,7 +238,7 @@ class TestForestBinaryClassifier(object):
             clf.verbose = 1
 
     def test_loss(self):
-        clf = ForestBinaryClassifier()
+        clf = ForestClassifier()
         assert clf.loss == "log"
         with pytest.raises(
                 ValueError, match="loss must be a string"
@@ -252,7 +252,7 @@ class TestForestBinaryClassifier(object):
         with pytest.raises(
                 ValueError, match="Only loss='log' is supported for now"
         ):
-            _ = ForestBinaryClassifier(loss="other")
+            _ = ForestClassifier(loss="other")
 
     # TODO: test for random_state
 

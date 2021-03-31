@@ -26,7 +26,7 @@ from sklearn.model_selection import train_test_split
 
 from wildwood._binning import Binner
 
-from wildwood.forest import ForestBinaryClassifier
+from wildwood.forest import ForestClassifier
 
 
 logging.basicConfig(
@@ -161,7 +161,7 @@ def fit_forest(X_train, y_train, n_estimators=10, dirichlet=0.5, step=1.0):
         "dirichlet": dirichlet,
     }
 
-    clf = ForestBinaryClassifier(**clf_kwargs)
+    clf = ForestClassifier(**clf_kwargs)
     clf.fit(X_train, y_train)
     return clf
 
