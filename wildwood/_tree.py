@@ -13,6 +13,7 @@ from numba import (
     jit,
     boolean,
     uint8,
+    int32,
     intp,
     uintp,
     float32,
@@ -36,6 +37,9 @@ TREE_UNDEFINED = intp(-2)
 tree_type = [
     # Number of features
     ("n_features", uintp),
+    # random_state used for seeding numpy from numba. Note that numba uses its own
+    # random_state, so that we need to seed numpy.random.seed() within jitted code
+    ("random_state", int32),
     # Maximum depth allowed in the tree
     ("max_depth", uintp),
     # Number of nodes in the tree
@@ -99,12 +103,15 @@ class _TreeClassifier(object):
         The predictions of each node in the tree with shape (n_nodes, n_classes)
     """
 
-    def __init__(self, n_features, n_classes):
+    def __init__(self, n_features, n_classes, random_state):
         self.n_features = n_features
         self.n_classes = n_classes
         self.max_depth = 0
         self.node_count = 0
         self.capacity = 0
+        self.random_state = random_state
+        # Seed numba's random generator...
+        np.random.seed(random_state)
         # Both node and prediction arrays have zero on the first axis and are resized
         # later when we know the initial capacity required for the tree
         self.nodes = np.empty(0, dtype=node_dtype)
@@ -142,11 +149,14 @@ class _TreeRegressor(object):
         The predictions of each node in the tree with shape (n_nodes,)
     """
 
-    def __init__(self, n_features):
+    def __init__(self, n_features, random_state):
         self.n_features = n_features
         self.max_depth = 0
         self.node_count = 0
         self.capacity = 0
+        self.random_state = random_state
+        # Seed numba's random generator...
+        np.random.seed(random_state)
         # Both node and prediction arrays have zero on the first axis and are resized
         # later when we know the initial capacity required for the tree
         self.nodes = np.empty(0, dtype=node_dtype)
@@ -195,7 +205,6 @@ def get_nodes(tree):
         ),
         columns=columns,
     )
-
 
 def get_nodes_regressor(tree):
     nodes = get_nodes(tree)
