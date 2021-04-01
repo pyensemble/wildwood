@@ -430,14 +430,13 @@ def add_node_tree(
         node["bin_threshold"] = bin_threshold
 
     node["is_split_categorical"] = is_split_categorical
-    if is_split_categorical:
-        # TODO check indexes!!
+    if is_split_categorical and (permutation_index > 0):
         start = tree.permutations_end_idx
-        if start + 256 >= tree.permutations_capacity:
+        if start + permutation_index >= tree.permutations_capacity:  # TODO make this value changeable
             resize_tree_permutations(tree, None)
-        node["permutation_start"] = start
         end = start + permutation_index
         tree.permutations[start:end] = permutation[:permutation_index]
+        node["permutation_start"] = start
         node["permutation_end"] = end
         tree.permutations_end_idx = end
     else:
@@ -454,7 +453,8 @@ def add_node_tree(
     nogil=True,
     locals={"nodes": node_type[::1],
             "idx_leaf": uintp,
-            "node": node_type},
+            "node": node_type,
+            "xif_in_perm": boolean},
 )
 def find_leaf(tree, xi):
     """Find the leaf index containing the given features vector.
@@ -478,12 +478,12 @@ def find_leaf(tree, xi):
     permutations = tree.permutations
     while not node["is_leaf"]:
         if node["is_split_categorical"]:   # the split is on a categorical feature
-            pass
-            perm = permutations[node["permutation_start"]:node["permutation_start"]]
+            permutation = permutations[node["permutation_start"]:node["permutation_start"]]
             xi_f = xi[node["feature"]]
-            # TODO use np.searchsorted()
-            xif_in_perm = xi_f in perm
-            if (xif_in_perm and node["is_perm_left"]) or (not xif_in_perm and not node["is_perm_left"]):
+            # xif_in_perm = xi_f in permutation
+            xif_in_perm = permutation[np.searchsorted(permutation, xi_f)] == xi_f
+            # if (xif_in_perm and node["is_perm_left"]) or (not xif_in_perm and not node["is_perm_left"]):
+            if xif_in_perm:
                 idx_leaf = node["left_child"]
             else:
                 idx_leaf = node["right_child"]

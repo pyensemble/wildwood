@@ -352,11 +352,9 @@ def grow(tree, tree_context, node_context):
             bin = split.bin_threshold
             feature = split.feature
             found_split = split.found_split
-            print("found_split=", found_split)
             is_split_categorical = split.is_split_categorical
             permutation = split.permutation
             permutation_index = split.permutation_index
-            print("permutation[:permutation_index]=", permutation[:permutation_index])
 
         # If we did not find a split then the node is a leaf, since we can't split it
         is_leaf = is_leaf or not found_split
@@ -409,6 +407,8 @@ def grow(tree, tree_context, node_context):
             #
             permutation_index,
         )
+        print("permutation_index=", permutation_index)
+        print("tree.permutations[tree.permutations_end_idx]=", tree.permutations[:tree.permutations_end_idx])
 
         # Save in the tree the predictions of the node
         tree.y_pred[node_id, :] = node_context.y_pred
