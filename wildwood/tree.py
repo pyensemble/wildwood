@@ -43,6 +43,7 @@ from ._tree import (
     tree_regressor_weighted_depth,
     get_nodes_regressor,
     get_nodes_classifier,
+    tree_apply
 )
 
 
@@ -66,13 +67,14 @@ class TreeBase(BaseEstimator, metaclass=ABCMeta):
     ):
         self._tree = None
         self._tree_context = None
+        self._train_indices = None
+        self._valid_indices = None
 
         self.n_bins = n_bins
         self.criterion = criterion
         self.loss = loss
         self.step = step
         self.aggregation = aggregation
-        # print("self.aggregation:", self.aggregation)
         self.max_depth = max_depth
         self.min_samples_split = min_samples_split
         self.min_samples_leaf = min_samples_leaf
@@ -108,6 +110,9 @@ class TreeBase(BaseEstimator, metaclass=ABCMeta):
 
     def get_nodes(self):
         return get_nodes(self._tree)
+
+    def apply(self, X):
+        return tree_apply(self._tree, X)
 
 
 class TreeClassifier(ClassifierMixin, TreeBase):
@@ -149,13 +154,14 @@ class TreeClassifier(ClassifierMixin, TreeBase):
     def fit(self, X, y, train_indices, valid_indices, sample_weights):
         n_classes = self.n_classes
         max_bins = self.n_bins - 1
+        random_state = self.random_state
         # TODO: on obtiendra cette info via le binner qui est dans la foret
         n_samples, n_features = X.shape
         n_bins_per_feature = max_bins * np.ones(n_features)
         n_bins_per_feature = n_bins_per_feature.astype(np.intp)
 
         # Create the tree object, which is mostly a data container for the nodes
-        tree = _TreeClassifier(n_features, n_classes)
+        tree = _TreeClassifier(n_features, n_classes, random_state)
 
         # We build a tree context, that contains global information about
         # the data, in particular the way we'll organize data into contiguous
@@ -189,6 +195,8 @@ class TreeClassifier(ClassifierMixin, TreeBase):
             best_split,
             candidate_split,
         )
+        self._train_indices = train_indices
+        self._valid_indices = valid_indices
         self._tree = tree
         self._tree_context = tree_context
         return self
@@ -237,13 +245,14 @@ class TreeRegressor(TreeBase, RegressorMixin):
 
     def fit(self, X, y, train_indices, valid_indices, sample_weights):
         max_bins = self.n_bins - 1
+        random_state = self.random_state
         # TODO: on obtiendra cette info via le binner qui est dans la foret
         n_samples, n_features = X.shape
         n_bins_per_feature = max_bins * np.ones(n_features)
         n_bins_per_feature = n_bins_per_feature.astype(np.intp)
 
         # Create the tree object, which is mostly a data container for the nodes
-        tree = _TreeRegressor(n_features)
+        tree = _TreeRegressor(n_features, random_state)
 
         # We build a tree context, that contains global information about
         # the data, in particular the way we'll organize data into contiguous
@@ -276,6 +285,8 @@ class TreeRegressor(TreeBase, RegressorMixin):
             best_split,
             candidate_split,
         )
+        self._train_indices = train_indices
+        self._valid_indices = valid_indices
         self._tree = tree
         self._tree_context = tree_context
         return self

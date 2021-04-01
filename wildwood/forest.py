@@ -69,7 +69,7 @@ def _generate_train_valid_samples(random_state, n_samples):
     # For very small samples, we might end up with empty validation...
     if valid_mask.sum() == 0:
         return _generate_train_valid_samples(
-            (random_state + 1) % np.iinfo(np.uintp).max, n_samples
+            (random_state + 1) % np.iinfo(np.uint32).max, n_samples
         )
     else:
         train_mask = np.logical_not(valid_mask)
@@ -79,8 +79,7 @@ def _generate_train_valid_samples(random_state, n_samples):
         return train_indices, valid_indices, train_indices_count
 
 
-# TODO: faudrait que la parallelisation marche des de le debut...
-def _parallel_build_trees(tree, X, y, sample_weight):
+def _parallel_build_trees(tree, X, y, sample_weight, random_state_bootstrap):
     """
     Private function used to fit a single tree in parallel.
     """
@@ -92,12 +91,14 @@ def _parallel_build_trees(tree, X, y, sample_weight):
 
     # TODO: all trees have the same train and valid indices...
     train_indices, valid_indices, train_indices_count = _generate_train_valid_samples(
-        tree.random_state, n_samples
+        random_state_bootstrap, n_samples
     )
     # We use bootstrap: sample repetition is achieved by multiplying the sample
     # weights by the sample counts. By construction, no repetition is possible in
     # validation data
     sample_weight[train_indices] *= train_indices_count
+
+    # Fit the tree
     tree.fit(X, y, train_indices, valid_indices, sample_weight)
     return tree
 
@@ -124,6 +125,12 @@ def _get_tree_prediction(predict, X, out, lock, tree_idx):
     prediction = predict(X, check_input=False)
     with lock:
         out[tree_idx] = prediction
+
+
+def _parallel_tree_apply(apply, X, out, lock, idx_tree):
+    leaves = apply(X)
+    with lock:
+        out[idx_tree] = leaves
 
 
 class ForestBase(BaseEstimator):
@@ -154,6 +161,8 @@ class ForestBase(BaseEstimator):
         self._n_features_ = None
         self.max_features_ = None
         self.n_jobs_ = None
+        self._random_states = None
+        self.trees = None
 
         # Set the parameters. This calls the properties defined below
         self.n_estimators = n_estimators
@@ -170,6 +179,23 @@ class ForestBase(BaseEstimator):
         self.n_jobs = n_jobs
         self.random_state = random_state
         self.verbose = verbose
+
+    def _generate_random_states(self):
+        """This helper method generates one seed (random_state) for each tree,
+        that is used to generate at random bootstrap samples and columns subsampling.
+
+        For testing purposes (see tests/test_forest.py::test_random_state) we save
+        those into two separate arrays self._random_states_bootstrap and
+        self._random_states_trees even if these are identical in non-testing settings
+        """
+        # Get the random instance
+        random_instance = check_random_state(self.random_state)
+        # Generate seeds for each tree and same them for testing
+        _random_states = random_instance.randint(
+            np.iinfo(np.uint32).max, size=self.n_estimators
+        )
+        self._random_states_bootstrap = _random_states
+        self._random_states_trees = _random_states
 
     def fit(self, X, y):
         """
@@ -197,7 +223,8 @@ class ForestBase(BaseEstimator):
         self.max_features_ = max_features_
         n_jobs_ = self._get_n_jobs_(self.n_jobs, self.n_estimators)
         self.n_jobs_ = n_jobs_
-        random_state_ = check_random_state(self.random_state)
+
+        self._generate_random_states()
 
         # TODO: deal with class_weight here
         # Everywhere in the code, the convention is that n_bins == max_bins + 1,
@@ -242,10 +269,12 @@ class ForestBase(BaseEstimator):
                     min_samples_leaf=self.min_samples_leaf,
                     categorical_features=self.categorical_features,
                     max_features=max_features_,
-                    random_state=random_state_,
+                    random_state=random_state,
                     verbose=self.verbose,
                 )
-                for _ in range(self.n_estimators)
+                for _, random_state in zip(
+                    range(self.n_estimators), self._random_states_trees
+                )
             ]
         else:
             # We are training a regressor
@@ -261,10 +290,12 @@ class ForestBase(BaseEstimator):
                     min_samples_leaf=self.min_samples_leaf,
                     categorical_features=self.categorical_features,
                     max_features=max_features_,
-                    random_state=random_state_,
+                    random_state=random_state,
                     verbose=self.verbose,
                 )
-                for _ in range(self.n_estimators)
+                for _, random_state in zip(
+                    range(self.n_estimators), self._random_states_trees
+                )
             ]
 
         # Parallel loop: use threading since all the numba code releases the GIL
@@ -278,8 +309,11 @@ class ForestBase(BaseEstimator):
                     y,
                     # TODO: deal with sample_weight
                     None,
+                    random_state_bootstrap,
                 )
-                for tree in tqdm(trees)
+                for tree, random_state_bootstrap in zip(
+                    tqdm(trees), self._random_states_bootstrap
+                )
             )
         else:
             trees = Parallel(
@@ -291,8 +325,11 @@ class ForestBase(BaseEstimator):
                     y,
                     # TODO: deal with sample_weight
                     None,
+                    random_state_bootstrap,
                 )
-                for tree in trees
+                for tree, random_state_bootstrap in zip(
+                    trees, self._random_states_bootstrap
+                )
             )
 
         self.trees = trees
@@ -318,14 +355,19 @@ class ForestBase(BaseEstimator):
             For each datapoint x in X and for each tree in the forest,
             return the index of the leaf x ends up in.
         """
-        X = self._validate_X_predict(X)
-        results = Parallel(
+        X_binned, n_jobs, lock = self.predict_helper(X)
+        n_samples = X_binned.shape[0]
+        out = np.empty((self.n_estimators, n_samples), dtype=np.uintp)
+        Parallel(
             n_jobs=self.n_jobs,
             verbose=self.verbose,
             **_joblib_parallel_args(prefer="threads"),
-        )(delayed(tree.apply)(X, check_input=False) for tree in self.estimators_)
+        )(
+            delayed(_parallel_tree_apply)(tree.apply, X_binned, out, lock, idx_tree)
+            for idx_tree, tree in enumerate(self.trees)
+        )
 
-        return np.array(results).T
+        return out
 
     def _validate_X_predict(self, X, check_input):
         """Validate the training data on predict (probabilities)."""
@@ -458,6 +500,19 @@ class ForestBase(BaseEstimator):
         #     print("{:.3f} s".format(duration))
 
         return X_binned
+
+    def predict_helper(self, X):
+        """A method used in all predict functions to avoid code duplication
+        """
+        # Is the forest fitted ?
+        check_is_fitted(self)
+        # Check data
+        X = self._validate_X_predict(X, check_input=True)
+        # TODO: we can also avoid data binning for predictions...
+        X_binned = self._bin_data(X, is_training_data=False)
+        n_jobs, _, _ = _partition_estimators(self.n_estimators, self.n_jobs)
+        lock = threading.Lock()
+        return X_binned, n_jobs, lock
 
     def get_nodes(self, tree_idx):
         return self.trees[tree_idx].get_nodes()
@@ -991,10 +1046,6 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         y : ndarray of shape (n_samples,) or (n_samples, n_outputs)
             The predicted classes.
         """
-
-        # TODO: c'est un copier / coller de scikit-learn. Simplifier au cas
-        #  classification binaire. Et il faut binner les features avant de predire
-
         proba = self.predict_proba(X)
         return self.classes_.take(np.argmax(proba, axis=1), axis=0)
 
@@ -1021,34 +1072,19 @@ class ForestClassifier(ForestBase, ClassifierMixin):
             The class probabilities of the input samples. The order of the
             classes corresponds to that in the attribute :term:`classes_`.
         """
-        # TODO: c'est un copier / coller de scikit-learn. Simplifier au cas
-        #  classification binaire. Et il faut binner les features avant de predire
-
-        check_is_fitted(self)
-        # Check data
-        X = self._validate_X_predict(X, check_input=True)
-
-        # TODO: we can also avoid data binning for predictions...
-        # Bin the data
-        X_binned = self._bin_data(X, is_training_data=False)
-
-        # Assign chunk of trees to jobs
-        n_jobs, _, _ = _partition_estimators(self.n_estimators, self.n_jobs)
-
+        X_binned, n_jobs, lock = self.predict_helper(X)
         all_proba = np.zeros((X_binned.shape[0], self.n_classes_))
-
-        lock = threading.Lock()
         Parallel(
             n_jobs=n_jobs,
             verbose=self.verbose,
             **_joblib_parallel_args(require="sharedmem"),
         )(
-            delayed(_accumulate_prediction)(e.predict_proba, X_binned, all_proba, lock)
-            for e in self.trees
+            delayed(_accumulate_prediction)(
+                tree.predict_proba, X_binned, all_proba, lock
+            )
+            for tree in self.trees
         )
-
         all_proba /= len(self.trees)
-
         return all_proba
 
     def predict_proba_trees(self, X):
@@ -1083,16 +1119,6 @@ class ForestClassifier(ForestBase, ClassifierMixin):
     def loss(self):
         return self._loss
 
-    @criterion.setter
-    def criterion(self, val):
-        if not isinstance(val, str):
-            raise ValueError("criterion must be a string")
-        else:
-            if val != "gini":
-                raise ValueError("Only criterion='gini' is supported for now")
-            else:
-                self._criterion = val
-
     @loss.setter
     def loss(self, val):
         if not isinstance(val, str):
@@ -1102,6 +1128,16 @@ class ForestClassifier(ForestBase, ClassifierMixin):
                 raise ValueError("Only loss='log' is supported for now")
             else:
                 self._loss = val
+
+    @criterion.setter
+    def criterion(self, val):
+        if not isinstance(val, str):
+            raise ValueError("criterion must be a string")
+        else:
+            if val != "gini":
+                raise ValueError("Only criterion='gini' is supported for now")
+            else:
+                self._criterion = val
 
     @property
     def dirichlet(self):
@@ -1278,50 +1314,25 @@ class ForestRegressor(ForestBase, RegressorMixin):
         )
 
     def predict(self, X):
-        check_is_fitted(self)
-        # Check data
-        X = self._validate_X_predict(X, check_input=True)
-
-        # TODO: we can also avoid data binning for predictions...
-        # Bin the data
-        X_binned = self._bin_data(X, is_training_data=False)
-
-        # Assign chunk of trees to jobs
-        n_jobs, _, _ = _partition_estimators(self.n_estimators, self.n_jobs)
-
+        X_binned, n_jobs, lock = self.predict_helper(X)
         all_preds = np.zeros(X_binned.shape[0])
 
-        lock = threading.Lock()
         Parallel(
             n_jobs=n_jobs,
             verbose=self.verbose,
             **_joblib_parallel_args(require="sharedmem"),
         )(
-            delayed(_accumulate_prediction)(e.predict, X_binned, all_preds, lock)
-            for e in self.trees
+            delayed(_accumulate_prediction)(tree.predict, X_binned, all_preds, lock)
+            for tree in self.trees
         )
-
         all_preds /= len(self.trees)
-
         return all_preds
 
     def weighted_depth(self, X):
-        check_is_fitted(self)
-        # Check data
-        X = self._validate_X_predict(X, check_input=True)
-
-        # TODO: we can also avoid data binning for predictions...
-        # Bin the data
-        X_binned = self._bin_data(X, is_training_data=False)
-
-        # Assign chunk of trees to jobs
-        n_jobs, _, _ = _partition_estimators(self.n_estimators, self.n_jobs)
-
+        X_binned, n_jobs, lock = self.predict_helper(X)
         all_weighted_depths = np.zeros(
             (self.n_estimators, X_binned.shape[0]), dtype=np.float32
         )
-
-        lock = threading.Lock()
         Parallel(
             n_jobs=n_jobs,
             verbose=self.verbose,
