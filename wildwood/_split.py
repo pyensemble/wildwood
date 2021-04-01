@@ -353,6 +353,7 @@ def find_best_split_along_feature(tree_context, node_context, feature, f, best_s
                 else:
                     best_split.permutation[:(255-i)] = np.sort(order_index[i:])
                     best_split.permutation_index = 255-i
+                print("best_split.permutation[:best_split.permutation_index]=", best_split.permutation[:best_split.permutation_index])
             else:  # not tree_context.is_categorical[feature]
                 best_split.permutation = np.empty(128, dtype=np.uint8)
                 best_split.permutation_index = 0

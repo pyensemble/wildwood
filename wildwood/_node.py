@@ -78,10 +78,6 @@ node_dtype = np.dtype(
         # In case that the split is on a categorical feature,
         #    index of end of index of bins
         ("permutation_end", np.uint8),
-        # In case that the split is on a categorical feature,
-        #    is bins within [start, end] go to left child?
-        #    False means bins within [start, end] go to right child
-        ("is_perm_left", np.bool),  # TODO is_perm_left is not really used?
     ]
 )
 

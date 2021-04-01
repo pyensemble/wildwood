@@ -454,7 +454,9 @@ def add_node_tree(
     locals={"nodes": node_type[::1],
             "idx_leaf": uintp,
             "node": node_type,
-            "xif_in_perm": boolean},
+            "xif_in_perm": boolean,
+            "permutations": uint8[:]
+            },
 )
 def find_leaf(tree, xi):
     """Find the leaf index containing the given features vector.
@@ -586,6 +588,7 @@ def tree_predict_proba(tree, X, aggregation, step):
         if aggregation:
             # Then, we go up in the tree
             idx_current = nodes[idx_current]["parent"]
+            # TODO is there a bug when node[0] has no child?
             # Now, we follow the path going up to the tree to compute the aggregated
             # prediction
             while idx_current != 0:
