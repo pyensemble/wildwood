@@ -21,35 +21,8 @@ from math import log2
 
 # Lazy to change everywhere when numba people decide that jitclass is not
 # experimental anymore
-jitclass = jitclass_
-njit = njit_(fastmath=False, nogil=True, cache=False, boundscheck=False)
-
-
-# We centralize below the definition of all the numba and numpy dtypes we'll need
-# nb_bool = boolean
-# np_bool = np.bool
-# nb_uint8 = uint8
-# np_uint8 = np.uint8
-# nb_float32 = float32
-# np_float32 = np.float32
-# nb_float64 = float64
-# np_float64 = np.float64
-#
-# np_size_t = np.uintp
-# nb_size_t = uintp
-# np_ssize_t = np.intp
-# nb_ssize_t = intp
-# nb_int32 = int32
-# np_int32 = np.int32
-# nb_uint32 = uint32
-# np_uint32 = np.uint32
-
-# Some useful constants
-# infinity = np.inf
-# epsilon = np.finfo("double").eps
-# max_int32 = np.iinfo(np.int32).max
-# max_size_t = np.iinfo(np_size_t).max
-# max_ssize_t = np.iinfo(np_ssize_t).max
+# jitclass = jitclass_
+# njit = njit_(fastmath=False, nogil=True, cache=False, boundscheck=False)
 
 
 def get_numba_type(class_):

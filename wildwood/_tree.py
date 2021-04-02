@@ -206,6 +206,7 @@ def get_nodes(tree):
         columns=columns,
     )
 
+
 def get_nodes_regressor(tree):
     nodes = get_nodes(tree)
     y_pred = tree.y_pred[: tree.node_count]
