@@ -9,12 +9,15 @@ from itertools import product
 import numpy as np
 import pytest
 
+from sklearn.utils import compute_sample_weight
+from sklearn.metrics import classification_report
+
 
 def approx(v, abs=1e-15):
-    return pytest.approx(v, abs)
+    return pytest.approx(v, abs=abs)
 
 
-from sklearn.datasets import make_moons, load_iris
+from sklearn.datasets import load_iris, load_breast_cancer
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score
 
@@ -24,10 +27,11 @@ from wildwood import ForestClassifier
 # TODO: parameter_test_with_type does nothing !!!
 
 
-class TestForestBinaryClassifier(object):
+class TestForestClassifier(object):
     @pytest.fixture(autouse=True)
     def _setup(self):
         self.iris = load_iris()
+        self.breast_cancer = load_breast_cancer()
 
     def test_min_samples_split(self):
         clf = ForestClassifier()
@@ -364,7 +368,112 @@ class TestForestBinaryClassifier(object):
         # Now we test 4. 5. and 6.
         n_estimatorss = [1, 3]
         n_jobss = [1, 4, -1]
-        for n_estimators, n_jobs in product(
-            n_estimatorss, n_jobss
-        ):
+        for n_estimators, n_jobs in product(n_estimatorss, n_jobss):
             do_test_bootstrap_again(n_estimators, n_jobs)
+
+    def test_class_weight(self):
+        # Test that default if None
+        clf = ForestClassifier()
+        assert clf.class_weight is None
+        clf.class_weight = "balanced"
+        assert clf.class_weight == "balanced"
+        with pytest.raises(
+            ValueError, match='class_weight can only be None or "balanced"'
+        ):
+            clf.class_weight = "truc"
+        with pytest.raises(
+            ValueError, match='class_weight can only be None or "balanced"'
+        ):
+            clf.class_weight = 1
+
+    def test_n_classes_classes_n_features_n_samples(self):
+        y = ["one", "two", "three", "one", "one", "two"]
+        X = [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6]]
+        clf = ForestClassifier()
+        clf.fit(X, y)
+
+        assert tuple(clf.classes_) == ("one", "three", "two")
+        assert clf.n_classes_ == 3
+        assert clf.n_features_ == 2
+        assert clf.n_samples_ == 6
+
+    # TODO: test that the label is 1D
+
+    def test_class_weight_sample_weights(self):
+        iris = self.iris
+        X, y = iris["data"], iris["target"]
+        # Check that no sample_weight and all sample weights equal to 1. is the same
+        clf1 = ForestClassifier(class_weight=None, random_state=42)
+        clf1.fit(X, y)
+        clf2 = ForestClassifier(class_weight=None, random_state=42)
+        clf2.fit(X, y, sample_weight=np.ones(y.shape[0]))
+        assert clf1.apply(X) == approx(clf2.apply(X))
+        assert clf1.predict_proba(X) == approx(clf2.predict_proba(X))
+
+        clf1 = ForestClassifier(class_weight="balanced", random_state=42)
+        clf1.fit(X, y)
+        clf2 = ForestClassifier(class_weight=None, random_state=42)
+        sample_weight = compute_sample_weight("balanced", y)
+        clf2.fit(X, y, sample_weight=sample_weight)
+        assert clf1.apply(X) == approx(clf2.apply(X))
+        assert clf1.predict_proba(X) == approx(clf2.predict_proba(X))
+
+        # Simulate unbalanced data from the iris dataset
+        X_unb = np.concatenate((X[0:50], X[50:56], X[100:106]), axis=0)
+        y_unb = np.concatenate((y[0:50], y[50:56], y[100:106]), axis=0)
+
+        X_train, X_test, y_train, y_test = train_test_split(
+            X_unb, y_unb, shuffle=True, stratify=y_unb, random_state=42, test_size=0.5
+        )
+
+        clf = ForestClassifier(class_weight=None, random_state=42, aggregation=True)
+        clf.fit(X_train, y_train)
+        y_pred = clf.predict(X_test)
+        report1 = classification_report(y_test, y_pred, output_dict=True)
+
+        clf = ForestClassifier(
+            class_weight="balanced", random_state=42, aggregation=True
+        )
+        clf.fit(X_train, y_train)
+        y_pred = clf.predict(X_test)
+        report2 = classification_report(y_test, y_pred, output_dict=True)
+
+        # In the considered case, class_weight should improve all metrics
+        for label in ["0", "1", "2"]:
+            label_report1 = report1[label]
+            label_report2 = report2[label]
+            assert label_report2["precision"] >= label_report1["precision"]
+            assert label_report2["recall"] >= label_report1["recall"]
+            assert label_report2["f1-score"] >= label_report1["f1-score"]
+
+        breast_cancer = self.breast_cancer
+        X, y = breast_cancer["data"], breast_cancer["target"]
+        idx_0 = y == 0
+        idx_1 = y == 1
+
+        X_unb = np.concatenate((X[idx_0], X[idx_1][:10]), axis=0)
+        y_unb = np.concatenate((y[idx_0], y[idx_1][:10]), axis=0)
+
+        X_train, X_test, y_train, y_test = train_test_split(
+            X_unb, y_unb, shuffle=True, stratify=y_unb, random_state=42, test_size=0.5
+        )
+
+        clf = ForestClassifier(class_weight=None, random_state=42, aggregation=True)
+        clf.fit(X_train, y_train)
+        y_pred = clf.predict(X_test)
+        report1 = classification_report(y_test, y_pred, output_dict=True)
+
+        clf = ForestClassifier(
+            class_weight="balanced", random_state=42, aggregation=True
+        )
+        clf.fit(X_train, y_train)
+        y_pred = clf.predict(X_test)
+        report2 = classification_report(y_test, y_pred, output_dict=True)
+
+        # In the considered case, class_weight should improve all metrics
+        for label in ["0", "1"]:
+            label_report1 = report1[label]
+            label_report2 = report2[label]
+            assert label_report2["precision"] >= label_report1["precision"]
+            assert label_report2["recall"] >= label_report1["recall"]
+            assert label_report2["f1-score"] >= label_report1["f1-score"]

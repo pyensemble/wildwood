@@ -245,7 +245,7 @@ def pop_node_record(records):
         "feature": uintp,
         "found_split": boolean,
         "threshold": float32,
-        "weighted_n_samples_valid": float32,
+        "w_samples_valid": float32,
         "pos_train": uintp,
         "pos_valid": uintp,
         "aggregation": boolean,
@@ -382,8 +382,6 @@ def grow(
         # TODO: correct this when actually using the threshold instead of
         #  bin_threshold
         threshold = 0.42
-        # TODO: now used for now
-        weighted_n_samples_valid = 42.0
 
         node_id = add_node_tree(
             # The tree
@@ -411,7 +409,7 @@ def grow(
             # Weighted number of training samples
             node_context.w_samples_train,
             # NOT USED FOR NOW
-            weighted_n_samples_valid,
+            node_context.w_samples_valid,
             # Index of the first training sample in the node
             start_train,
             # End-index of the slice containing the node's training samples
