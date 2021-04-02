@@ -15,7 +15,7 @@ sys.path.extend([".", ".."])
 from wildwood.forest import ForestRegressor
 import pickle
 import datetime
-
+import subprocess
 
 def linear_regression(dataset, random_state=0, n_jobs=-1):
 
@@ -70,14 +70,16 @@ def catboost_regressor(dataset, n_estimators=100, n_jobs=-1, random_state=0, ver
 def lightgbm_regressor(dataset, n_estimators=100, n_jobs=-1, random_state=0, verbose=0):
     reg = lgb.LGBMRegressor(n_estimators= n_estimators, random_state= random_state, n_jobs= n_jobs)
     tic = time()
-    reg.fit(dataset.data_train,
+    data_train = dataset.data_train.astype({c: 'category' for c in range(dataset.nb_continuous_features, dataset.n_features)})
+    reg.fit(data_train,
             dataset.target_train)  # , sample_weight=sample_weight)#, categorical_feature=list(cat_features))# if args.specify_cat_features else None)
     toc = time()
     fit_time = toc - tic
 
     print(f"fitted in {toc - tic:.3f}s")
+    data_test = dataset.data_test.astype({c: 'category' for c in range(dataset.nb_continuous_features, dataset.n_features)})
 
-    eval = datasets.evaluate_regressor(reg, dataset.data_test, dataset.target_test)
+    eval = datasets.evaluate_regressor(reg, data_test, dataset.target_test)
     eval.update({"fit_time" : fit_time})
     return eval
 
@@ -156,4 +158,8 @@ def extract_field(df, field):
 
 
 with open("benchmark_regression"+datetime.datetime.now().strftime("%Y%m%d%H%M%S")+".pickle", 'wb') as f:
+    dtime = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+    gitind = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])
+    pickle.dump(dtime, f)
+    pickle.dump(gitind, f)
     pickle.dump(stats, f)

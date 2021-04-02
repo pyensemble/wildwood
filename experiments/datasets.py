@@ -722,7 +722,7 @@ class KDDCup(Datasets):#multiclass
             self.data.columns = list(range(self.data.shape[1]))
 
         self.size, self.n_features = self.data.shape
-        self.nb_continuous_features = 34#32
+        self.nb_continuous_features = len(continuous)#34#32
 
         self.split_train_test(test_split, random_state)
 
@@ -796,7 +796,7 @@ class BreastCancer(Datasets):#binary
 
 
 class CaliforniaHousing(Datasets):#regression
-    def __init__(self, path=None, test_split=0.3, random_state=0, normalize_intervals=False, as_pandas=False, subsample=None):
+    def __init__(self, path=None, test_split=0.3, random_state=0, normalize_intervals=False, one_hot_categoricals=False, as_pandas=False, subsample=None):
         from sklearn.datasets import fetch_california_housing
 
         data, target = fetch_california_housing(return_X_y=True, as_frame = True)#as_pandas)
@@ -822,16 +822,14 @@ class CaliforniaHousing(Datasets):#regression
         self.split_train_test(test_split, random_state)
 
 class Boston(Datasets):#regression
-    def __init__(self, path=None, test_split=0.3, random_state=0, normalize_intervals=False, as_pandas=False, subsample=None):
+    def __init__(self, path=None, test_split=0.3, random_state=0, normalize_intervals=False, one_hot_categoricals=False, as_pandas=False, subsample=None):
         from sklearn.datasets import load_boston
 
         data, target = load_boston(return_X_y=True)
 
-        data = data[:subsample]
-        target = target[:subsample]
+        self.data = data[:subsample]
+        self.target = target[:subsample]
 
-        self.data = data
-        self.target = target
         self.task = "regression"
 
         if normalize_intervals:
@@ -840,37 +838,44 @@ class Boston(Datasets):#regression
         if as_pandas:
             self.data = pd.DataFrame(self.data)
             self.target = pd.Series(self.target)
+            if not one_hot_categoricals:
+                cat = self.data.pop(3).astype(int)
+                self.data = self.data.join(cat)
+            self.data.columns = list(range(self.data.shape[1]))
 
         self.size, self.n_features = self.data.shape
-        self.nb_continuous_features = self.n_features
+        self.nb_continuous_features = self.n_features - 1
 
         self.split_train_test(test_split, random_state)
 
 
 
 class Diabetes(Datasets):#regression
-    def __init__(self, path=None, test_split=0.3, random_state=0, normalize_intervals=False, as_pandas=False, subsample=None):
+    def __init__(self, path=None, test_split=0.3, random_state=0, normalize_intervals=False, one_hot_categoricals=False, as_pandas=False, subsample=None):
         from sklearn.datasets import load_diabetes
 
         data, target = load_diabetes(return_X_y=True, as_frame=True)
 
-        data = data[:subsample]
-        target = target[:subsample]
+        self.data = data[:subsample]
+        self.target = target[:subsample]
 
-        self.data = data
-        self.target = target
+
         self.task = "regression"
 
         if normalize_intervals:
             mins = self.data.min()
             self.data = (self.data - mins)/(self.data.max() - mins)
 
+        if not one_hot_categoricals:
+            sex = self.data.pop("sex").apply(lambda x: x > 0).astype(int)
+            self.data = self.data.join(sex)
+            self.data.columns = list(range(self.data.shape[1]))
         if not as_pandas:
             self.data = self.data.values
             self.target = self.target.values
 
         self.size, self.n_features = self.data.shape
-        self.nb_continuous_features = self.n_features
+        self.nb_continuous_features = self.n_features - 1
 
         self.split_train_test(test_split, random_state)
 

@@ -10,7 +10,7 @@ from catboost import CatBoostRegressor
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', type=str, default="BreastCancer")
 parser.add_argument('--normalize-intervals', action="store_true", default=False)
-
+parser.add_argument('--one-hot-categoricals', action="store_true", default=False)
 parser.add_argument('--dataset-path', type=str, default="data")
 parser.add_argument('--dataset-subsample', type=int, default=100000)
 parser.add_argument('--n-estimators', type=int, default=100)
@@ -37,10 +37,10 @@ if dataset.task != "regression":
 
 print("Training Catboost regressor ...")
 
-
+cat_features = list(range(dataset.nb_continuous_features, dataset.n_features))
 #sample_weight = dataset.get_train_sample_weights()
 
-reg = CatBoostRegressor(n_estimators=args.n_estimators, random_state=args.random_state, thread_count=args.n_jobs)
+reg = CatBoostRegressor(n_estimators=args.n_estimators, random_state=args.random_state, thread_count=args.n_jobs, cat_features=cat_features)
 tic = time()
 reg.fit(dataset.data_train, dataset.target_train)#, sample_weight=sample_weight)#, categorical_feature=list(cat_features))# if args.specify_cat_features else None)
 toc = time()

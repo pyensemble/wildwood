@@ -11,7 +11,7 @@ from sklearn.linear_model import LinearRegression
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', type=str, default="BreastCancer")
 parser.add_argument('--normalize-intervals', action="store_true", default=False)
-
+parser.add_argument('--one-hot-categoricals', action="store_false", default=True)
 parser.add_argument('--dataset-path', type=str, default="data")
 parser.add_argument('--dataset-subsample', type=int, default=100000)
 parser.add_argument('--random-state', type=int, default=0)
