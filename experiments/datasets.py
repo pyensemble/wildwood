@@ -46,7 +46,7 @@ def evaluate_classifier(clf, test_data, test_target, binary=True):
     print(f"Average precision score: {avg_precision_score :.4f}")
 
     print(classification_report(test_target, predicted_test))
-    return {"auc" : roc_auc, "acc" : acc, "avg_precision_score" : avg_precision_score, "log_loss" : log_loss_value, "predict_time" : predict_time}
+    return [predict_time, roc_auc, acc, log_loss_value, avg_precision_score]
 
 def evaluate_regressor(reg, test_data, test_target):
     tic = time()
@@ -58,7 +58,7 @@ def evaluate_regressor(reg, test_data, test_target):
     mse = mean_squared_error(test_target, predicted_test)
 
     print(f"Mean squared error: {mse :.4f}")
-    return {"prediction_time" : predict_time, "mse": mse}
+    return [predict_time, mse]
 
 
 def onehotencode(y):

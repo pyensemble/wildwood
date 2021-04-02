@@ -1,12 +1,7 @@
-import os
-
 from time import time
 import argparse
 
-import numpy as np
 import datasets
-
-from sklearn.metrics import accuracy_score, roc_auc_score, log_loss, average_precision_score
 
 from sklearn.linear_model import LogisticRegression
 
