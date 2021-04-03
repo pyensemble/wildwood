@@ -1,0 +1,962 @@
+\documentclass{article}
+
+% if you need to pass options to natbib, use, e.g.:
+%     \PassOptionsToPackage{numbers, compress}{natbib}
+% before loading neurips_2020
+
+% ready for submission
+% \usepackage{neurips_2020}
+
+% to compile a preprint version, e.g., for submission to arXiv, add add the
+% [preprint] option:
+%     \usepackage[preprint]{neurips_2020}
+
+% to compile a camera-ready version, add the [final] option, e.g.:
+%     \usepackage[final]{neurips_2020}
+
+% to avoid loading the natbib package, add option nonatbib:
+\usepackage[nonatbib]{neurips_2020}
+
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+\usepackage{hyperref}       % hyperlinks
+\usepackage{url}            % simple URL typesetting
+\usepackage{booktabs}       % professional-quality tables
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{microtype}      % microtypography
+\usepackage{mathrsfs}
+
+\usepackage{algorithmic}
+\usepackage{algorithm}
+
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{amsthm}
+
+\usepackage{mathtools}
+
+\renewcommand{\leq}{\leqslant}
+\renewcommand{\geq}{\geqslant}
+
+\newcommand{\mt}{\mathrm}
+\newcommand{\di}{\mathrm{d}}
+\newcommand{\too}{\longrightarrow}
+\newcommand{\map}{\longmapsto}
+\newcommand{\hess}{\mathrm{H}}
+\newcommand{\id}{\mathrm{id}}
+\newcommand{\Id}{\mathrm{Id}}
+\newcommand{\eps}{\varepsilon}
+\newcommand{\sh}{\mathop{\mathrm{sh}}}
+\newcommand{\ch}{\mathop{\mathrm{ch}}}
+\newcommand{\lint}{[\![}
+\newcommand{\rint}{]\!]}
+%\renewcommand{\iint}[2]{\lint #1 , #2 \rint}
+\newcommand{\midd}{\,\Vert\,}
+\newcommand{\vol}{\mathop{\mathrm{vol}}}
+\newcommand{\dist}{\mathrm{dist}}
+\newcommand{\argmin}{\mathop{\mathrm{argmin}}}
+\newcommand{\argmax}{\mathop{\mathrm{argmax}}}
+\newcommand{\wt}{\widetilde}
+\newcommand{\wh}{\widehat}
+\newcommand{\pp}{\; : \; }
+
+\newcommand{\bs}{\boldsymbol}
+\newcommand{\N}{\mathbb N}
+\newcommand{\Z}{\mathbb Z}
+\newcommand{\Q}{\mathbf Q}
+\newcommand{\R}{\mathbb R}
+\newcommand{\C}{\mathbf C}
+\newcommand{\F}{\mathscr F}
+\newcommand{\cX}{\mathcal X}
+\newcommand{\cY}{\mathcal Y}
+\newcommand{\M}{\mathscr{M}}
+\newcommand{\B}{\mathscr{B}}
+\renewcommand{\S}{\mathscr S}
+
+\newcommand{\GL}{\mathrm{GL}} %ou : mathsf
+\newcommand{\SL}{\mathrm{SL}}
+\renewcommand{\O}{\mathrm{O}}
+\newcommand{\SO}{\mathrm{SO}}
+\newcommand{\card}{\mathop{\mathrm{card}}}
+
+\newcommand{\cl}{\mathscr C}
+\newcommand{\Sym}{\mathfrak S}
+\newcommand{\bor}{\mathscr B}
+\newcommand{\parts}{\mathscr{P}}
+\newcommand{\Chi}{\mathcal{X}}
+\newcommand{\Nu}{\mathcal{V}}
+\newcommand{\G}{\mathscr{G}}
+
+\newcommand{\otb}{\mathtt{otb}}
+\newcommand{\itb}{\mathtt{itb}}
+
+\renewcommand{\ln}{\log}
+\usepackage{xspace}
+% should insert space when needed
+\newcommand{\ie}{\textit{i.e.}\@\xspace} 
+\newcommand{\eg}{e.g.\@\xspace}
+\newcommand{\iid}{i.i.d.\@\xspace}
+
+\newcommand{\jao}[1]{\textcolor{magenta}{JM: #1}}
+\newcommand{\erw}[1]{\textcolor{blue}{ES: #1}}
+\newcommand{\ste}[1]{\textcolor{red}{SG: #1}}
+
+% Probability
+\newcommand{\E}{\mathbb E}
+\renewcommand{\P}{\mathbb P}
+\newcommand{\Var}{\mathrm{Var}}
+\newcommand{\var}{\Var}
+\newcommand{\Cov}{\mathrm{Cov}}
+\newcommand{\cov}{\Cov}
+\newcommand{\cond}{\,|\,}
+\newcommand{\indep}{\mathrel{\text{\scalebox{1.07}{$\perp\mkern-10mu\perp$}}}}
+\newcommand{\indic}[1]{\mathbf{1}( #1 )}
+\newcommand{\probas}{\mathcal{P}}
+\newcommand{\kl}{\mathrm{KL}} % or : D_{KL}, \mathrm{KL}
+\newcommand{\kll}[2]{\kl ( {#1} \midd {#2} )} % KL divergence
+\newcommand{\kls}[2]{\mathrm{kl} ( #1 , #2 )} % kl between Bernoulli
+\newcommand{\ent}{\mathop{\mathrm{Ent}}}
+\newcommand{\dtv}{D_{\mathrm{TV}}}
+
+% Probability distributions
+\newcommand{\bernoullidist}{\mathcal{B}}
+\newcommand{\poissondist}{\mathsf{Poisson}}
+\newcommand{\expdist}{\mathsf{Exp}}
+\newcommand{\gaussdist}{\mathcal{N}}
+\newcommand{\gammadist}{\mathsf{Gamma}}
+\newcommand{\betadist}{\mathsf{Beta}}
+\newcommand{\dirichletdist}{\mathsf{Dir}}
+\newcommand{\uniformdist}{\mathcal{U}}%{\mathsf{Unif}}
+% \newcommand{\lebdist}{\mathsf{Leb}}%{\lambda_{\mathrm{Leb}}}
+
+%% Loss, risk, experts
+\newcommand{\prior}{\pi}
+\newcommand{\loss}{\ell}
+\newcommand{\cumloss}{L}
+\newcommand{\risk}{R}
+\newcommand{\excessrisk}{\mathcal{E}}
+\newcommand{\regret}{\mathrm{Reg}}
+\newcommand{\predspace}{\widehat{\cY}}
+\newcommand{\pred}{\widehat{y}}
+\newcommand{\predrule}{f}
+\newcommand{\combinfun}{\mathop{\textbf{pred}}}
+\newcommand{\Experts}{\mathcal{E}}
+
+%% Supervised learning
+\newcommand{\dataset}{\mathscr D}
+\newcommand{\lossclassif}{\loss_{01}}
+\newcommand{\lossreg}{\loss_{\mathrm{reg}}}
+
+%% Paper specific
+\newcommand{\MP}{\mathop{\mathsf{MP}}} % Mondrian process
+% \newcommand{\split}{\sigma} % splits of the tree T
+\newcommand{\splits}{\Sigma} % splits of the tree T
+\newcommand{\asplit}{\sigma} % a split 
+\newcommand{\node}{\mathbf{v}} %\eta
+\newcommand{\othernode}{\mathbf{w}}
+\newcommand{\nodes}{\mathrm{nodes}} % all nodes of T
+\newcommand{\inodes}{\mathrm{intnodes}} % interior nodes of T
+\newcommand{\leaves}{\mathrm{leaves}} % leaves of T
+\newcommand{\nleaves}[1]{|\leaves (#1) |}
+\newcommand{\leaf}{\node}%{\mathbf{l}} %\phi
+\newcommand{\diam}{\mathop{\mathrm{diam}}}
+\newcommand{\cell}{C}
+%\newcommand{\Cells}{\mathscr{C}}
+\newcommand{\lchild}[1]{{#1}0}
+%{\mathtt{left}( {#1} )} % left child of a node
+\newcommand{\rchild}[1]{{#1}1}
+% {\mathtt{right}( {#1} )} % right child of a node
+\newcommand{\paren}[1]{\mathtt{paren} (#1)}
+\newcommand{\cut}{s} % threshold of a split
+\newcommand{\Cut}{S} % same but random
+\renewcommand{\root}{\mathtt{root}} % root of a tree
+\newcommand{\Leb}{\mathrm{vol}} % Lebesgue measure
+\newcommand{\covering}{\mathscr{C}}
+\newcommand{\range}{\mathsf{range}} % range
+\newcommand{\cellrange}{R}%{\cell^X}
+\newcommand{\ncap}{\!\not\!\cap \,} % does not intersect
+\newcommand{\birth}{\tau} % birth time
+\newcommand{\births}{\mathcal{T}} % family of birth times
+\newcommand{\globaltree}{\mathbf{T}} % global tree
+\newcommand{\tree}{\mathcal{T}} % tree or subtree
+% \newcommand{\treepart}{\Pi} % tree partition
+\newcommand{\mondrian}{\Pi} % Mondrian realization
+\newcommand{\labels}{\Lambda} % labels of a tree
+\newcommand{\child}[2]{\mathsf{child}_{#1} (#2)} % child of node #2 containing point #1
+\newcommand{\parent}[1]{\mathtt{parent} (#1)} % parent of a node
+\newcommand{\prednode}{\pred}
+\newcommand{\pathpoint}{\mathtt{path}} % path of a point in a tree
+\newcommand{\wbar}{w^{\mathrm{den}}} % averaged weights in CTW
+\newcommand{\wnum}{w^{\mathrm{num}}} % averaged weights in CTW
+\newcommand{\avgpred}{\overline{y}}
+\newcommand{\prefix}{\subseteq} % prefix relation among contexts
+%\newcommand{\wy}{w'}
+\newcommand{\wpred}{\widehat{w}}
+\newcommand{\ybar}{\overline{y}}
+\newcommand{\nbtrees}{M} % number of trees in the forest
+\newcommand{\idtree}{m} % index of the tree
+\newcommand{\ncells}{K}
+\newcommand{\ncellmin}{k}
+
+\newtheorem{proposition}{Proposition}%[chapter]
+\newtheorem{theorem}{Theorem}
+% % \newtheorem*{Bla}{Theorem Bla}
+\newtheorem{lemma}{Lemma}
+% \newtheorem{tech_lemma}{Technical Lemma}
+\newtheorem{corollary}{Corollary}
+% \newtheorem{fact}{Fact}
+% \newtheorem{property}{Property}
+% \newtheorem{properties}{Properties}
+
+
+% \theoremstyle{definition}
+\newtheorem{definition}{Definition}
+% \newtheorem{problem}{Problem}
+% \newtheorem{strategy}{Strategy}%[chapter]
+% % \newtheorem{drem}{Remarque}%[chapter]
+% \newtheorem{assumption}{Assumption}%[section] 
+\newtheorem{example}{Example}%[chapter]
+\newtheorem{remark}{Remark} 
+
+%% Algorithms
+\newcommand{\MondrianForest}{\mathsf{MondrianForest}}
+\newcommand{\SplitCell}{\mathsf{SplitCell}}
+\newcommand{\ExtendMondrian}{\mathsf{ExtendMondrian}}
+\newcommand{\InfiniteMondrian}{\mathsf{InfiniteMondrian}}
+\newcommand{\ExtendCell}{\mathtt{NodeUpdate}}
+\newcommand{\PartitionUpdate}{\mathsf{PartitionUpdate}}
+\newcommand{\MondrianUpdate}{\mathtt{AmfUpdate}}
+\newcommand{\Predict}{\mathtt{AmfPredict}}
+\newcommand{\MondrianForestPredict}{\mathtt{MondrianPredict}}
+\newcommand{\MondrianForestUpdate}{\mathtt{MondrianUpdate}}
+
+\newcommand{\SampleMondrian}{\mathtt{SampleMondrian}}
+
+%%Listings
+
+\usepackage{listings}
+
+\usepackage{todonotes}
+
+\title{WildWood: better and faster Random Forests (a.k.a don't mess with out-of-the-bag samples)}
+
+% The \author macro works with any number of authors. There are two commands
+% used to separate the names and addresses of multiple authors: \And and \AND.
+%
+% Using \And between authors leaves it to LaTeX to determine where to break the
+% lines. Using \AND forces a line break at that point. So, if LaTeX puts 3 of 4
+% authors names on the first line, and the last on the second line, try using
+% \AND instead of \And before the third author name.
+
+\author{%
+  David S.~Hippocampus\thanks{Use footnote for providing further information
+    about author (webpage, alternative address)---\emph{not} for acknowledging
+    funding agencies.} \\
+  Department of Computer Science\\
+  Cranberry-Lemon University\\
+  Pittsburgh, PA 15213 \\
+  \texttt{hippo@cs.cranberry-lemon.edu} \\
+  % examples of more authors
+  % \And
+  % Coauthor \\
+  % Affiliation \\
+  % Address \\
+  % \texttt{email} \\
+  % \AND
+  % Coauthor \\
+  % Affiliation \\
+  % Address \\
+  % \texttt{email} \\
+  % \And
+  % Coauthor \\
+  % Affiliation \\
+  % Address \\
+  % \texttt{email} \\
+  % \And
+  % Coauthor \\
+  % Affiliation \\
+  % Address \\
+  % \texttt{email} \\
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+    We introduce WildWood (WW), a new ensemble algorithm for supervised learning of Random Forest (RF) type. It is faster than standard approaches used in RF relying on pre-sorted or inplace sorting thanks to the binning approach commonly used in extreme gradient boosting, such as LightGBM. Furthermore, it makes a very different use of the bootstrap out-of-the-bag samples used by each individual tree in the forest to compute aggregation weights for the exponential weights aggregation algorithm, which allows to perform automatic soft tree pruning, which leads to BLALBA
+\end{abstract}
+
+\section{Introduction}
+
+\todo{utiliser in fine le template neurips 2021}
+
+
+In this paper, we consider the standard problem of supervised learning, where data comes as a set of i.i.d training samples $(x_i, y_i)$ for $i=1, \ldots, n$ with features $x_i \in \cX \subset \R^d$ and $y_i \in \cY$.
+Our aim is to design a randomized prediction function
+\begin{equation*}
+  \widehat f_n (\cdot, \boldsymbol \Pi_n) : \cX \to \widehat \cY,
+\end{equation*}
+computed from the training samples, where $\Pi_n$ is a random variable that accounts for the randomization procedure and $\widehat \cY$ is a prediction space (that can be different from $\cY$).
+
+This paper introduces the WildWood algorithm (WW), which is an ensemble method of Random Forest (RF) type \todo{cite breiman, etc.} the main contributions of the paper and the main advantages of WW are as follows:
+\begin{itemize}
+  \item FAST + easy code available thanks to binning, a strategy now commonly used for extreme boosting methods such as XGBoost, LightGBM and CatBoost \cite{prokhorenkova2017catboost} \todo{CITE}
+
+  \item The use which is made of out-of-the-bag samples. Indeed, WW uses an aggregation with exponential weights algorithm to produce its predictions, and a remarkable aspect of it is that the predictions computed are  \emph{exact}, in the sense that no approximation is required.
+  We are able to \emph{compute exactly the posterior distribution} thanks to a particular choice of prior, combined with an adaptation of Context Tree Weighting \cite{willems1995context-basic,willems1998context-extensions,helmbold1997pruning,catoni2004statistical}, commonly used in lossless compression to aggregate all subtrees of a prespecified tree, which is both computationally efficient and theoretically sound.
+
+ Our approach is, therefore, drastically
+  different from Bayesian trees \cite{chipman1998bayesiancart,denison1998bayesiancart,taddy2011dynamictrees} and from BART \cite{chipman2010bart} which implement MCMC methods to approximate posterior distributions on trees. It departs also from hierarchical Bayesian smoothing involved in~\cite{lakshminarayanan2014mondrianforests} for instance, which requires also approximations.
+
+  \item Some theory ?
+\end{itemize}
+
+
+\subsection{Random Forests}
+ 
+%We consider non-linear prediction rules $(\widehat \Pi_n)_{t \geq 1}$ that are \emph{random forests}, defined as the  averaging of $M \geq 1$ randomized decision trees.
+We let $\widehat f(x, \Pi^{(1)}), \dots, \widehat f(x, \Pi^{(M)})$ be randomized tree predictors at a point $x \in \cX$ associated to the random tree partitions $(\Pi^{(m)})_{1 \leq m \leq M}$  of $\cX$, where $\Pi^{(1)}, \hdots , \Pi^{(M)}$ are \iid.
+Setting $\boldsymbol \Pi^{(M)} = (\Pi^{(1)}, \ldots, \Pi^{(M)})$, the random forest predictor $\widehat f^{(\nbtrees)}(x, \boldsymbol \Pi^{(M)})$ is then defined by
+\begin{equation}
+    \label{eq:def_RF}
+    \widehat f_n^{(M)}(x, \boldsymbol \Pi_n^{(M)}) = \frac 1M \sum_{m=1}^M \widehat f_n(x, \Pi_n^{(m)}),
+\end{equation}
+namely taking the average over all randomized tree predictions $\widehat f_n(x, \Pi_n^{(m)})$, following the principle of bagging  \todo{citer bagging etc.}
+The training of such an ensemble method can therefore be highly parallelized, since the training of each tree is made independently of each other, even if each of them follow the exact same randomized construction.
+Therefore, we describe in what follows only the construction of a single tree (and its associated random partition and prediction function) and omit from now on the dependence on $m=1, \ldots, M$.
+An illustration of the decision functions of $M=10$ trees and the corresponding forest is provided in Figure~\ref{fig:forest-effect}. \todo{STE: pas interessant je pense ?}
+
+\todo{enlever partout le subscript ${}_n$ qui est inutile ?}
+
+Random tree partitions are given by $\Pi = (\tree, \splits)$, where $\tree$ is a binary tree and $\Sigma$ contains information about each node in $\tree$ (such as splits).
+These objects are introduced in Section~\ref{subsec:tree} and Section~\ref{subsec:mondrian}.
+
+
+\subsection{The binning strategy}
+\label{subsec:binning}
+
+Ici on explique rapidement que toutes les features sont binnees en suivant lightgbm (REF)
+
+
+This strategy allows to use the histogram strategy for finding splits (expliquer)
+
+The input matrix of features $\bs X$ of size $n \times d$ is transformed into another matrix of binned features denoted $\bs X^{\text{bin}}$, where to each input feature $j =1, \ldots, d$, either continuous or categorical, is associated a set of bins $\{ 1, \ldots, B_j \}$, where $B_j \leq B^{\max} $ corresponds either equal the number of modalities of a categorical features, or to a maximum number $B^{\max}$ of feature (note that $B^{\max} = 255$ in LightGBM, so that $\bs X^{\text{bin}}$ can use the \texttt{uint8} datatype (one Byte).
+This means that each column $j$ of $\bs X^\text{bin}$ satisfies $(\bs X^\text{bin})^j \in \{ 1, \ldots, B_j \}^n$.
+In this paper we simply use inter-quantile binning for continuous features, and categorical features with more than $B^{\max}$ features use \todo{comment on fait pour celles la ?}
+
+\subsection{Random tree partitions}
+\label{subsec:tree}
+
+Let $C = \prod_{j=1}^d [\alpha_j, \beta_j] \subseteq \cX$ be a hyper-rectangular box (eventually with $\alpha_j = -\infty$ and/or $\beta_j = +\infty$).
+A tree partition of $C$ is a pair $(\tree, \splits)$, where $\tree$ is a finite ordered binary tree and $\splits$ is a family of splits at the interior nodes of $\tree$.
+
+\paragraph{Finite ordered binary trees.} 
+
+A finite ordered binary tree $\tree$ is represented as a finite subset of the set $\{ 0, 1 \}^* = \bigcup_{n \geq 0} \{ 0, 1 \}^n$ of all finite words on $\{ 0, 1\}$.
+The set $\{ 0, 1\}^*$ is endowed with a tree structure (and called the complete binary tree): the empty word $\root$ is the root, and for any $\node \in \{ 0, 1\}^*$, the left (resp. right) child of $\node$ is $\node 0$ (resp. $\node 1$), obtained by concatenating a $0$ (resp. $1$) at the end of $\node$.
+We denote by $\inodes (\tree) = \{ \node \in \tree : \node 0, \node 1 \in \tree \}$ the set of its interior nodes and the set of its leaves is denoted by $\leaves (\tree) = \{ \node \in \tree : \node 0, \node 1 \not\in \tree \}$, both sets are disjoints by definition and their union contains all the nodes from $\tree$, namely $\nodes(\tree) = \inodes (\tree) \cup \leaves (\tree)$.
+
+\paragraph{Splits and cells.} 
+
+Each split $\sigma_\node = (j_\node, b_\node)$ in the family $\splits = (\asplit_\node)_{\node \in \inodes (\tree)}$ of splits is characterized by its split dimension $j_\node \in \{ 1, \dots, d \}$ and its bin threshold $b_\node \in \{ 1, \ldots, B_{j_\node} \}$.
+One can associate to $(\tree, \splits)$ a partition $(\cell_{\leaf})_{\leaf \in \leaves  (\tree)}$ of $\cX$ as follows.
+For each node $\node \in \tree$, its cell $\cell_\node$ is 
+a hyper-rectangular region $\cell_\node \subseteq \cX$ defined recursively: the cell associated to $\root$ of $\tree$ is $\cX$ and for each $\node \in \inodes(\tree)$, we define
+\begin{equation}
+  \label{eq:cell-split-definition}
+  \cell_{\node 0} := \{ x \in \cell_\node : x_{j_\node} \leq b_{j_\node}  \} \quad \text{and} \quad \cell_{\node 1} := \cell_\node \setminus \cell_{\node 0}.
+\end{equation}
+Then, the leaf cells $(\cell_{\leaf})_{\leaf \in \leaves (\tree)}$ form a partition of $\cX$ by construction.
+We consider a random partition given standard decisions trees, where the sources of randomness comes both from bootstrapping and features subsampling (also known as columns bootstrap).
+
+\paragraph{Bootstrap.}
+
+Define the indices of the whole training dataset as $I = \{1, \ldots, n\}$. 
+The randomization process $\Pi_n$ of a tree in the forest uses bootstrap: it samples uniformly at random, with replacement, elements of $I$ corresponding to in-the-bag samples.
+Sampling is with replacement, so that identical indices can be sampled several times.
+If we denote as $I_\itb$ the set of unique in-the-bag samples, we can define the set of out-of-the-bag samples as $I_\otb = I \setminus I_\itb$.
+A standard argument shows that for any $i \in I$ one has $\P[i \in I_\itb] = 1 - (1 - 1/n)^n \rightarrow 1 - e^{-1} \approx 0.632$ as $n \rightarrow +\infty$, which is known as the 0.632 rule.
+As explained below, the main departure of WW from standard RF algorithm is the use we make of $I_\otb$, as explained in Section~\ref{sub:agg-ctw} below.
+
+\paragraph{Features subsampling.}
+
+\todo{BART / DART}
+Another source of randomness in $\Pi_n$ is column subsampling, following what standard RF algorithms do.
+Each time we need to find a split, we do not try all the features $\{1, \ldots, d\}$, but only a subset of them of size $d_{\max}$, chosen uniformly at random (without replacement).
+Features subsampling combined with bootstrap allows to ``decorrelate'' randomized tree predictors $\widehat f_n(x, \Pi^{(m)})$ for $m=1, \ldots, M$, so that the predictions of the forest, which uses bagging (averaging) in~\eqref{eq:def_RF} has a decreased variance.
+In standard RF implementations, this parameter is known as the \verb+max_features+ parameter in \texttt{scikit-learn}'s implementation of RF and \texttt{mtry} in \texttt{R}'s implementation.
+
+
+\paragraph{About the computation of splits.}
+
+Expliquer ici comment les splits sont calculés et dire comment on fait pour les features categorielles
+
+
+\paragraph{Stopping criterion.}
+
+
+
+\paragraph{Node and tree predictions.}
+
+
+
+\subsection{Aggregation with exponential weights and prediction functions}
+\label{sub:agg-ctw}
+
+The prediction function of a tree in WW is an aggregation of the predictions given by all possible subtrees of $\tree$ rooted at $\root$.
+This uses aggregation with exponential weights, with a branching process prior over the subtrees, which gives more importance to subtrees with a good predictive performance.
+More importantly, this prior choice allows to compute \emph{exactly} the predictions, in a very computationally efficient BLABLA
+
+\paragraph{Node and subtree prediction.}
+
+Let us assume that the realization of randomized prediction tree $\tree$ is available.
+The definition of the prediction function used in WildWood requires the notion of node and subtree prediction.
+Given $\Pi = (\tree, \Sigma) \sim ?$, we define $\node_{\tree} (x) \in \leaves(\tree)$ as the leaf of $\tree$ containing $x \in \cX$.
+The prediction of a node $\node \in \nodes(\tree)$ and of a subtree $T \subset \tree$ rooted as $\root$ is given by
+\begin{equation}
+    \label{eq:node_subtree_prediction}
+    \pred_{\node} = h ( (y_i)_{i \in I_\itb \pp x_i \in \cell_\node}) \quad \text{ and } \quad  \pred_{T} (x) = \pred_{\node_{T} (x)},
+\end{equation}
+for each node $\node \in \tree$ (which defines a cell $\cell_\node \subseteq \cX$ following
+Equation~\eqref{eq:cell-split-definition}), where $h : \bigcup_{k \geq 0} \cY^k \to \widehat \cY$ is a prediction algorithm used in each cell, with $\widehat \cY$ its prediction space and where the subtree prediction $\pred_{T} (x)$ of $T$ is simply given by the prediction of the leaf node $\node_T(x)$ of $T$ containing $x$.
+Also, note that node and subtree predictions only use in-the-bag samples.
+For regression problems, we can use empirical mean forecasters
+\begin{equation}
+    \label{eq:reg-predictor}
+    \pred_{\node} = \frac{1}{n_{\node}} 
+    \sum_{i \in I_\itb \pp x_i \in \cell_\node} y_i,
+\end{equation}
+where $n_{\node} = | \{i \in I_\itb \pp x_i \in \cell_\node \} |$.
+For multi-class classification, we have labels $y_i \in \cY$ where $\cY$ is a finite set of label modalities (such as $\cY = \{ 1, \ldots, K \}$) and predictions are in $\widehat \cY = \probas(\cY)$, the set of probability distributions on $\cY$. 
+We use a Bayes predictive posterior with a prior on $\probas (\cY)$ equal to the Dirichlet distribution $\dirichletdist(\alpha, \dots, \alpha)$, namely the \emph{Jeffreys prior} on the multinomial model $\probas (\cY)$, which leads to
+\begin{equation}
+  \label{eq:kt-predictor}
+  \pred_{\node} (y) = \frac{n_{\node} (y) + \alpha}{n_{\node} + \alpha |\cY|},
+\end{equation}
+for any $y \in \cY$, where $n_{\node} (y) = | \{ i \in I_\itb \pp x_i \in \cell_\node, y_i = y \} |$.
+By default, WildWood uses the \emph{Krichevsky-Trofimov} forecaster (see \cite{tjalkens1993sequential}) which corresponds to the choice $\alpha = 1/2$.
+
+\paragraph{Prediction loss of a subtree}
+
+While the previous computations are performed over in-the-bag samples $I_\itb$, we use here out-of-the-bag samples $I_\otb$ to compute losses associated to the predictions of all possible subtrees $T \subset \tree$, that are understood in this setting as individual experts.
+If $\ell : \widehat \cY \times \cY \to \R$ is a generic loss function, we define the average loss of a subtree as
+\begin{equation*}
+L_T = \frac{1}{|I_\otb|} \sum_{i \in I_\otb} \ell (\pred_{T} (x_i), y_i) 
+= \frac{1}{|I_\otb|} \sum_{i \in I_\otb} \ell (\pred_{\node_T(x_i)}, y_i).
+\end{equation*}
+For regression problems, a default choice of loss in WW is the quadratic loss $\ell (\pred, y) = (\pred - y)^2$ for any $y \in \cY$ and $\pred \in \widehat \cY$ where $\widehat \cY = \cY = \R$, but one can use of course any other loss.
+For multi-class classification, we consider the logarithmic loss (also called cross-entropy) $\ell (\pred, y) = - \log \pred(y)$, where $\pred(y) \in (0, 1]$ when using~\eqref{eq:kt-predictor}.
+Once again, note that the losses computation use $I_\otb$ while predictions use $I_\itb$.
+
+
+\paragraph{The prediction function of a tree in WildWood.}
+
+Let $x \in \cX$.
+The prediction function $\widehat f_n$ of a tree in WW is given by
+\begin{equation}
+  \label{eq:exact-aggregation}
+ \widehat f_n (x) = \frac{\sum_{T \subset \tree} \pi (T) e^{-\eta L_T} \pred_{T} (x)}{\sum_{T \subset \tree} \pi (T) e^{-\eta L_T}},
+\end{equation}
+where the sum is over all subtrees $T$ of $\tree$ that are rooted at $\root$ and where the \emph{prior} $\pi$ on subtrees is the probability distribution defined by
+\begin{equation}
+\label{eq:ctw-prior}
+\pi(T) = 2^{- \| T \|},
+\end{equation}
+where $\|\tree\| = |\nodes(T)|$ is the number of nodes in $\tree$ and $\eta > 0$ is a parameter called the learning rate (although no gradient descent is performed here).
+Note that $\pi$ is the distribution of the branching process with branching probability $1 / 2$ at each node of $\tree$, with exactly two children when it branches.
+The learning rate $\eta$ can be optimally tuned following theoretical guarantees from Section~\ref{sec:theory}, see in particular Corollaries~\ref{cor:regret-best-pruning-log} and~\ref{cor:regret-best-pruning-square}, but it can be also obtained through hyper-optimization.
+
+This aggregation procedure is a \emph{non-greedy way to prune trees}: the weights do not depend only on the quality of one single split but rather on the performance of each subsequent split. An example of aggregated trees is provided in Figure~\ref{fig:algorithm-prediction}.
+
+Let us stress that computing $\widehat f_n$ from Equation~\eqref{eq:exact-aggregation} seems computationally infeasible in practice, since it involves a sum over all subtrees of $\tree$.
+Besides, it requires to keep in memory one weight $e^{-\eta L_T}$ for all subtrees $T$, which seems prohibitive as well.
+Indeed, the number of subtrees of the minimal tree that separates $n$ points is exponential in the number of nodes, and hence \emph{exponential in $n$}.
+However, it turns out that one can compute exactly and very efficiently $\widehat f_t$ using the prior choice from Equation~\eqref{eq:ctw-prior} together with an adaptation of Context Tree Weighting \cite{willems1995context-basic, willems1998context-extensions, helmbold1997pruning,catoni2004statistical}. 
+This will be detailed in Section~\ref{sec:algorithm} below.
+
+
+\paragraph{About hyper-optimization of $\eta$ and $\alpha$}
+
+\todo{expliquer ici (apres avoir decrit l'algorithme exact qu'on peut le faire tres vite sans avoir a reconstruire l'arbre}
+
+
+% However, the proper choice of the prior in Equation~\eqref{eq:ctw-prior} allows us to prove that $\widehat f_t$ can actually be computed very efficiently, at almost no memory cost, as stated in Proposition~\ref{prop:algorithm-implements-aggregation} below, where we prove that the AMF algorithm described in Section~\ref{sub:online-mondrian} below allows to compute  $\widehat f_t$ exactly and efficiently.
+
+\begin{figure}[h!]
+\begin{center}
+% \input{fig-alg-unres-before-tree_structure_final}
+\caption{Illustration of all subtrees involved in the prediction of a tree in AMF at the red query point between steps $t=4$ and $t=5$. The tree $\tree_{4} = \tree_{4, 0}$ is the one obtained with samples up to $t=4$ and subtrees $\tree_{4,j}$ for $j = 1, \hdots, 4$ are pruning of this tree. A tree in AMF produces a prediction given by Equation~\eqref{eq:exact-aggregation}, which is a convex combination of all five subtrees, weighted by their past performances through the aggregation weights.}
+\label{fig:algorithm-prediction}  
+\end{center}
+\end{figure}
+
+
+
+% \begin{figure}[h!]
+%   \centering
+%   \fbox{\rule[-.5cm]{0cm}{4cm} \rule[-.5cm]{4cm}{0cm}}
+%   \caption{Sample figure caption.}
+% \end{figure}
+
+
+% \begin{table}[h!]
+%   \caption{Sample table title}
+%   \label{sample-table}
+%   \centering
+%   \begin{tabular}{lll}
+%     \toprule
+%     \multicolumn{2}{c}{Part}                   \\
+%     \cmidrule(r){1-2}
+%     Name     & Description     & Size ($\mu$m) \\
+%     \midrule
+%     Dendrite & Input terminal  & $\sim$100     \\
+%     Axon     & Output terminal & $\sim$10      \\
+%     Soma     & Cell body       & up to $10^6$  \\
+%     \bottomrule
+%   \end{tabular}
+% \end{table}
+
+\section{Proofs}
+\label{sec:proofs}
+
+The expression in Equation~\eqref{eq:exact-aggregation} involves sums over all subtrees $T$ of the ``global'' tree $\tree$ (involving an exponential in the number of leaves of $\tree$).
+However, it can be computed efficiently because of the specific choice of the prior $\pi$.
+More precisely, we will use the following lemma \cite[Lemma~1]{helmbold1997pruning} several times to efficiently compute sums of products.
+Let us recall that $\nodes(\tree)$ stands for the set of nodes of~$\tree$.
+\begin{lemma}
+  \label{lem:ctw-sum-prod}
+  Let $g: \nodes(\tree) \to \R$ be an arbitrary function and define $G: \nodes(\tree) \to \R$ as
+  \begin{equation}
+  \label{eq:ctw-sum-prod-def}
+  G (\node) = \sum_{T \subset \tree_\node} 2^{- \| T \|} 
+  \prod_{\node' \in \leaves(T)} g(\node'),
+  \end{equation}
+  where the sum over $T \subset \tree_\node$ means the sum over all subtrees $T$ of $\tree$ rooted at $\node$. 
+  Then\textup, $G (\node)$ can be computed recursively as follows\textup:
+  \begin{equation*}
+    G(\node) = 
+    \begin{cases}
+      g(\node) & \text{ if } \node \in \leaves(\tree) \\
+      \frac{1}{2} g(\node) + \frac{1}{2} G(\node 0) G(\node 1) & \mathrm{ otherwise,}
+    \end{cases}
+  \end{equation*}
+  for each node $\node \in \nodes(\tree)$.
+\end{lemma}
+For the sake of completeness, we include a proof of this statement.
+\begin{proof}
+\todo{INSERT THE PROOF}
+\end{proof}
+
+Let us introduce 
+\begin{equation*}
+w_T = \pi_\tree (T) \exp (- \eta L_T),
+\end{equation*}
+so that Equation~\eqref{eq:exact-aggregation} writes
+\begin{equation}
+\label{eq:ewa-tree}
+\wh f_n(x) = \frac{\sum_{T \subset \tree} w_T \pred_{T} (x)}{\sum_{T \subset \tree} w_T},
+\end{equation}
+where the sums hold over all the subtrees $T$ of $\tree$ rooted at $\root$ (the root of the full tree $\tree$).
+We will show how to efficiently compute and update the numerator and denominator in Equation~\eqref{eq:ewa-tree}.
+Note that $w_T$ may be written as
+\begin{align}
+    \nonumber
+    w_T &= \pi_\tree (T) \exp(- \eta L_T) \\
+    \nonumber
+    &= 2^{-\| T \|} \exp \bigg(- \frac{\eta}{|I_\otb|} \sum_{i \in I_\otb} \ell (\pred_{\node_T(x_i)}, y_i) \bigg) \\
+    \label{eq:weight-tree-decomp-1} 
+    &= 2^{-\| T \|} \exp \bigg(- \frac{\eta}{|I_\otb|} \sum_{\node \in \leaves(T)} 
+    \sum_{i \in I_\otb \pp x_i \in C_\node} \ell (\pred_{\node_T(x_i)}, y_i) \bigg) \\
+    \label{eq:weight-tree-decomp-2}
+    &= 2^{-\| T \|} \exp \bigg(- \frac{\eta}{|I_\otb|} \sum_{\node \in \leaves(T)} 
+    \sum_{i \in I_\otb \pp x_i \in C_\node} \ell (\pred_{\node}, y_i) \bigg) \\
+    \nonumber
+    &= 2^{-\| T \|} \exp \bigg(- \eta \sum_{\node \in \leaves(T)} L_\node \bigg) \\
+    \label{eq:weight-tree-decomp-3}
+    &= 2^{-\| T \|} \prod_{\node \in \leaves(T)} w_{\node}
+\end{align}
+where
+\begin{equation}
+    \label{eq:node_loss_and_weight}
+ L_\node := \frac{1}{|I_\otb|} \sum_{i \in I_\otb \pp x_i \in C_\node} \ell (\pred_{\node}, y_i)
+ \quad \text{and } \quad w_\node := \exp(-\eta L_\node).
+\end{equation}
+Equality~\eqref{eq:weight-tree-decomp-1} comes from the fact that the set of cells $\{C_\node : \node \in \leaves(T) \}$ is a partition of $\cX$ by construction, and that the stopping criterion used to build $\tree$ ensures that each leaf node in $\leaves(T)$ contains at least one sample from $I_\otb$ (see Section~???).
+Equality~\eqref{eq:weight-tree-decomp-2} comes from the fact that the prediction of a node is constant and equal to $\pred_\node$ for any $x \in C_\node$.
+
+\paragraph{Denominator of Equation~\eqref{eq:ewa-tree}.}
+
+For each node $\node \in \nodes(\tree)$ denote
+\begin{equation}
+\label{eq:avg-weights-def}
+\wbar_{\node} = \sum_{T \subset \tree_\node} 2^{-\| T \|} \prod_{\node' \in \leaves (T)} w_{\node'},
+\end{equation}
+where once again the sum over $T \subset \tree_\node$ means the sum over all subtrees $T$ of $\tree$ rooted at $\node$.
+We have that~\eqref{eq:weight-tree-decomp-3} entails
+\begin{equation}
+\label{eq:wbar-root}
+\wbar_{\root} = \sum_{T \subset \tree_\root} 2^{-\| T \|} \prod_{\node \in \leaves (T)} w_{\node} = \sum_{T  \subset \tree_\root } w_T = \sum_{T  \subset \tree} w_T \, .
+\end{equation}
+So, we can compute recursively $\wbar_{\root}$ very efficiently, using a recursion on the weights $\wbar_{\node}$ using Lemma~\ref{lem:ctw-sum-prod} with $g(\node) = w_\node$.
+Indeed, we obtain with this choice that
+\begin{equation}
+    \label{eq:wden-recursion}
+    \wbar_{\node} =
+    \begin{cases}
+      w_{\node} & \text{ if } \node \in \leaves (\tree), \\
+      \frac{1}{2} w_{\node} + \frac{1}{2} \wbar_{\node 0} \wbar_{\node 1} &\text{ otherwise}.
+    \end{cases}
+\end{equation}
+Now, we can exploit the fact that decision trees are built in a depth-first fashion in WildWood: all the nodes $\node \in \tree$ are stored in a "flat" array, and by construction both the childs $\node 0$ and $\node 1$ have indexes that are larger than the one of $\node$.
+So, we can simply loop over the array of nodes in reverse order and compute $\wbar_{\node} = w_\node$ if $\node \in \leaves(\tree)$ and  $\wbar_{\node} = \frac{1}{2} w_{\node} + \frac{1}{2} \wbar_{\node 0} \wbar_{\node 1}$ otherwise: we are guaranteed to have computed $\wbar_{\node 0}$ and $\wbar_{\node 1}$ before computing $\wbar_{\node}$.
+This algorithm is described in Algorithm~\ref{alg:wbar-computation}.
+Since these computations involve a large number of products with exponentiated numbers, it typically leads to strong over and under-flows: we describe in Algorithm~\ref{alg:wbar-computation} a version of this algorithm which works recursively over the logarithms of the weights.
+At the end of this loop, we end up at $\node = \root$ and have computed $\wbar_{\root} = \sum_{T  \subset \tree} w_T$ with a very efficient $O(|\nodes(\tree)|)$ complexity.
+Note also at it is sufficient to store both $w_\node$ and $\wbar_\node$ for all $\node \in \tree$, which makes for a $O(|\nodes(\tree)|)$ memory consumption.
+This is in stark contrast with what a naive implementation of this computation would lead to, namely an exponential complexity w.r.t. $|\nodes(\tree)|$.
+
+\begin{algorithm}[htbp]
+    \caption{Computation of $\log(\wbar_\node)$ for all $\node \in \nodes(\tree)$.}
+    \label{alg:wbar-computation}
+    \begin{algorithmic}[1]
+      \STATE \textbf{Inputs:} Fully grown tree $\tree$, step $\eta > 0$ and losses $L_\node$ for all $\node \in \nodes(\tree)$ computed using~\eqref{eq:node_loss_and_weight}.
+      It is assumed that the nodes from $\nodes(\tree)$ are stored in a "flat" array data structure $\mathtt{nodes}$ that respects the parenthood ordering: for any $\node = \mathtt{nodes}[i_{\node}] \in \inodes(\tree)$ and its childs $\node a = \mathtt{nodes}[i_{\node a}]$ for $a \in \{0, 1\}$, we have $i_{\node a} > i_\node$.
+      \FOR{$\node \in \mathrm{reversed}(\mathtt{nodes})$}
+      \IF{$\node$ is a leaf}
+      \STATE Put $\log(\wbar_\node) \gets -\eta L_\node$
+      \ELSE
+      \STATE Put  $\log(\wbar_{\node}) \gets \log( \frac{1}{2} e^{-\eta L_{\node}} + \frac{1}{2} e^{\log(\wbar_{\node 0}) + \log(\wbar_{\node 1})})$
+      \ENDIF
+      \ENDFOR
+      \RETURN {The set of log-weights $\{ \log(\wbar_{\node}) : \node \in \nodes(\tree)$ \}}
+    \end{algorithmic}
+\end{algorithm}
+
+\paragraph{Numerator of Equation~\eqref{eq:ewa-tree}.}
+
+The numerator of Equation~\eqref{eq:ewa-tree} almost follows the exact same argument as the denominator, but since it depends on the input vector $x \in \cX$ of features for which we want to predict the label, it is performed at inference time.
+Let $\pathpoint(x)$ be the sequence from $\nodes(\tree)$ that leads to the leaf $\node_{\tree}(x)$ containing $x \in \cX$ and define, for any $\node \in \nodes(\tree)$, $\wpred_{\node}(x) = w_\node \pred_\node(x)$ if $\node \in \pathpoint(x)$ and  $\wpred_{\node}(x) = w_\node$ otherwise.
+We have
+\begin{align}
+    \nonumber
+    \sum_{T \subset \tree} w_T \pred_{T} (x) &= \sum_{T \subset \tree_\root} w_{T} \pred_{\node_T(x)} \\
+    \label{eq:denom-argument-1}
+    &=  \sum_{T \subset \tree_\root} 2^{-\| T \|} \prod_{\node \in \leaves(T)} w_{\node} \pred_{\node_T(x)} \\
+    \label{eq:denom-argument-2}
+    &= \sum_{T \subset \tree_\root} 2^{-\| T \|} \prod_{\node \in \leaves(T)} \wpred_{\node}(x).
+\end{align}
+Note that~\eqref{eq:denom-argument-1} comes from~\eqref{eq:weight-tree-decomp-3} while~\eqref{eq:denom-argument-2} comes from the definition of $\wpred_{\node}(x)$ (note that a single term from the product over $\node \in \leaves(T)$ corresponds to $\node = \node_T(x)$ since $\{ C_\node : \node \in \leaves(T) \}$ is a partition of $\cX$).
+We are now in position to use again Lemma~\ref{lem:ctw-sum-prod} with $g(\node) = \wpred_{\node}(x)$.
+Defining
+\begin{equation*}
+\wnum_\node(x)
+= \sum_{T \subset \tree_\node} 2^{-\| T \|}
+\prod_{\node' \in \leaves(T)} \wpred_{\node'}(x) \, ,
+\end{equation*}
+we can conclude that 
+\begin{equation}
+    \label{eq:wnum-root}
+    \wnum_\root(x) = \sum_{T \subset \tree} w_T \pred_{T} (x)
+\end{equation}
+and that the following recurrence holds:
+\begin{equation}
+  \label{eq:wnum-recursion1}
+  \wnum_{\node}(x) =
+  \begin{cases}
+      \wpred_{\node}(x) & \text{ if } \node \in \leaves(\tree) \\
+      \frac{1}{2} \wpred_{\node}(x) + \frac{1}{2} \wnum_{\node 0}(x) \wnum_{\node 1}(x) &\text{ otherwise}.
+  \end{cases}
+\end{equation}
+This recurrence allows to compute $\wnum_{\node}(x)$ from $\wpred_{\node}(x)$, but note that a direct use of this formula would lead to a complexity $O(|\nodes(\tree)|)$ to produce a prediction for a single input $x \in \cX$. 
+It turns out can we can do much better than that.
+
+Indeed, whenever $\node \notin \pathpoint(x)$, we have by definition that $\wpred_{\node}(x) = w_{\node}$ and that $\wpred_{\node'}(x) = w_{\node'}$ for any descendant $\node'$ of $\node$, which entails by induction that $\wnum_{\node}(x) = \wbar_\node$ for any $\node \notin \pathpoint(x)$.
+Therefore, we only need to explain how to compute $\wnum_{\node}(x)$ for $\node \in \pathpoint(x)$.
+This is achieved recursively, thanks to~\eqref{eq:wnum-recursion1}, starting at the leaf $\node_\tree(x)$ and going up in the tree to $\root$:
+\begin{equation}
+    \label{eq:wnum-recursion2}
+  \wnum_{\node}(x) =
+  \begin{cases}
+      w_{\node} \pred_{\node} & \text{ if } \node = \node_\tree (x) \\
+      \frac{1}{2} w_{\node} \pred_{\node} + \frac{1}{2} \wbar_{\node (1-a)} \wnum_{\node a}(x) &\text{ otherwise, where } a \in \{ 0, 1 \} \text{ is s.t. } \node a \in \pathpoint(x).
+  \end{cases}
+\end{equation}
+Let us explain where this comes from: firstly, one has obviously that $\leaves(\tree) \cap \pathpoint(x) = \{ \node_\tree(x) \}$, so that $\wnum_{\node}(x) = g(\node) = \wpred_{\node}(x) = w_\node \pred_\node(x)$ for $\node = \node_\tree (x)$.
+Secondly, we go up in the tree along $\pathpoint(x)$ and use again~\eqref{eq:wnum-recursion1}: whenever $\node \in \inodes(\tree)$ and $\node a \in \pathpoint(x)$ for $a \in \{0, 1\}$, we have $\wnum_{\node (1 - a)}(x) = \wbar_{\node (1 - a)}$ since $\node (1 - a) \notin \pathpoint(x)$. 
+This recursion has a complexity $O(|\pathpoint(x)|)$ where $|\pathpoint(x)|$ is the length of the path starting at $\node_\tree(x)$ and going to $\root$, and is typically orders of magnitude smaller than $|\nodes(\tree)|$ (in a well-balanced binary tree, one has the relation $|\pathpoint(x)| = O(\log_2(|\nodes(\tree)|))$).
+Moreover, we observe that the recursions used in~\eqref{eq:wden-recursion} and~\eqref{eq:wnum-recursion2} only need to save both $w_\node$ and $\wbar_\node$ for any $\node \in \nodes(\tree)$.
+
+Finally, we have using~\eqref{eq:wbar-root} and~\eqref{eq:wnum-root} that
+\begin{equation*}
+    \wh f_n(x) = \frac{\sum_{T \subset \tree} w_T \pred_{T} (x)}{\sum_{T \subset \tree} w_T} = \frac{\wnum_\root(x)}{\wbar_\root} =: \wh f_{\root}(x),
+\end{equation*}
+and we want to compute $\wh f_{\root}(x)$ recursively from $\wh f_{\node}(x)$ where $\node \in \pathpoint(x)$.
+First, whenever $\node = \node_\tree (x)$ we have
+\begin{equation*}
+    \wh f_\node(x) = \frac{\wnum_\node(x)}{\wbar_\node} = \frac{w_{\node} \pred_{\node}}{w_{\node}} = \pred_{\node},
+\end{equation*}
+while for $\node \neq  \node_\tree (x)$ and $\node \in \pathpoint(x)$, we write
+\begin{align}
+    \label{eq:fnode-computation1}
+    \wh f_\node(x) = \frac{\wnum_\node(x)}{\wbar_\node} 
+    &= \frac{\frac{1}{2} w_{\node} \pred_{\node} + \frac{1}{2} \wbar_{\node (1-a)} \wnum_{\node a}(x)}{\wbar_\node} \\
+    \label{eq:fnode-computation2}
+    &= \frac 12 \frac{w_{\node}}{\wbar_\node} \pred_{\node} 
+    + \frac 12 \frac{\wbar_{\node (1-a)} \wbar_{\node a}} {\wbar_\node} \frac{\wnum_{\node a}(x)}{\wbar_{\node a}} \\
+    \label{eq:fnode-computation3}
+    &= \frac 12 \frac{w_{\node}}{\wbar_\node} \pred_{\node} + \Big(1 - \frac 12  \frac{w_{\node}}{\wbar_\node} \Big) \wh f_{\node a}(x),
+\end{align}
+where~\eqref{eq:fnode-computation1} comes from~\eqref{eq:wnum-recursion2} while \eqref{eq:fnode-computation3} comes from~\eqref{eq:wden-recursion}.
+The computation of $\wh f_n(x)$ is therefore performed as described in Algorithm~\ref{alg:tree-prediction}.
+
+\begin{algorithm}[htbp]
+    \caption{Computation of $\wh f_n(x)$ for any $x \in \cX$.}
+    \label{alg:tree-prediction}
+    \begin{algorithmic}[1]
+      \STATE \textbf{Inputs:} Fully grown tree $\tree$, losses $L_\node$ and log-weights $\log(\wbar_\node)$ computed respectively by Equation~\eqref{eq:node_loss_and_weight} and Algorithm~\ref{alg:wbar-computation} for all $\node \in \nodes(\tree)$.
+      \STATE Find the leaf $\node \gets \node_\tree(x) \in \leaves(\tree)$ containing $x$ 
+      \STATE Put $\wh f_n(x) \gets \pred_\node$ (the node $\node$ forecaster, such as~\eqref{eq:reg-predictor} for regression or~\eqref{eq:kt-predictor} for classification)
+      \WHILE{$\node \neq \root$}
+      \STATE Put $\node \gets \mathrm{parent}(\node)$
+      \STATE Put $\alpha \gets \frac 12 \exp(-\eta L_\node - \log(\wbar_\node))$ 
+      \STATE Put $\wh f_n(x) \gets \alpha \pred_\node + (1 - \alpha) \wh f_n(x)$
+      \ENDWHILE
+      \RETURN {The prediction $\wh f_n(x)$}
+    \end{algorithmic}
+\end{algorithm}
+
+
+% This Section gathers the proofs of all the results of the paper, following their order of appearance, namely the proofs of Proposition~\ref{prop:algorithm-implements-aggregation}, Lemma~\ref{lem:regret-pruning}, Corollaries~\ref{cor:regret-best-pruning-log},~\ref{cor:regret-best-pruning-square} and~\ref{cor:regret-lambda-regression}, Lemma~\ref{lem:online-to-batch} and Theorems~\ref{thm:oracle-best-lambda} and~\ref{thm:minimax-adaptive}.
+
+
+% \subsection{Proof of Proposition~\ref{prop:algorithm-implements-aggregation}}
+% \label{sec:proof-proposition}
+
+
+% Consider a realization $\mondrian = (\tree^\mondrian, \Sigma^\mondrian) \sim \MP$ of the infinite Mondrian partition, and assume that we are at step $t \geq 1$, namely we observed $(x_1, y_1), \ldots, (x_{t-1}, y_{t-1})$ and performed the updates described in Algorithm~\ref{alg:mondrian-update} on each sample.
+% Given $x \in [0, 1]^d$, we want to predict the label (or its distribution) using
+% \begin{equation}
+%   \label{eq:ftx_proof}
+%  \widehat f_t (x) = \frac{\sum_{\tree \subset \tree^\mondrian} \pi (\tree) e^{-\eta L_{t-1} (\tree)} \pred_{\tree, t} (x)}{\sum_{\tree \subset \tree^\mondrian} \pi (\tree) 
+%  e^{-\eta L_{t-1} (\tree)}},
+% \end{equation}
+% where we recall that $\pi (\tree) = 2^{- | \tree |}$ with $|\tree|$ the number of nodes in $\tree$ and where we recall that the sum in~\eqref{eq:ftx_proof} is an infinite sum over all subtrees $\tree$ of $\tree^\mondrian$.
+
+% \paragraph{Reduction to a finite sum.}
+
+% Let $\globaltree$ denote the minimal subtree of $\tree^\mondrian$ that separates the elements of $\{ x_1, \dots, x_{t-1}, x \}$ (if $x = x_{t}$ then
+%  $\globaltree = \tree_{t+1}$).
+% Also, for every finite tree $\tree$, denote $\tree|_\globaltree := \tree \cap \globaltree$.
+% For any subtree $\tree$ of $\globaltree$, we have
+% \begin{equation}
+%   \label{eq:sum-subtree-restrict}
+%   \sum_{\tree' : \tree'|_\globaltree = \tree} \pi (\tree') = 2^{- \| \tree \|}
+%   =: \pi_\globaltree (\tree),
+% \end{equation}
+% where $\|\tree \|$ denotes the number of nodes of $\tree$ which are not leaves of $\globaltree$; note that $\pi_\globaltree$ is a probability distribution on the subtrees of $\globaltree$, since $\pi$ is a probability distribution on finite subtrees of $\{ 0, 1\}^*$.
+% To see why Equation~\eqref{eq:sum-subtree-restrict} is true, consider the following representation of $\pi$: let $(B_\node)_{\node \in \{ 0, 1 \}^*}$ be an \iid family of Bernoulli random variables with parameter $1 / 2$; a node $\node$ is said to be \emph{open} if $B_\node = 1$, and \emph{closed} otherwise.
+% Then, denote $\tree'$ the subtree of $\{ 0, 1\}^*$ all of whose interior nodes are open, and all of whose leaves are closed; clearly, $\tree' \sim \pi$.
+% Now, $\tree'|_\globaltree = \tree$ if and only if all interior nodes of $\tree$ are open and all leaves of $\tree$ except leaves of $\globaltree$ are closed.
+% By independence of the $B_\node$, this happens with probability $2^{-\| \tree \|}$.
+
+% In addition, note that if $\tree'$ is a finite subtree of $\{ 0, 1\}^*$ and $\tree =\tree'|_\globaltree$, then $\pred_{\tree', t} (x) = \pred_{\tree, t} (x)$.
+% Indeed, let $\node_{\tree'}(x)$ be the leaf of $\tree'$ that contains $x$; if $\node_{\tree'} (x) \in \globaltree$, then $\node_{\tree'} (x) = \node_{\tree}(x)$ and hence $\pred_{\tree', t} (x) = \pred_{\node_{\tree'}(x), t} = \pred_{\node_{\tree}(x), t} = \pred_{\tree, t}(x)$; otherwise, by definition of $\globaltree$, both $\node_{\tree'}(x)$ and $\node_\tree(x)$ only contain the $x_s$ ($s \leq t-1$) such that $x_s = x$, so that again $\pred_{\node_{\tree'}(x), t} = \pred_{\node_{\tree}(x), t}$.
+% Similarly, this result for $x = x_t$ also holds for $x_s$, $s \leq t-1$, so that $L_{t-1} (\tree') = L_{t-1} (\tree)$.
+% From the points above, it follows that
+% \begin{align}
+%   \label{eq:infinite-to-finite-aggregation}
+%   \wh f_t (x)
+%   &= \frac{\sum_{\tree \subset \tree^\mondrian} \pi (\tree) e^{-\eta L_{t-1} (\tree)} \pred_{\tree, t} (x)}{\sum_{\tree \subset \tree^\mondrian} \pi (\tree) e^{-\eta L_{t-1} (\tree)}} \nonumber \\
+%   &= \frac{\sum_{\tree \subset \tree^\mondrian} \sum_{\tree' : \tree'|_\globaltree = \tree} \pi (\tree') e^{-\eta L_{t-1} (\tree')} \pred_{\tree', t} (x)}{\sum_{\tree \subset \tree^\mondrian} \sum_{\tree' : \tree'|_\globaltree = \tree} \pi (\tree') e^{-\eta L_{t-1} (\tree')}} \nonumber \\
+%   &= \frac{\sum_{\tree \subset \tree^\mondrian} \sum_{\tree' : \tree'|_\globaltree = \tree} \pi (\tree') e^{-\eta L_{t-1} (\tree)} \pred_{\tree, t} (x)}{\sum_{\tree \subset \tree^\mondrian} \sum_{\tree' : \tree'|_\globaltree = \tree} \pi (\tree') e^{-\eta L_{t-1} (\tree)}} \nonumber \\
+%   &= \frac{\sum_{\tree \subset \globaltree} \ \pi_\globaltree (\tree) e^{-\eta L_{t-1} (\tree)} \pred_{\tree, t} (x)}{\sum_{\tree \subset \globaltree} \pi_\globaltree (\tree) e^{-\eta L_{t-1} (\tree)}}
+%     \, .
+% \end{align}
+
+% %\ste{?? Ce n'est pas terrible...manque qq explications ??}
+
+
+
+% \subsection{Proofs of Lemma~\ref{lem:regret-pruning}, Corollaries~\ref{cor:regret-best-pruning-log},~\ref{cor:regret-best-pruning-square},~\ref{cor:regret-lambda-regression}, Lemma~\ref{lem:online-to-batch}, Theorems~\ref{thm:oracle-best-lambda},~\ref{thm:minimax-adaptive} and Proposition~\ref{prop:mondrian_depth_bound}}
+
+% We start with some well-known lemmas that are used to bound the regret: Lemma~\ref{lem:exp-regret} controls the regret with respect to each tree forecaster, while Lemmas~\ref{lem:regret-kt-log} and~\ref{lem:regret-average-square} bound the regret of each tree forecaster with respect to the optimal labeling of its leaves.
+
+% \begin{lemma}[\cite{vovk1998mixability}]%[Regret of the Exponential Weights algorithm]
+%   \label{lem:exp-regret}
+%   Let $\Experts$ be a countable set of experts and $\prior = (\prior_i)_{i\in \Experts}$ be a probability measure on $\Experts$.
+%   Assume that $\ell$ is $\eta$-\emph{exp-concave}.
+%   For every $t \geq 1$\textup, let $y_t \in \cY$\textup, $\pred_{i,t} \in \predspace$ be the prediction of expert $i \in \Experts$ and $L_{i,t} = \sum_{s=1}^t \ell (\pred_{i,s}, y_s)$ be its cumulative loss.
+%   Consider the predictions defined as
+%   \begin{equation}
+%     \label{eq:exponential-weights}
+%     \pred_t = \frac{\sum_{i \in \Experts} \pi_i \, e^{- \eta L_{i, t-1}} \pred_{i,t} }{\sum_{i \in \Experts} \pi_i \, e^{-\eta L_{i, t-1}}}.
+%   \end{equation}
+%   Then\textup, irrespective of the values of $y_t \in \cY$ and $\pred_{i,t} \in \predspace,$ we have the following regret bound
+%   \begin{equation}
+%     \label{eq:exp-regret}
+%     \sum_{t=1}^n \ell (\pred_t, y_t) - \sum_{t=1}^n \ell (\pred_{i,t}, y_t)
+%     \leq \frac{1}{\eta} \log \frac{1}{\prior_i}
+%   \end{equation}
+%   for each $i \in \Experts$ and $n \geq 1$.
+% \end{lemma}
+
+% \begin{lemma}[\cite{tjalkens1993sequential}]
+%   \label{lem:regret-kt-log}
+%   Let $\ell$ be the logarithmic loss on the finite set $\cY,$ and let $y_t \in \cY$ for every $t \geq 1$.
+%   The \emph{Krichevsky-Trofimov (KT)}  forecaster\textup, which predicts
+%   \begin{equation}
+%     \label{eq:kt}
+%     \pred_{t} ( y ) = \frac{n_{t-1} (y) + 1/2}{(t - 1) + |\cY |/2}
+%     \, ,
+%   \end{equation}
+%   with $n_{t-1} (y) = | \{ 1 \leq s \leq t -1 : y_s = y \} |,$ 
+%   satisfies the following regret bound with respect to the class $\probas(\cY)$ of constant experts \textup(which always predict the same probability distribution on $\cY$\textup)\textup: 
+%   \begin{equation}
+%     \label{eq:regret-kt}
+%     \sum_{t=1}^n \ell (\pred_t, y_t) - \inf_{p \in \probas (\cY)} \sum_{t=1}^n \ell (p, y_t)
+%     \leq\frac{|\cY| - 1}{2} \log (4n)
+%   \end{equation}
+%   for each $n \geq 1.$
+% \end{lemma}
+
+% %%% and enable to control the regret at each leaf
+% %%% put in the appendix or proof section ?
+% \begin{lemma}[\cite{cesabianchi2006PLG}, p.~43]
+%   \label{lem:regret-average-square}
+%   Consider the square loss $\ell (\pred, y) = (\pred - y)^2$ on $\cY = \predspace = [-B, B],$ with $B >0$. 
+%   For every $t \geq 1,$ let $y_t \in [-B, B]$.
+%   Consider the strategy defined by $\pred_1 = 0$, and for each $t \geq 2,$
+%   \begin{equation}
+%     \label{eq:average-online}
+%     \pred_t = \frac{1}{t-1} \sum_{s=1}^{t-1} y_s \, .
+%   \end{equation}
+%   The regret of this strategy with respect to the class of constant experts \textup(which always predict some $b\in [-B, B]$\textup) is upper bounded as follows\textup:
+%   \begin{equation}
+%     \label{eq:regret-average-square}
+%     \sum_{t=1}^n \ell (\pred_t, y_t) - \inf_{b \in [-B, B]} \sum_{t=1}^n \ell (b, y_t)
+%     \leq 8 B^2 (1+ \log n)
+%   \end{equation}
+%   for each $n \geq 1.$
+% \end{lemma}
+
+
+% \begin{proof}[Lemma~\ref{lem:regret-pruning}]
+%   This follows from Proposition~\ref{prop:algorithm-implements-aggregation} and Lemma~\ref{lem:exp-regret}.  
+% \end{proof}
+
+% \begin{proof}[Corollary~\ref{cor:regret-best-pruning-log}]
+%   Since the logarithmic loss is $1$-exp-concave, Lemma~\ref{lem:regret-pruning} implies
+%   \begin{equation}
+%     \label{eq:proof-regret-log-1}
+%     \sum_{t=1}^n \ell (\wh f_t (x_t) , y_t)    
+%     - \sum_{t=1}^n \ell (\pred_{\tree, t} (x_t), y_t)
+%     \leq |\tree| \log 2
+%   \end{equation}
+%   for every subtree $\tree$.
+%   It now remains to bound the regret of the tree forecaster $\tree$ with respect to the optimal labeling of its leaves.
+%   By Lemma~\ref{lem:regret-kt-log}, for every leaf $\node$ of $\tree$,
+%   % and every $p_\node \in \probas(\cY)$,
+%   \begin{equation*}
+%     %\label{eq:proof-regret-log-2}
+%     \sum_{1\leq t \leq n \pp x_t \in \cell_\node} \ell (\pred_{\tree, t} (x_t), y_t)
+%     - \inf_{p_\node \in \probas(\cY)} \sum_{1\leq t \leq n \pp x_t \in \cell_\node} \ell (p_\node, y_t)
+%     \leq \frac{|\cY| - 1}{2} \log (4 N_{\node, n})
+%   \end{equation*}
+%   where $N_{\node, n} = | \{ 1\leq t \leq n : x_t \in \cell_\node \} |$ (assuming that $N_{\node, n} \geq 1$).
+%   Summing the above inequality over the leaves $\node$ of $\tree$ such that $N_{\node, n} \geq 1$
+%   yields
+%   \begin{equation}
+%     \label{eq:proof-regret-log-3}
+%     \sum_{t=1}^n \ell (\pred_{\tree, t} (x_t), y_t)
+%     - \inf_{g_\tree} \sum_{t=1}^n \ell (g_\tree (x_t), y_t)
+%     \leq \frac{|\cY| - 1}{2} \sum_{\node \in \leaves (\tree) \pp N_{\node, n} \geq 1} \log (4 N_{\node, n})
+%   \end{equation}
+%   where $g_\tree$ is any function constant on the leaves of $\tree$.
+%   Now, letting $L = | \{ \node \in \leaves(\tree) :  N_{\node, n} \geq 1 \} | \leq |\leaves(\tree)| = \frac{|\tree| + 1}{2}$, we have by concavity of the $\log$ 
+%   \begin{align*}
+%     \sum_{\node \in \leaves (\tree) \pp N_{\node, n} \geq 1} \log (4 N_{\node, n})
+%     &\leq L \log \bigg( \frac{\sum_{\node \in \leaves (\tree) \pp N_{\node, n} \geq 1} 4 N_{\node, n}}{L} \bigg) \\
+%     & = L \log \Big( \frac{4n}{L} \Big) \leq \frac{|\tree|+1}{2} \log (4n) \, .
+%   \end{align*}
+%   Plugging this in~\eqref{eq:proof-regret-log-3} and combining with Equation~\eqref{eq:proof-regret-log-1} leads to the desired bound~\eqref{eq:regret-best-pruning-log}.
+% \end{proof}
+
+% \begin{proof}[Corollary~\ref{cor:regret-best-pruning-square}]
+%   The proof proceeds similarly to that of Corollary~\ref{cor:regret-best-pruning-log}, by combining Lemmas~\ref{lem:regret-pruning} and~\ref{lem:regret-average-square} and using the fact that the square loss is $\eta = 1/ ( 8 B^2 )$-exp-concave on $[-B, B]$.
+% \end{proof}
+
+% \begin{proof}[Corollary~\ref{cor:regret-lambda-regression}]
+%   First, we reason conditionally on the Mondrian process $\mondrian$.
+%   By applying Corollary~\ref{cor:regret-best-pruning-square} to $\tree = \mondrian_\lambda$, we obtain, since the number of nodes of $\mondrian_\lambda$ is $2 | \leaves(\mondrian_\lambda) | - 1$:
+%   \begin{equation}    
+%     \label{eq:proof-regret-lambda}    
+%     \sum_{t=1}^n \ell (\wh f_t (x_t) , y_t)
+%     - \inf_g \sum_{t=1}^n \ell (g (x_t), y_t)
+%     \leq 8 B^2 | \leaves (\mondrian_\lambda)| \log n \, ,
+%   \end{equation}
+%   where the infimum spans over all functions $g : [0, 1]^d \to \predspace$ which are constant on the cells of $\mondrian_\lambda$.
+%   Corollary~\ref{cor:regret-lambda-regression} follows by taking the expectation over $\mondrian$ and using the fact that  $\mondrian_\lambda \sim \MP (\lambda)$ implies $\E [ |\leaves (\mondrian_\lambda) | ] = (1+\lambda)^d$ \cite[Corollary~1]{mourtada2018mondrian}.
+% \end{proof}
+
+
+% \begin{proof}[Lemma~\ref{lem:online-to-batch}]
+%   For every $t=1, \dots, n$, $\wh f_t$ is $\F_{t-1} := \sigma(x_1, y_1, \dots, x_{t-1}, y_{t-1})$-measurable and since $(x_t, y_t)$ is independent of $\F_t$:
+%   % $\E [ \wh f_t () ]$
+%   \begin{equation*}
+%     \E [ \ell ( \wh f_t (x_t), y_t ) ]
+%     = \E [ \E [ \ell ( \wh f_t (x_t) , y_t ) \cond \F_{t-1} ]  ]
+%     = \E [ R (\wh f_t) ]
+%     \, ,
+%   \end{equation*}
+%   so that, for every $g \in \G$,
+%   \begin{equation*}
+%     \frac{1}{n} \E \Big[ \sum_{t=1}^n \big( \ell (\wh f_t (x_t), y_t) - \ell (g(x_t), y_t) \big) \Big] = \frac{1}{n} \sum_{t=1}^n \E [ R (\wh f_t) ] - R(g) = \E [ R (\widetilde f_n ) ] - R(g) \, .
+%   \end{equation*}
+% \end{proof}
+
+
+\section*{Broader Impact}
+
+Authors are required to include a statement of the broader impact of their work, including its ethical aspects and future societal consequences. 
+Authors should discuss both positive and negative outcomes, if any. For instance, authors should discuss a) 
+who may benefit from this research, b) who may be put at disadvantage from this research, c) what are the consequences of failure of the system, and d) whether the task/method leverages
+biases in the data. If authors believe this is not applicable to them, authors can simply state this.
+
+Use unnumbered first level headings for this section, which should go at the end of the paper. {\bf Note that this section does not count towards the eight pages of content that are allowed.}
+
+\begin{ack}
+Use unnumbered first level headings for the acknowledgments. All acknowledgments
+go at the end of the paper before the list of references. Moreover, you are required to declare 
+funding (financial activities supporting the submitted work) and competing interests (related financial activities outside the submitted work). 
+More information about this disclosure can be found at: \url{https://neurips.cc/Conferences/2020/PaperInformation/FundingDisclosure}.
+
+
+Do {\bf not} include this section in the anonymized submission, only in the final paper. You can use the \texttt{ack} environment provided in the style file to autmoatically hide this section in the anonymized submission.
+\end{ack}
+
+
+\section*{References}
+
+References follow the acknowledgments. Use unnumbered first-level heading for
+the references. Any choice of citation style is acceptable as long as you are
+consistent. It is permissible to reduce the font size to \verb+small+ (9 point)
+when listing the references.
+{\bf Note that the Reference section does not count towards the eight pages of content that are allowed.}
+\medskip
+
+\small
+
+\bibliographystyle{alpha}
+\bibliography{biblio-journal}
+
+
+\newpage  
+\appendix
+
+
+\section{Supplementary material}
+
+Proofs
+
+\end{document}

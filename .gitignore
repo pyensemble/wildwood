@@ -1,3 +1,14 @@
+# latex compiled files
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.pdf
+*.synctex.gz
+
 # Byte-compiled / optimized / DLL files
 wildwood/fromscikit/*
 __pycache__/
