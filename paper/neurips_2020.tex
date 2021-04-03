@@ -284,7 +284,9 @@
 \maketitle
 
 \begin{abstract}
-    We introduce WildWood (WW), a new ensemble algorithm for supervised learning of Random Forest (RF) type. It is faster than standard approaches used in RF relying on pre-sorted or inplace sorting thanks to the binning approach commonly used in extreme gradient boosting, such as LightGBM. Furthermore, it makes a very different use of the bootstrap out-of-the-bag samples used by each individual tree in the forest to compute aggregation weights for the exponential weights aggregation algorithm, which allows to perform automatic soft tree pruning, which leads to BLALBA
+    We introduce WildWood (WW), a new ensemble algorithm for supervised learning of Random Forest (RF) type. 
+    While standard RF algorithm use bootstrap out-of-the-bag samples to compute simple scores, WW use these samples to perform aggregation with exponential weights, which leads to much improved predictions. BLABLA WW makes a very different use of the  used by each individual tree in the forest to in order to use a perform compute aggregation weights for the exponential weights aggregation algorithm, which allows to perform automatic soft tree pruning, which leads to BLALBA
+    It is faster than standard approaches used in RF relying on pre-sorted or inplace sorting thanks to the binning approach commonly used in extreme gradient boosting, such as LightGBM. Furthermore, it makes 
 \end{abstract}
 
 \section{Introduction}
