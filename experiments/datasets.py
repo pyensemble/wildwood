@@ -2,6 +2,7 @@ import os
 from gzip import GzipFile
 from time import time
 
+from urllib.request import urlretrieve
 
 import numpy as np
 import pandas as pd
