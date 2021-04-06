@@ -39,12 +39,14 @@ def logistic_regression(dataset, penalty='l2', dual=False, random_state=0, n_job
 def xgboost(dataset, random_state=0, use_label_encoder=False, n_estimators=100, n_jobs=-1, max_depth=None, verbose=False):
 
     print("Training XGBoost classifier ...")
-    tic = time()
 
     clf = xgb.XGBClassifier(random_state= random_state, use_label_encoder=False, n_estimators=n_estimators,
                             n_jobs= n_jobs, max_depth= max_depth)
     print("Running XGBClassifier with use_label_encoder=False")
-    clf.fit(dataset.data_train, dataset.target_train, verbose=verbose, sample_weight=dataset.get_train_sample_weights())
+    sample_weights = dataset.get_train_sample_weights()
+
+    tic = time()
+    clf.fit(dataset.data_train, dataset.target_train, verbose=verbose, sample_weight=dataset.sample_weights)
     toc = time()
 
     fit_time = toc - tic
@@ -58,9 +60,10 @@ def catboost(dataset, n_estimators=100, n_jobs=-1, random_state=0, verbose=0):
 
     clf = CatBoostClassifier(n_estimators= n_estimators, random_seed= random_state, cat_features=cat_features,
                              thread_count= n_jobs)
+    sample_weights = dataset.get_train_sample_weights()
 
     tic = time()
-    clf.fit(dataset.data_train, dataset.target_train, verbose=bool(verbose), sample_weight=dataset.get_train_sample_weights(),
+    clf.fit(dataset.data_train, dataset.target_train, verbose=bool(verbose), sample_weight=sample_weights,
             cat_features=cat_features)
     toc = time()
     fit_time = toc - tic
@@ -73,10 +76,11 @@ def lightgbm(dataset, n_estimators=100, n_jobs=-1, random_state=0, verbose=0):
     cat_features = list(range(dataset.nb_continuous_features, dataset.n_features))
 
     clf = lgb.LGBMClassifier(n_estimators= n_estimators, random_state= random_state, n_jobs= n_jobs)
+    sample_weights = dataset.get_train_sample_weights()
 
     tic = time()
     clf.fit(dataset.data_train, dataset.target_train, verbose=bool(verbose),
-            sample_weight=dataset.get_train_sample_weights(), categorical_feature=cat_features)
+            sample_weight=sample_weights, categorical_feature=cat_features)
     toc = time()
     fit_time = toc - tic
     print(f"fitted in {toc - tic:.3f}s")
@@ -87,10 +91,10 @@ def lightgbm(dataset, n_estimators=100, n_jobs=-1, random_state=0, verbose=0):
 def sklearn_random_forest(dataset, n_estimators=100, n_jobs=-1, criterion='gini', random_state=0):
 
     clf = RandomForestClassifier(n_estimators= n_estimators, criterion= criterion, random_state= random_state, n_jobs= n_jobs)
-
+    sample_weights = dataset.get_train_sample_weights()
     tic = time()
 
-    clf.fit(dataset.data_train, dataset.target_train, sample_weight=dataset.get_train_sample_weights())
+    clf.fit(dataset.data_train, dataset.target_train, sample_weight=sample_weights)
     toc = time()
 
     fit_time = toc - tic
@@ -104,9 +108,9 @@ def wildwood(dataset, n_estimators=100, n_jobs=-1, criterion='gini', random_stat
     clf = ForestClassifier(n_estimators= n_estimators, random_state= random_state,
                                  n_jobs= n_jobs , criterion=criterion)
     clf.fit(dataset.data_train[:100], dataset.target_train[:100])# , sample_weight=train_sample_weights)
-
+    sample_weights = dataset.get_train_sample_weights()
     tic = time()
-    clf.fit(dataset.data_train, dataset.target_train)#, sample_weight=dataset.get_train_sample_weights())
+    clf.fit(dataset.data_train, dataset.target_train)#, sample_weight=sample_weights)
     toc = time()
     fit_time = toc - tic
     print(f"fitted in {toc - tic:.3f}s")
