@@ -5,12 +5,18 @@
 
 import types
 from itertools import product
+from time import time
 
 import numpy as np
 import pytest
 
 from sklearn.utils import compute_sample_weight
 from sklearn.metrics import classification_report
+from sklearn.datasets import make_moons
+
+from joblib import effective_n_jobs
+from time import time
+import logging
 
 
 def approx(v, abs=1e-15):
@@ -24,6 +30,10 @@ from sklearn.metrics import roc_auc_score
 from wildwood import ForestClassifier
 
 
+# logging.basicConfig(
+#     level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+# )
+
 # TODO: parameter_test_with_type does nothing !!!
 
 
@@ -32,6 +42,12 @@ class TestForestClassifier(object):
     def _setup(self):
         self.iris = load_iris()
         self.breast_cancer = load_breast_cancer()
+        self.effective_n_jobs = effective_n_jobs()
+
+        # logging.info(
+        #     "%d jobs can be effectively be run in parallel on this machine"
+        #     % self.effective_n_jobs
+        # )
 
     def test_min_samples_split(self):
         clf = ForestClassifier()
@@ -477,3 +493,90 @@ class TestForestClassifier(object):
             assert label_report2["precision"] >= label_report1["precision"]
             assert label_report2["recall"] >= label_report1["recall"]
             assert label_report2["f1-score"] >= label_report1["f1-score"]
+
+    def test_performance_iris(self):
+        iris = self.iris
+        X, y = iris["data"], iris["target"]
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, shuffle=True, stratify=y, random_state=42, test_size=0.3
+        )
+        clf = ForestClassifier(class_weight="balanced", random_state=42)
+        clf.fit(X_train, y_train)
+        y_score = clf.predict_proba(X_test)
+        assert roc_auc_score(y_test, y_score, multi_class="ovo") >= 0.985
+        clf = ForestClassifier(random_state=42)
+        clf.fit(X_train, y_train)
+        y_score = clf.predict_proba(X_test)
+        assert roc_auc_score(y_test, y_score, multi_class="ovo") >= 0.985
+
+    def test_performance_breast_cancer(self):
+        breast_cancer = self.breast_cancer
+        X, y = breast_cancer["data"], breast_cancer["target"]
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, shuffle=True, stratify=y, random_state=42, test_size=0.3
+        )
+        clf = ForestClassifier(class_weight="balanced", random_state=42)
+        clf.fit(X_train, y_train)
+        y_score = clf.predict_proba(X_test)
+        assert roc_auc_score(y_test, y_score[:, 1]) >= 0.98
+        clf = ForestClassifier(random_state=42)
+        clf.fit(X_train, y_train)
+        y_score = clf.predict_proba(X_test)
+        assert roc_auc_score(y_test, y_score[:, 1]) >= 0.98
+
+    def test_performance_moons(self):
+        pass
+
+    def test_parallel_fit(self):
+        n_samples = 100_000
+        X, y = make_moons(n_samples=n_samples, noise=0.2, random_state=42)
+
+        # Precompile
+        clf = ForestClassifier(n_estimators=1, n_jobs=1, aggregation=True)
+        clf.fit(X[:10], y[:10])
+        clf = ForestClassifier(n_estimators=1, n_jobs=1, aggregation=False)
+        clf.fit(X[:10], y[:10])
+
+        random_state = 42
+
+        effective_n_jobs = self.effective_n_jobs
+        print("effective_n_jobs: ", effective_n_jobs)
+
+        def is_parallel_split_faster(n_estimators, aggregation):
+            clf = ForestClassifier(
+                random_state=random_state,
+                n_estimators=n_estimators,
+                n_jobs=1,
+                aggregation=aggregation,
+            )
+            tic = time()
+            clf.fit(X, y)
+            toc = time()
+            time_no_parallel = toc - tic
+
+            clf = ForestClassifier(
+                random_state=random_state,
+                n_estimators=n_estimators,
+                n_jobs=effective_n_jobs,
+                aggregation=aggregation,
+            )
+
+            tic = time()
+            clf.fit(X, y)
+            toc = time()
+            time_parallel = toc - tic
+
+            # We want parallel code to be effective_n_jobs / 3 faster when using
+            # effectively effective_n_jobs threads
+            assert time_no_parallel >= effective_n_jobs * time_parallel / 3
+            print("time_no_parallel:", time_no_parallel)
+            print("time_parallel:", time_parallel)
+
+        # We want each thread to handle 4 trees
+        n_estimators = 4 * effective_n_jobs
+        is_parallel_split_faster(n_estimators=n_estimators, aggregation=True)
+        is_parallel_split_faster(n_estimators=n_estimators, aggregation=False)
+
+    def test_parallel_predict_proba(self):
+        # TODO: predict_proba in parallel is sloooooowwwww ????
+        pass
