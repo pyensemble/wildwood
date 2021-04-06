@@ -46,7 +46,7 @@ def xgboost(dataset, random_state=0, use_label_encoder=False, n_estimators=100, 
     sample_weights = dataset.get_train_sample_weights()
 
     tic = time()
-    clf.fit(dataset.data_train, dataset.target_train, verbose=verbose, sample_weight=dataset.sample_weights)
+    clf.fit(dataset.data_train, dataset.target_train, verbose=verbose, sample_weight=sample_weights)
     toc = time()
 
     fit_time = toc - tic
@@ -110,7 +110,7 @@ def wildwood(dataset, n_estimators=100, n_jobs=-1, criterion='gini', random_stat
     clf.fit(dataset.data_train[:100], dataset.target_train[:100])# , sample_weight=train_sample_weights)
     sample_weights = dataset.get_train_sample_weights()
     tic = time()
-    clf.fit(dataset.data_train, dataset.target_train)#, sample_weight=sample_weights)
+    clf.fit(dataset.data_train, dataset.target_train, sample_weight=sample_weights)
     toc = time()
     fit_time = toc - tic
     print(f"fitted in {toc - tic:.3f}s")
