@@ -527,7 +527,7 @@ def compute_node_classifier_context(
                 label = uintp(y[sample])
                 # TODO: aggregation loss is hard-coded here. Call a function instead
                 #  when implementing other losses
-                loss_valid += -log(y_pred[label])
+                loss_valid += - w_samples_valid * log(y_pred[label])
 
             w_samples_valid_in_bins[f, bin] += sample_weight
 
@@ -677,7 +677,7 @@ def compute_node_regressor_context(
                 label = y[sample]
                 # TODO: aggregation loss is hard-coded here. Call a function instead
                 #  when implementing other losses
-                loss_valid += (label - y_pred) * (label - y_pred)
+                loss_valid += sample_weight * (label - y_pred) * (label - y_pred)
 
             w_samples_valid_in_bins[f, bin] += sample_weight
 

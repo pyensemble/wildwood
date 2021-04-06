@@ -182,6 +182,8 @@ def plot_decision_classification(classifiers, datasets):
         for name, clf in classifiers:
             ax = plt.subplot(n_datasets, n_classifiers + 1, i)
             clf.fit(X_train, y_train)
+
+            clf.apply(X_train)
             # logging.info("%s had %d nodes" % (name, clf.tree_.node_count))
             truc = np.empty((xx.ravel().shape[0], 2))
             truc[:, 0] = xx.ravel()

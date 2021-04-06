@@ -44,6 +44,8 @@ np.set_printoptions(precision=2)
 
 random_state = 42
 
+np.random.seed(0)
+
 iris = datasets.load_iris()
 
 

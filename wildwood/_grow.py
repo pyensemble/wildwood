@@ -164,7 +164,7 @@ def has_records(records):
     output : bool
         Returns True if there are remaining records in the stack, False otherwise
     """
-    return records.top <= 0
+    return records.top > 0
 
 
 @jit(
@@ -245,7 +245,7 @@ def pop_node_record(records):
         "feature": uintp,
         "found_split": boolean,
         "threshold": float32,
-        "weighted_n_samples_valid": float32,
+        "w_samples_valid": float32,
         "pos_train": uintp,
         "pos_valid": uintp,
         "aggregation": boolean,
@@ -325,7 +325,7 @@ def grow(
     # TODO: this option will come for the forest later
     min_samples_split = 2
 
-    while not has_records(records):
+    while has_records(records):
         # Get information about the current node
         (
             parent,
@@ -382,8 +382,6 @@ def grow(
         # TODO: correct this when actually using the threshold instead of
         #  bin_threshold
         threshold = 0.42
-        # TODO: now used for now
-        weighted_n_samples_valid = 42.0
 
         node_id = add_node_tree(
             # The tree
@@ -411,7 +409,7 @@ def grow(
             # Weighted number of training samples
             node_context.w_samples_train,
             # NOT USED FOR NOW
-            weighted_n_samples_valid,
+            node_context.w_samples_valid,
             # Index of the first training sample in the node
             start_train,
             # End-index of the slice containing the node's training samples

@@ -16,7 +16,7 @@ from scipy.sparse import issparse
 from sklearn.ensemble._base import _partition_estimators
 from sklearn.utils import check_random_state, compute_sample_weight, check_array
 from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
-from sklearn.utils.validation import check_consistent_length
+from sklearn.utils.validation import check_consistent_length, _check_sample_weight
 from sklearn.preprocessing import LabelEncoder
 
 from sklearn.utils.fixes import _joblib_parallel_args, delayed
@@ -69,7 +69,7 @@ def _generate_train_valid_samples(random_state, n_samples):
     # For very small samples, we might end up with empty validation...
     if valid_mask.sum() == 0:
         return _generate_train_valid_samples(
-            (random_state + 1) % np.iinfo(np.uintp).max, n_samples
+            (random_state + 1) % np.iinfo(np.uint32).max, n_samples
         )
     else:
         train_mask = np.logical_not(valid_mask)
@@ -79,25 +79,48 @@ def _generate_train_valid_samples(random_state, n_samples):
         return train_indices, valid_indices, train_indices_count
 
 
-# TODO: faudrait que la parallelisation marche des de le debut...
-def _parallel_build_trees(tree, X, y, sample_weight):
-    """
-    Private function used to fit a single tree in parallel.
-    """
-    n_samples = X.shape[0]
-    if sample_weight is None:
-        sample_weight = np.ones((n_samples,), dtype=np.float32)
-    else:
-        sample_weight = sample_weight.astype(np.float32)
+def _parallel_build_trees(tree, X, y, sample_weight, random_state_bootstrap):
+    """Private function used to fit a single tree in parallel.
 
-    # TODO: all trees have the same train and valid indices...
+    Parameters
+    ----------
+    tree : TreeClassifier or TreeRegressor
+        The tree to fit
+
+    X : {array-like, sparse matrix} of shape (n_samples, n_features)
+        The training input samples. Internally, it will be binned into a uint8
+        dtype following LightGBM's histogram strategy. If a sparse matrix is
+        provided, it will be converted into a sparse ``csc_matrix``.
+
+    y : array-like of shape (n_samples,)
+        The target values (class labels in classification, real numbers in
+        regression).
+
+    sample_weight : array-like of shape (n_samples,)
+        Sample weights. If no weighting is used then it is a vector of ones.
+
+    random_state_bootstrap : int
+        The seed used to instantiate the random number generator
+
+    Returns
+    -------
+    output : TreeClassifier or TreeRegressor
+        The fitted tree
+    """
+
+    n_samples = X.shape[0]
+    # A copy is required, since we'll modify it inplace for the bootstrap
+    sample_weight = sample_weight.copy()
+
     train_indices, valid_indices, train_indices_count = _generate_train_valid_samples(
-        tree.random_state, n_samples
+        random_state_bootstrap, n_samples
     )
     # We use bootstrap: sample repetition is achieved by multiplying the sample
     # weights by the sample counts. By construction, no repetition is possible in
     # validation data
     sample_weight[train_indices] *= train_indices_count
+
+    # Fit the tree
     tree.fit(X, y, train_indices, valid_indices, sample_weight)
     return tree
 
@@ -126,6 +149,12 @@ def _get_tree_prediction(predict, X, out, lock, tree_idx):
         out[tree_idx] = prediction
 
 
+def _parallel_tree_apply(apply, X, out, lock, idx_tree):
+    leaves = apply(X)
+    with lock:
+        out[idx_tree] = leaves
+
+
 class ForestBase(BaseEstimator):
     """
     BLABLA
@@ -152,8 +181,11 @@ class ForestBase(BaseEstimator):
         self._fitted = False
         self._n_samples_ = None
         self._n_features_ = None
+        self._class_weight = None
         self.max_features_ = None
         self.n_jobs_ = None
+        self._random_states = None
+        self.trees = None
 
         # Set the parameters. This calls the properties defined below
         self.n_estimators = n_estimators
@@ -171,20 +203,70 @@ class ForestBase(BaseEstimator):
         self.random_state = random_state
         self.verbose = verbose
 
-    def fit(self, X, y):
+    def _generate_random_states(self):
+        """This helper method generates one seed (random_state) for each tree,
+        that is used to generate at random bootstrap samples and columns subsampling.
+
+        For testing purposes (see tests/test_forest.py::test_random_state) we save
+        those into two separate arrays self._random_states_bootstrap and
+        self._random_states_trees even if these are identical in non-testing settings
         """
+        # Get the random instance
+        random_instance = check_random_state(self.random_state)
+        # Generate seeds for each tree and same them for testing
+        _random_states = random_instance.randint(
+            np.iinfo(np.uint32).max, size=self.n_estimators
+        )
+        self._random_states_bootstrap = _random_states
+        self._random_states_trees = _random_states
+
+    def fit(self, X, y, sample_weight=None):
         """
+        Trains WildWood's forest predictor from the training set (X, y).
+
+        Parameters
+        ----------
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
+            The training input samples. Internally, it will be binned into a uint8
+            dtype following LightGBM's histogram strategy. If a sparse matrix is
+            provided, it will be converted into a sparse ``csc_matrix``.
+
+        y : array-like of shape (n_samples,)
+            The target values (class labels in classification, real numbers in
+            regression).
+
+        sample_weight : array-like of shape (n_samples,), default=None
+            If None, then samples are equally weighted. Otherwise, samples are
+            weighted. If sample_weight[42] = 3.0 then all computations do "as if"
+            there were 3 lines with the same contents as X[42] in all computations
+            (for split finding, node predictions and for the aggregation algorithm
+            (computation of validation losses).
+
+        Returns
+        -------
+        self : object
+        """
+
         # TODO: Why only float64 ? What if the data is already binned ?
         X, y = self._validate_data(
             X, y, dtype=[np.float32], force_all_finite=False, order="F"
         )
+        check_consistent_length(X, y)
+
+        # In all cases we have a sample_weight_ vector: it contains only ones if
+        # sample_weight=None.
+        sample_weight_ = _check_sample_weight(sample_weight, X, dtype=np.float32)
 
         is_classifier = isinstance(self, ForestClassifier)
+
         if is_classifier:
             y = self._encode_y(y)
+            class_weight = self.class_weight
+            if class_weight is not None:
+                expanded_class_weight = compute_sample_weight(class_weight, y)
+                sample_weight_ *= expanded_class_weight
         else:
             y = np.ascontiguousarray(y, dtype=np.float32)
-        check_consistent_length(X, y)
 
         # TODO: deal properly with categorical features. What if these are specified ?
         self.is_categorical_, known_categories = self._check_categories(X)
@@ -197,9 +279,9 @@ class ForestBase(BaseEstimator):
         self.max_features_ = max_features_
         n_jobs_ = self._get_n_jobs_(self.n_jobs, self.n_estimators)
         self.n_jobs_ = n_jobs_
-        random_state_ = check_random_state(self.random_state)
 
-        # TODO: deal with class_weight here
+        self._generate_random_states()
+
         # Everywhere in the code, the convention is that n_bins == max_bins + 1,
         # since max_bins is the maximum number of bins, without the eventual bin for
         # missing values (+ 1 is for the missing values bin)
@@ -242,10 +324,12 @@ class ForestBase(BaseEstimator):
                     min_samples_leaf=self.min_samples_leaf,
                     categorical_features=self.categorical_features,
                     max_features=max_features_,
-                    random_state=random_state_,
+                    random_state=random_state,
                     verbose=self.verbose,
                 )
-                for _ in range(self.n_estimators)
+                for _, random_state in zip(
+                    range(self.n_estimators), self._random_states_trees
+                )
             ]
         else:
             # We are training a regressor
@@ -261,10 +345,12 @@ class ForestBase(BaseEstimator):
                     min_samples_leaf=self.min_samples_leaf,
                     categorical_features=self.categorical_features,
                     max_features=max_features_,
-                    random_state=random_state_,
+                    random_state=random_state,
                     verbose=self.verbose,
                 )
-                for _ in range(self.n_estimators)
+                for _, random_state in zip(
+                    range(self.n_estimators), self._random_states_trees
+                )
             ]
 
         # Parallel loop: use threading since all the numba code releases the GIL
@@ -276,10 +362,12 @@ class ForestBase(BaseEstimator):
                     tree,
                     X_binned,
                     y,
-                    # TODO: deal with sample_weight
-                    None,
+                    sample_weight_,
+                    random_state_bootstrap,
                 )
-                for tree in tqdm(trees)
+                for tree, random_state_bootstrap in zip(
+                    tqdm(trees), self._random_states_bootstrap
+                )
             )
         else:
             trees = Parallel(
@@ -289,10 +377,12 @@ class ForestBase(BaseEstimator):
                     tree,
                     X_binned,
                     y,
-                    # TODO: deal with sample_weight
-                    None,
+                    sample_weight_,
+                    random_state_bootstrap,
                 )
-                for tree in trees
+                for tree, random_state_bootstrap in zip(
+                    trees, self._random_states_bootstrap
+                )
             )
 
         self.trees = trees
@@ -318,14 +408,23 @@ class ForestBase(BaseEstimator):
             For each datapoint x in X and for each tree in the forest,
             return the index of the leaf x ends up in.
         """
-        X = self._validate_X_predict(X)
-        results = Parallel(
+        X_binned, n_jobs, lock = self.predict_helper(X)
+        n_samples = X_binned.shape[0]
+        out = np.empty((self.n_estimators, n_samples), dtype=np.uintp)
+        Parallel(
             n_jobs=self.n_jobs,
             verbose=self.verbose,
             **_joblib_parallel_args(prefer="threads"),
-        )(delayed(tree.apply)(X, check_input=False) for tree in self.estimators_)
+        )(
+            delayed(_parallel_tree_apply)(tree.apply, X_binned, out, lock, idx_tree)
+            for idx_tree, tree in enumerate(self.trees)
+        )
 
-        return np.array(results).T
+        return out
+
+    def _validate_y_class_weight(self, y):
+        # Default implementation
+        return y, None
 
     def _validate_X_predict(self, X, check_input):
         """Validate the training data on predict (probabilities)."""
@@ -458,6 +557,19 @@ class ForestBase(BaseEstimator):
         #     print("{:.3f} s".format(duration))
 
         return X_binned
+
+    def predict_helper(self, X):
+        """A method used in all predict functions to avoid code duplication
+        """
+        # Is the forest fitted ?
+        check_is_fitted(self)
+        # Check data
+        X = self._validate_X_predict(X, check_input=True)
+        # TODO: we can also avoid data binning for predictions...
+        X_binned = self._bin_data(X, is_training_data=False)
+        n_jobs, _, _ = _partition_estimators(self.n_estimators, self.n_jobs)
+        lock = threading.Lock()
+        return X_binned, n_jobs, lock
 
     def get_nodes(self, tree_idx):
         return self.trees[tree_idx].get_nodes()
@@ -815,28 +927,11 @@ class ForestClassifier(ForestBase, ClassifierMixin):
     verbose : int, default=0
         Controls the verbosity when fitting and predicting.
 
-    class_weight : {"balanced", "balanced_subsample"}, dict or list of dicts, \
-            default=None
-        Weights associated with classes in the form ``{class_label: weight}``.
-        If not given, all classes are supposed to have weight one. For
-        multi-output problems, a list of dicts can be provided in the same
-        order as the columns of y.
-
-        Note that for multioutput (including multilabel) weights should be
-        defined for each class of every column in its own dict. For example,
-        for four-class multilabel classification weights should be
-        [{0: 1, 1: 1}, {0: 1, 1: 5}, {0: 1, 1: 1}, {0: 1, 1: 1}] instead of
-        [{1:1}, {2:5}, {3:1}, {4:1}].
-
-        The "balanced" mode uses the values of y to automatically adjust
+    class_weight : "balanced" or None, default=None
+        Weights associated with classes. If None, all classes are supposed to have
+        weight one. The "balanced" mode uses the values of y to automatically adjust
         weights inversely proportional to class frequencies in the input data
         as ``n_samples / (n_classes * np.bincount(y))``
-
-        The "balanced_subsample" mode is the same as "balanced" except that
-        weights are computed based on the bootstrap sample for every tree
-        grown.
-
-        For multi-output, the weights of each column of y will be multiplied.
 
         Note that these weights will be multiplied with sample_weight (passed
         through the fit method) if sample_weight is specified.
@@ -883,6 +978,7 @@ class ForestClassifier(ForestBase, ClassifierMixin):
             random_state=random_state,
             verbose=verbose,
         )
+        self._classes_ = None
         self._n_classes_ = None
         self.dirichlet = dirichlet
         self.class_weight = class_weight
@@ -907,17 +1003,16 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         check_classification_targets(y)
         label_encoder = LabelEncoder()
         encoded_y = label_encoder.fit_transform(y)
-        self.classes_ = label_encoder.classes_
-        n_classes_ = self.classes_.shape[0]
+        self._classes_ = label_encoder.classes_
+        n_classes_ = self._classes_.shape[0]
         self._n_classes_ = n_classes_
         # only 1 tree for binary classification.
         # TODO: For multiclass classification, we build 1 tree per class.
-        self.n_trees_per_iteration_ = 1 if n_classes_ <= 2 else n_classes_
+        # self.n_trees_per_iteration_ = 1 if n_classes_ <= 2 else n_classes_
         encoded_y = np.ascontiguousarray(encoded_y, dtype=np.float32)
         return encoded_y
 
     def _validate_y_class_weight(self, y):
-        # TODO: c'est un copier / coller de scikit. Simplifier au cas classif binaire
         check_classification_targets(y)
 
         y = np.copy(y)
@@ -926,47 +1021,14 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         if self.class_weight is not None:
             y_original = np.copy(y)
 
-        self.classes_ = []
-        self.n_classes_ = []
-
         y_store_unique_indices = np.zeros(y.shape, dtype=int)
-        for k in range(self.n_outputs_):
-            classes_k, y_store_unique_indices[:, k] = np.unique(
-                y[:, k], return_inverse=True
-            )
-            self.classes_.append(classes_k)
-            self.n_classes_.append(classes_k.shape[0])
+        classes_, y_store_unique_indices[:] = np.unique(y, return_inverse=True)
+        self._classes_ = classes_
+        self._n_classes_ = classes_.shape[0]
         y = y_store_unique_indices
 
         if self.class_weight is not None:
-            valid_presets = ("balanced", "balanced_subsample")
-            if isinstance(self.class_weight, str):
-                if self.class_weight not in valid_presets:
-                    raise ValueError(
-                        "Valid presets for class_weight include "
-                        '"balanced" and "balanced_subsample".'
-                        'Given "%s".' % self.class_weight
-                    )
-                if self.warm_start:
-                    warn(
-                        'class_weight presets "balanced" or '
-                        '"balanced_subsample" are '
-                        "not recommended for warm_start if the fitted data "
-                        "differs from the full dataset. In order to use "
-                        '"balanced" weights, use compute_class_weight '
-                        '("balanced", classes, y). In place of y you can use '
-                        "a large enough sample of the full training set "
-                        "target to properly estimate the class frequency "
-                        "distributions. Pass the resulting weights as the "
-                        "class_weight parameter."
-                    )
-
-            if self.class_weight != "balanced_subsample" or not self.bootstrap:
-                if self.class_weight == "balanced_subsample":
-                    class_weight = "balanced"
-                else:
-                    class_weight = self.class_weight
-                expanded_class_weight = compute_sample_weight(class_weight, y_original)
+            expanded_class_weight = compute_sample_weight(self.class_weight, y_original)
 
         return y, expanded_class_weight
 
@@ -991,10 +1053,6 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         y : ndarray of shape (n_samples,) or (n_samples, n_outputs)
             The predicted classes.
         """
-
-        # TODO: c'est un copier / coller de scikit-learn. Simplifier au cas
-        #  classification binaire. Et il faut binner les features avant de predire
-
         proba = self.predict_proba(X)
         return self.classes_.take(np.argmax(proba, axis=1), axis=0)
 
@@ -1021,34 +1079,19 @@ class ForestClassifier(ForestBase, ClassifierMixin):
             The class probabilities of the input samples. The order of the
             classes corresponds to that in the attribute :term:`classes_`.
         """
-        # TODO: c'est un copier / coller de scikit-learn. Simplifier au cas
-        #  classification binaire. Et il faut binner les features avant de predire
-
-        check_is_fitted(self)
-        # Check data
-        X = self._validate_X_predict(X, check_input=True)
-
-        # TODO: we can also avoid data binning for predictions...
-        # Bin the data
-        X_binned = self._bin_data(X, is_training_data=False)
-
-        # Assign chunk of trees to jobs
-        n_jobs, _, _ = _partition_estimators(self.n_estimators, self.n_jobs)
-
+        X_binned, n_jobs, lock = self.predict_helper(X)
         all_proba = np.zeros((X_binned.shape[0], self.n_classes_))
-
-        lock = threading.Lock()
         Parallel(
             n_jobs=n_jobs,
             verbose=self.verbose,
             **_joblib_parallel_args(require="sharedmem"),
         )(
-            delayed(_accumulate_prediction)(e.predict_proba, X_binned, all_proba, lock)
-            for e in self.trees
+            delayed(_accumulate_prediction)(
+                tree.predict_proba, X_binned, all_proba, lock
+            )
+            for tree in self.trees
         )
-
         all_proba /= len(self.trees)
-
         return all_proba
 
     def predict_proba_trees(self, X):
@@ -1083,16 +1126,6 @@ class ForestClassifier(ForestBase, ClassifierMixin):
     def loss(self):
         return self._loss
 
-    @criterion.setter
-    def criterion(self, val):
-        if not isinstance(val, str):
-            raise ValueError("criterion must be a string")
-        else:
-            if val != "gini":
-                raise ValueError("Only criterion='gini' is supported for now")
-            else:
-                self._criterion = val
-
     @loss.setter
     def loss(self, val):
         if not isinstance(val, str):
@@ -1102,6 +1135,16 @@ class ForestClassifier(ForestBase, ClassifierMixin):
                 raise ValueError("Only loss='log' is supported for now")
             else:
                 self._loss = val
+
+    @criterion.setter
+    def criterion(self, val):
+        if not isinstance(val, str):
+            raise ValueError("criterion must be a string")
+        else:
+            if val != "gini":
+                raise ValueError("Only criterion='gini' is supported for now")
+            else:
+                self._criterion = val
 
     @property
     def dirichlet(self):
@@ -1118,6 +1161,17 @@ class ForestClassifier(ForestBase, ClassifierMixin):
                 self._dirichlet = val
 
     @property
+    def classes_(self):
+        if self._fitted:
+            return self._classes_
+        else:
+            raise ValueError("You must call fit before asking for classes_")
+
+    @classes_.setter
+    def classes_(self, _):
+        raise ValueError("classes_ is a readonly attribute")
+
+    @property
     def n_classes_(self):
         if self._fitted:
             return self._n_classes_
@@ -1127,6 +1181,22 @@ class ForestClassifier(ForestBase, ClassifierMixin):
     @n_classes_.setter
     def n_classes_(self, _):
         raise ValueError("n_classes_ is a readonly attribute")
+
+    @property
+    def class_weight(self):
+        return self._class_weight
+
+    @class_weight.setter
+    def class_weight(self, val):
+        if val is None:
+            self._class_weight = None
+        elif isinstance(val, str):
+            if val != "balanced":
+                raise ValueError('class_weight can only be None or "balanced"')
+            else:
+                self._class_weight = val
+        else:
+            raise ValueError('class_weight can only be None or "balanced"')
 
 
 class ForestRegressor(ForestBase, RegressorMixin):
@@ -1278,50 +1348,25 @@ class ForestRegressor(ForestBase, RegressorMixin):
         )
 
     def predict(self, X):
-        check_is_fitted(self)
-        # Check data
-        X = self._validate_X_predict(X, check_input=True)
-
-        # TODO: we can also avoid data binning for predictions...
-        # Bin the data
-        X_binned = self._bin_data(X, is_training_data=False)
-
-        # Assign chunk of trees to jobs
-        n_jobs, _, _ = _partition_estimators(self.n_estimators, self.n_jobs)
-
+        X_binned, n_jobs, lock = self.predict_helper(X)
         all_preds = np.zeros(X_binned.shape[0])
 
-        lock = threading.Lock()
         Parallel(
             n_jobs=n_jobs,
             verbose=self.verbose,
             **_joblib_parallel_args(require="sharedmem"),
         )(
-            delayed(_accumulate_prediction)(e.predict, X_binned, all_preds, lock)
-            for e in self.trees
+            delayed(_accumulate_prediction)(tree.predict, X_binned, all_preds, lock)
+            for tree in self.trees
         )
-
         all_preds /= len(self.trees)
-
         return all_preds
 
     def weighted_depth(self, X):
-        check_is_fitted(self)
-        # Check data
-        X = self._validate_X_predict(X, check_input=True)
-
-        # TODO: we can also avoid data binning for predictions...
-        # Bin the data
-        X_binned = self._bin_data(X, is_training_data=False)
-
-        # Assign chunk of trees to jobs
-        n_jobs, _, _ = _partition_estimators(self.n_estimators, self.n_jobs)
-
+        X_binned, n_jobs, lock = self.predict_helper(X)
         all_weighted_depths = np.zeros(
             (self.n_estimators, X_binned.shape[0]), dtype=np.float32
         )
-
-        lock = threading.Lock()
         Parallel(
             n_jobs=n_jobs,
             verbose=self.verbose,
