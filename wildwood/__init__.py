@@ -1,2 +1,2 @@
 
-from .forest import ForestClassifier
+from .forest import ForestClassifier, ForestRegressor

@@ -5,8 +5,10 @@ import numpy as np
 
 import logging
 
+
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import (
+    OrdinalEncoder,
     OneHotEncoder,
     StandardScaler,
     LabelEncoder,
@@ -77,7 +79,11 @@ class Dataset:
         self.df_raw = None
 
         self.n_samples_ = None
+        self.n_samples_train_ = None
+        self.n_samples_test_ = None
         self.n_features_ = None
+        self.n_columns_ = None
+        self.columns_ = None
         self.categorical_columns_ = None
         self.continuous_columns_ = None
         self.n_features_categorical_ = None
@@ -85,6 +91,7 @@ class Dataset:
         self.classes_ = None
         self.n_classes_ = None
         self.scaled_gini_ = None
+        self.categorical_features_ = None
 
     def __repr__(self):
         repr = "Dataset("
@@ -192,12 +199,13 @@ class Dataset:
                     ]
                 )
             else:
-                # Otherwise keep the categorical columns unchanged
+                # Otherwise just use an ordinal encoder (this just replaces the
+                # modalities by integers)
                 categorical_transformer = ColumnTransformer(
                     [
                         (
                             "categorical_transformer",
-                            FunctionTransformer(),
+                            OrdinalEncoder(),
                             self.categorical_columns,
                         )
                     ]
@@ -224,11 +232,13 @@ class Dataset:
         # column label
         self.n_samples_, _ = df.shape
 
+        # A list containing the names of the categorical colunms
         self.categorical_columns_ = [
             col
             for col, dtype in df.dtypes.items()
             if col != self.label_column and dtype.name == "category"
         ]
+        # A list containing the names of the continuous colunms
         self.continuous_columns_ = [
             col
             for col, dtype in df.dtypes.items()
@@ -238,6 +248,15 @@ class Dataset:
         self.n_features_categorical_ = len(self.categorical_columns_)
         self.n_features_continuous_ = len(self.continuous_columns_)
         self.n_features_ = self.n_features_categorical_ + self.n_features_continuous_
+
+        if not self.one_hot_encode and self.n_features_categorical_ > 0:
+            # If we do not use one-hot encoding, we compute a boolean mask indicating
+            # which features are categorical. We use the fact that by construction of
+            # the Dataset categorical features come last.
+            categorical_features = np.zeros(self.n_features_, dtype=np.bool)
+            #
+            categorical_features[-self.n_features_categorical_ :] = True
+            self.categorical_features_ = categorical_features
 
         stratify = None if self.task == "regression" else df[self.label_column]
 
@@ -249,9 +268,49 @@ class Dataset:
             stratify=stratify,
         )
 
-        X_train = self.transformer.fit_transform(df_train)
+        self.transformer = self.transformer.fit(df_train)
+        X_train = self.transformer.transform(df_train)
         X_test = self.transformer.transform(df_test)
-        y_train = self.label_encoder.fit_transform(df_train[self.label_column])
+
+        # An array holding the names of all the columns
+        columns = []
+        if self.n_features_continuous_ > 0:
+            columns.extend(self.continuous_columns_)
+
+        if self.n_features_categorical_ > 0:
+            if self.one_hot_encode:
+                # Get the list of modalities from the OneHotEncoder
+                all_modalities = (
+                    self.transformer.transformer_list[-1][1]
+                    .transformers_[0][1]
+                    .categories_
+                )
+                for categorical_column, modalities in zip(
+                    self.categorical_columns_, all_modalities
+                ):
+                    # Add the columns for this features
+                    columns.extend(
+                        [
+                            categorical_column
+                            # + "#"
+                            # + modality
+                            + "#"
+                            + str(idx_modality)
+                            for idx_modality, modality in enumerate(modalities)
+                        ]
+                    )
+            else:
+                columns.extend(self.categorical_columns_)
+        self.columns_ = columns
+
+        n_samples_train, n_columns = X_train.shape
+        n_samples_test, _ = X_test.shape
+        self.n_columns_ = n_columns
+        self.n_samples_train_ = n_samples_train
+        self.n_samples_test_ = n_samples_test
+
+        self.label_encoder = self.label_encoder.fit(df_train[self.label_column])
+        y_train = self.label_encoder.transform(df_train[self.label_column])
         y_test = self.label_encoder.transform(df_test[self.label_column])
 
         if self.task != "regression":

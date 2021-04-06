@@ -52,13 +52,13 @@ logging.basicConfig(
 )
 
 loaders = [
-    load_adult,
+    # load_adult,
     load_bank,
     # load_breastcancer,
     # load_car,
     # load_cardio,
-    load_churn,
-    load_default_cb,
+    # load_churn,
+    # load_default_cb,
     # load_letter,
     # load_satimage,
     # load_sensorless,
@@ -71,104 +71,16 @@ loaders = [
 
 random_state = 42
 
-classifiers = [
-    # lambda: (
-    #     "LRW",
-    #     LogisticRegression(
-    #         class_weight="balanced",
-    #         solver="saga",
-    #         random_state=random_state,
-    #         max_iter=100,
-    #         verbose=False,
-    #     ),
-    # ),
-    # lambda: (
-    #     "LR",
-    #     LogisticRegression(
-    #         solver="saga", random_state=random_state, max_iter=100, verbose=False,
-    #     ),
-    # ),
-    # lambda: ("RF", RandomForestClassifier(n_jobs=-1, random_state=random_state)),
-    # lambda: (
-    #     "RFW",
-    #     RandomForestClassifier(
-    #         class_weight="balanced", n_jobs=-1, random_state=random_state
-    #     ),
-    # ),
-    # lambda: ("WW", ForestClassifier(n_jobs=-1, random_state=random_state)),
-    # lambda: (
-    #     "WildWood (Agg)",
-    #     ForestClassifier(class_weight="balanced", n_jobs=-1, random_state=random_state),
-    # ),
-    lambda: (
-        "WildWood (One Hot)",
-        ForestClassifier(
+clf = ForestClassifier(
             n_estimators=1,
             n_jobs=1,
             class_weight="balanced",
             random_state=random_state,
-            aggregation=True,
+            aggregation=False,
             max_features=None,
-            # dirichlet=0.0,
-        ),
-    ),
-    lambda: (
-        "WildWood (Ordinal)",
-        ForestClassifier(
-            n_estimators=1,
-            n_jobs=1,
-            class_weight="balanced",
-            random_state=random_state,
-            aggregation=True,
-            max_features=None,
-            # dirichlet=0.0,
-        ),
-    ),
-    lambda: (
-        "WildWood (Categorical)",
-        ForestClassifier(
-            n_estimators=1,
-            n_jobs=1,
-            class_weight="balanced",
-            random_state=random_state,
-            aggregation=True,
-            max_features=None,
-            # dirichlet=0.0,
-        ),
-    ),
-]
+            dirichlet=1e-7
+        )
 
-
-data_extractions = [
-    # # For LRW
-    # {"one_hot_encode": True, "standardize": True, "drop": "first"},
-    # # For RFW
-    # {"one_hot_encode": True, "standardize": False, "drop": None},
-    {"one_hot_encode": True, "standardize": False, "drop": None, "categorical": False},
-    {"one_hot_encode": False, "standardize": False, "drop": None, "categorical": False},
-    {"one_hot_encode": False, "standardize": False, "drop": None, "categorical": True},
-]
-
-# data_extraction = {
-#     # "LogisticRegression": {
-#     #     "one_hot_encode": True,
-#     #     "standardize": True,
-#     #     "drop": "first",
-#     # },
-#     # "RandomForestClassifier": {
-#     #     "one_hot_encode": True,
-#     #     "standardize": False,
-#     #     "drop": None,
-#     # },
-#     # "ForestClassifier": {"one_hot_encode": True, "standardize": False, "drop": None},
-#     "ForestClassifier": {"one_hot_encode": False, "standardize": False, "drop": None}
-# }
-
-
-# Number of time each experiment is repeated, one for each seed (leading
-# data_random_states = [42, 43, 44, 46, 47, 49, 50, 52, 53, 55]
-data_random_states = [42]
-clf_random_state = 42
 
 col_data = []
 col_classifier = []
@@ -183,13 +95,6 @@ col_avg_precision_score_weighted = []
 col_log_loss = []
 col_accuracy = []
 
-col_roc_auc_train = []
-col_roc_auc_weighted_train = []
-col_avg_precision_score_train = []
-col_avg_precision_score_weighted_train = []
-col_log_loss_train = []
-col_accuracy_train = []
-
 
 for Clf, data_extraction in zip(classifiers, data_extractions):
     clf_title, clf = Clf()
@@ -201,9 +106,7 @@ for Clf, data_extraction in zip(classifiers, data_extractions):
         data_name = dataset.name
         task = dataset.task
         for key, val in data_extraction.items():
-            if key != "categorical":
-                setattr(dataset, key, val)
-        categorical = data_extraction["categorical"]
+            setattr(dataset, key, val)
         logging.info("-" * 64)
         logging.info("Launching task for %r" % dataset)
         for repeat, data_random_state in enumerate(data_random_states):
@@ -232,14 +135,13 @@ for Clf, data_extraction in zip(classifiers, data_extractions):
                 )
             )
 
-            if hasattr(clf, "categorical_features") and categorical:
+            if hasattr(clf, "categorical_features"):
                 # If it is WildWood's classifier, we set the categorical features
                 logging.info(
                     "Setting categorical_features: %r" % dataset.categorical_features_
                 )
                 clf.categorical_features = dataset.categorical_features_
 
-            y_train_binary = LabelBinarizer().fit_transform(y_train)
             y_test_binary = LabelBinarizer().fit_transform(y_test)
             tic = time()
             clf.fit(X_train, y_train)
@@ -249,75 +151,42 @@ for Clf, data_extraction in zip(classifiers, data_extractions):
             col_fit_time.append(fit_time)
             tic = time()
             y_scores = clf.predict_proba(X_test)
-            y_scores_train = clf.predict_proba(X_train)
             toc = time()
             predict_time = toc - tic
             col_predict_time.append(predict_time)
             logging.info("Predict %s in %.2f seconds" % (clf_name, fit_time))
             y_pred = np.argmax(y_scores, axis=1)
-            y_pred_train = np.argmax(y_scores_train, axis=1)
 
             if task == "binary-classification":
                 roc_auc = roc_auc_score(y_test, y_scores[:, 1])
-                roc_auc_train = roc_auc_score(y_train, y_scores_train[:, 1])
                 roc_auc_weighted = roc_auc
-                roc_auc_weighted_train = roc_auc_train
                 avg_precision_score = average_precision_score(y_test, y_scores[:, 1])
-                avg_precision_score_train = average_precision_score(
-                    y_train, y_scores_train[:, 1]
-                )
                 avg_precision_score_weighted = avg_precision_score
-                avg_precision_score_weighted_train = avg_precision_score_train
                 log_loss_ = log_loss(y_test, y_scores)
-                log_loss_train_ = log_loss(y_train, y_scores_train)
                 accuracy = accuracy_score(y_test, y_pred)
-                accuracy_train = accuracy_score(y_train, y_pred_train)
             elif task == "multiclass-classification":
                 roc_auc = roc_auc_score(
                     y_test, y_scores, multi_class="ovr", average="macro"
                 )
-                roc_auc_train = roc_auc_score(
-                    y_train, y_scores_train, multi_class="ovr", average="macro"
-                )
                 roc_auc_weighted = roc_auc_score(
                     y_test, y_scores, multi_class="ovr", average="weighted"
                 )
-                roc_auc_weighted_train = roc_auc_score(
-                    y_train, y_scores_train, multi_class="ovr", average="weighted"
-                )
-
                 avg_precision_score = average_precision_score(y_test_binary, y_scores)
-                avg_precision_score_train = average_precision_score(
-                    y_train_binary, y_scores_train
-                )
                 avg_precision_score_weighted = average_precision_score(
                     y_test_binary, y_scores, average="weighted"
                 )
-                avg_precision_score_weighted_train = average_precision_score(
-                    y_train_binary, y_scores_train, average="weighted"
-                )
                 log_loss_ = log_loss(y_test, y_scores)
-                log_loss_train_ = log_loss(y_train, y_scores_train)
                 accuracy = accuracy_score(y_test, y_pred)
-                accuracy_train = accuracy_score(y_train, y_pred_train)
             # TODO: regression
             else:
                 raise ValueError("Task %s not understood" % task)
 
             col_roc_auc.append(roc_auc)
-            col_roc_auc_train.append(roc_auc_train)
             col_roc_auc_weighted.append(roc_auc_weighted)
-            col_roc_auc_weighted_train.append(roc_auc_weighted_train)
             col_avg_precision_score.append(avg_precision_score)
-            col_avg_precision_score_train.append(avg_precision_score_train)
             col_avg_precision_score_weighted.append(avg_precision_score_weighted)
-            col_avg_precision_score_weighted_train.append(
-                avg_precision_score_weighted_train
-            )
             col_log_loss.append(log_loss_)
-            col_log_loss_train.append(log_loss_train_)
             col_accuracy.append(accuracy)
-            col_accuracy_train.append(accuracy_train)
 
             logging.info(
                 "AUC= %.2f, AUCW: %.2f, AVGP: %.2f, AVGPW: %.2f, LOGL: %.2f, ACC: %.2f"
@@ -346,12 +215,6 @@ results = pd.DataFrame(
         "avg_prec_w": col_avg_precision_score_weighted,
         "log_loss": col_log_loss,
         "accuracy": col_accuracy,
-        "roc_auc_train": col_roc_auc_train,
-        "roc_auc_w_train": col_roc_auc_weighted_train,
-        "avg_prec_train": col_avg_precision_score_train,
-        "avg_prec_w_train": col_avg_precision_score_weighted_train,
-        "log_loss_train": col_log_loss_train,
-        "accuracy_train": col_accuracy_train,
     }
 )
 

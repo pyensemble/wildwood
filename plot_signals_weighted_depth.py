@@ -6,7 +6,7 @@ import numpy as np
 
 import pandas as pd
 
-from wildwood.signals import get_signal, make_regression
+from wildwood.dataset import get_signal, make_regression
 from wildwood.forest import ForestRegressor
 
 from wildwood._binning import Binner
@@ -28,7 +28,9 @@ random_state = 42
 noise = 0.03
 aggregation = True
 n_estimators = 100
-step = 10.0
+
+step = 1 / noise ** 2
+
 signal = "heavisine"
 
 X_train, y_train = make_regression(

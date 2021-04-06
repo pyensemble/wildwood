@@ -55,7 +55,7 @@ def _generate_train_valid_samples(random_state, n_samples):
 
     Returns
     -------
-    output : tuple of theer numpy arrays
+    output : tuple of three numpy arrays
         * output[0] contains the indices of the training samples
         * output[1] contains the indices of the validation samples
         * output[2] contains the counts of the training samples
@@ -157,7 +157,7 @@ def _parallel_tree_apply(apply, X, out, lock, idx_tree):
 
 class ForestBase(BaseEstimator):
     """
-    BLABLA
+    TODO: BLABLA
     """
 
     def __init__(
@@ -198,6 +198,7 @@ class ForestBase(BaseEstimator):
         self.min_samples_leaf = min_samples_leaf
         self.max_bins = max_bins
         self.categorical_features = categorical_features
+        self.is_categorical_ = None
         self.max_features = max_features
         self.n_jobs = n_jobs
         self.random_state = random_state
@@ -249,7 +250,9 @@ class ForestBase(BaseEstimator):
 
         # TODO: Why only float64 ? What if the data is already binned ?
         X, y = self._validate_data(
-            X, y, dtype=[np.float32], force_all_finite=False, order="F"
+            X, y, dtype=[np.float64], force_all_finite=False, order="F"
+            # TODO: (with cat features) if np.float32 in previous line, would raise
+            #   ValueError: Buffer dtype mismatch, expected 'const X_DTYPE_C' but got 'float'
         )
         check_consistent_length(X, y)
 
@@ -267,9 +270,6 @@ class ForestBase(BaseEstimator):
                 sample_weight_ *= expanded_class_weight
         else:
             y = np.ascontiguousarray(y, dtype=np.float32)
-
-        # TODO: deal properly with categorical features. What if these are specified ?
-        self.is_categorical_, known_categories = self._check_categories(X)
 
         n_samples, n_features = X.shape
         # Let's get actual parameters based on the parameters passed by the user and
@@ -292,14 +292,26 @@ class ForestBase(BaseEstimator):
 
         # TODO: Deal more intelligently with this. Do not bin if the data is already
         #  binned by test for dtype=='uint8' for instance
+
+        # If is is an array with dtypd uint8 then the data is already binned
+        # Otherwise we need to bin the features indicated by the either a boolean or
+        # integer array
+
+        is_categorical, self._known_categories = self._check_categories(X)
+
         self._bin_mapper = Binner(
             n_bins=n_bins,
-            is_categorical=self.is_categorical_,
-            known_categories=known_categories,
+            is_categorical=is_categorical,
+            known_categories=self._known_categories,
         )
+        if is_categorical is None:
+            self.is_categorical_ = np.zeros(X.shape[1], dtype=np.bool)
+        else:
+            self.is_categorical_ = np.asarray(is_categorical,
+                                              dtype=np.bool)
         X_binned = self._bin_data(X, is_training_data=True)
 
-        # TODO: Deal with categorical data
+        # TODO: Deal with missing data
         # Uses binned data to check for missing values
         has_missing_values = (
             (X_binned == self._bin_mapper.missing_values_bin_idx_)
@@ -323,6 +335,7 @@ class ForestBase(BaseEstimator):
                     min_samples_split=self.min_samples_split,
                     min_samples_leaf=self.min_samples_leaf,
                     categorical_features=self.categorical_features,
+                    is_categorical=self.is_categorical_,
                     max_features=max_features_,
                     random_state=random_state,
                     verbose=self.verbose,
@@ -344,6 +357,7 @@ class ForestBase(BaseEstimator):
                     min_samples_split=self.min_samples_split,
                     min_samples_leaf=self.min_samples_leaf,
                     categorical_features=self.categorical_features,
+                    is_categorical=self.is_categorical_,
                     max_features=max_features_,
                     random_state=random_state,
                     verbose=self.verbose,
@@ -573,6 +587,12 @@ class ForestBase(BaseEstimator):
 
     def get_nodes(self, tree_idx):
         return self.trees[tree_idx].get_nodes()
+
+    def path_leaf(self, X, tree_idx=0):
+        check_is_fitted(self)
+        X = self._validate_X_predict(X, check_input=True)
+        X_binned = self._bin_data(X, is_training_data=False)
+        return self.trees[tree_idx].path_leaf(X_binned)
 
     @property
     def n_estimators(self):
@@ -950,7 +970,7 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         loss: str = "log",
         step: float = 1.0,
         aggregation: bool = True,
-        dirichlet: bool = 0.5,
+        dirichlet: float = 0.5,
         max_depth: Union[None, int] = None,
         min_samples_split: int = 2,
         min_samples_leaf: int = 1,
