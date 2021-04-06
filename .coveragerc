@@ -1,0 +1,14 @@
+[run]
+branch = True
+source = wildwood
+include = */wildwood/*
+
+[report]
+omit =
+    examples/*
+    docs/*
+    paper/*
+
+exclude_lines =
+    if verbose
+    self._using_numba = True
