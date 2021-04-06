@@ -154,7 +154,7 @@ def get_nodes(tree):
         "is_split_categorical",
         "permutation_start",
         "permutation_end",
-        "is_perm_left"
+        # "is_perm_left"
     ]
 
     # columns = [col_name for col_name, _ in np_node_tree]

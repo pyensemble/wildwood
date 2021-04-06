@@ -119,7 +119,8 @@ def _accumulate_prediction(predict, X, out, lock):
 
 
 def _get_tree_prediction(predict, X, out, lock, tree_idx):
-    prediction = predict(X, check_input=False)
+    # prediction = predict(X, check_input=False)
+    prediction = predict(X)
     with lock:
         out[tree_idx] = prediction
 
@@ -753,7 +754,7 @@ class ForestBinaryClassifier(BaseEstimator, ClassifierMixin):
     def predict_proba_trees(self, X):
         check_is_fitted(self)
         # Check data
-        X = self._validate_X_predict(X)
+        X = self._validate_X_predict(X, check_input=True)
         # TODO: we can also avoid data binning for predictions...
         X_binned = self._bin_data(X, is_training_data=False)
         n_samples, n_features = X.shape

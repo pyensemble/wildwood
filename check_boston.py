@@ -43,14 +43,14 @@ np.random.seed(0)
 # X = data.drop('PRICE', axis=1)
 # y = data['PRICE']
 
-X = np.random.randint(0, 10, (10, 5))
+X = np.random.randint(0, 5, (10, 5))
 y = np.array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
 categorical_features = [i for i in range(5)]
-clf = ForestBinaryClassifier(n_estimators=3,
+clf = ForestBinaryClassifier(n_estimators=10,
                              random_state=42,
                              categorical_features=categorical_features,
-                             n_jobs=1)
+                             n_jobs=-1)
 print('fitting...')
 clf.fit(X, y)
 print('fitted')
-# print(clf.predict(X))
+print(clf.predict(X))

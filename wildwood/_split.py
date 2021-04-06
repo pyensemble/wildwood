@@ -208,8 +208,7 @@ def copy_split(from_split, to_split):
         "w_samples_valid": float32,
         "w_samples_train_in_bins": float32[::1],
         "w_samples_valid_in_bins": float32[::1],
-        # TODO: put back this
-        # "y_sum_in_bins": float32[::1],
+        "y_sum_in_bins": float32[:, :],
         "order_index": uint8[:],
         "n_samples_train_left": uintp,
         "n_samples_train_right": uintp,
@@ -285,6 +284,7 @@ def find_best_split_along_feature(tree_context, node_context, feature, f, best_s
     if tree_context.is_categorical[feature]:
         # sort y_sum_in_bins[:, 0] in descending order
         order_index = np.argsort(y_sum_in_bins[:, 0])[::-1].astype(np.uint8)
+        # this only for binary classification (not for multiclass classification)
     else:
         order_index = np.arange(n_bins, dtype=np.uint8)
     # We go from left to right (in sens of order_index) and

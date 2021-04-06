@@ -317,7 +317,7 @@ hyperparameters"""
 n_estimators = st.sidebar.selectbox("n_estimators", [1, 5, 10, 50, 100], index=2)
 aggregation = st.sidebar.checkbox("aggregation", value=True)
 dirichlet = st.sidebar.selectbox(
-    "dirichlet", [1e-8, 0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 100], index=3
+    "dirichlet", [1e-8, 0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 100.], index=3
 )
 step = st.sidebar.selectbox(
     "step", [1e-2, 1e-1, 0.5, 1.0, 2.0, 3.0, 5.0, 10.0, 50.0], index=3
