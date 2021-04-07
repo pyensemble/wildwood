@@ -40,8 +40,9 @@ np.set_printoptions(precision=2)
 # logging.info("Spent {time} compiling.".format(time=toc - tic))
 
 
-# n_samples = 1000
-n_samples = 2_000_000
+n_samples = 1000
+# n_samples = 2_000_000
+
 
 # n_samples = 10
 random_state = 42
@@ -69,7 +70,7 @@ clf_kwargs = {
     "dirichlet": 1e-8,
     "step": 1.0,
     "aggregation": True,
-    "verbose": True
+    "verbose": True,
 }
 
 
@@ -212,6 +213,6 @@ tic = time()
 plot_decision_classification(classifiers, datasets)
 toc = time()
 
-print("time: ", toc-tic)
+print("time: ", toc - tic)
 
 plt.show()
