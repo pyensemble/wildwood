@@ -8,9 +8,17 @@ import numpy as np
 import pandas as pd
 import zipfile
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, roc_auc_score, log_loss, average_precision_score, mean_squared_error, classification_report
+from sklearn.metrics import (
+    accuracy_score,
+    roc_auc_score,
+    log_loss,
+    average_precision_score,
+    mean_squared_error,
+    classification_report,
+)
 
 from sklearn.preprocessing import MinMaxScaler
+
 
 def evaluate_classifier(clf, test_data, test_target, binary=True):
     tic = time()
@@ -24,21 +32,33 @@ def evaluate_classifier(clf, test_data, test_target, binary=True):
     predicted_test = np.argmax(predicted_proba_test, axis=1)
 
     if binary:
-        roc_auc = roc_auc_score(test_target, predicted_proba_test[:, 1], multi_class="ovo")
-        avg_precision_score = average_precision_score(test_target, predicted_proba_test[:, 1])
+        roc_auc = roc_auc_score(
+            test_target, predicted_proba_test[:, 1], multi_class="ovo"
+        )
+        avg_precision_score = average_precision_score(
+            test_target, predicted_proba_test[:, 1]
+        )
     else:
         onehot_target_test = onehotencode(test_target)
 
         try:
-            roc_auc = roc_auc_score(onehot_target_test, predicted_proba_test, multi_class="ovo")
+            roc_auc = roc_auc_score(
+                onehot_target_test, predicted_proba_test, multi_class="ovo"
+            )
         except ValueError as verror:
             print("FAILED to compute roc auc with following error : ")
             print(verror)
             roc_auc = 0.0
-        avg_precision_score = average_precision_score(onehot_target_test, predicted_proba_test)
+        avg_precision_score = average_precision_score(
+            onehot_target_test, predicted_proba_test
+        )
 
     acc = accuracy_score(test_target, predicted_test)
-    log_loss_value = log_loss(test_target, predicted_proba_test, labels=list(range(predicted_proba_test.shape[1])) if not binary else None)
+    log_loss_value = log_loss(
+        test_target,
+        predicted_proba_test,
+        labels=list(range(predicted_proba_test.shape[1])) if not binary else None,
+    )
     print(f"ROC AUC: {roc_auc:.4f}, ACC: {acc :.4f}")
     print("ROC AUC computed with multi_class='ovo' (see sklearn docs)")
 
@@ -48,6 +68,7 @@ def evaluate_classifier(clf, test_data, test_target, binary=True):
 
     print(classification_report(test_target, predicted_test))
     return [predict_time, roc_auc, acc, log_loss_value, avg_precision_score]
+
 
 def evaluate_regressor(reg, test_data, test_target):
     tic = time()
@@ -63,25 +84,41 @@ def evaluate_regressor(reg, test_data, test_target):
 
 
 def onehotencode(y):
-    encoded = np.zeros((len(y), np.max(y).astype(int)+1))
+    encoded = np.zeros((len(y), np.max(y).astype(int) + 1))
     encoded[np.arange(len(y)), y] = 1
     return encoded
 
+
 class Datasets:
 
-    def __init__(self):
+    def __init__(self, filename, url, random_state=None):
         pass
 
     def split_train_test(self, test_split, random_state):
         if self.task == "classification":
-            self.data_train, self.data_test, self.target_train, self.target_test = train_test_split(
-            self.data, self.target, test_size=test_split, random_state=random_state, stratify=self.target)
+            (
+                self.data_train,
+                self.data_test,
+                self.target_train,
+                self.target_test,
+            ) = train_test_split(
+                self.data,
+                self.target,
+                test_size=test_split,
+                random_state=random_state,
+                stratify=self.target,
+            )
         else:
-            self.data_train, self.data_test, self.target_train, self.target_test = train_test_split(
-            self.data, self.target, test_size=test_split, random_state=random_state)
+            (
+                self.data_train,
+                self.data_test,
+                self.target_train,
+                self.target_test,
+            ) = train_test_split(
+                self.data, self.target, test_size=test_split, random_state=random_state
+            )
 
-    
-    #def get_test_size(self, test_split):
+    # def get_test_size(self, test_split):
     #        if test_split <= 0:
     #            raise Error("test_split should be positive")
     #    if type(test_split) == int:
@@ -94,17 +131,23 @@ class Datasets:
     def get_class_proportions(self, data=None):
         if data is None:
             data = self.target
-        return np.bincount(data.astype(int))/len(data)
+        return np.bincount(data.astype(int)) / len(data)
 
     def get_train_sample_weights(self):
-        return (1/(self.n_classes * self.get_class_proportions(self.target_train)))[self.target_train]
+        return (1 / (self.n_classes * self.get_class_proportions(self.target_train)))[
+            self.target_train
+        ]
 
     def info(self):
         print("Dataset info : ")
         print("task : {}".format(self.task))
-        print("sample count (train + test) : {} with {} for training".format(self.size, len(self.data_train)))
+        print(
+            "sample count (train + test) : {} with {} for training".format(
+                self.size, len(self.data_train)
+            )
+        )
         print("number of features : {} ".format(self.n_features))
-        if self.task =="classification":
+        if self.task == "classification":
             print(" of which continuous : {}".format(self.nb_continuous_features))
             print("One hot encoded features : {}".format(self.one_hot_categoricals))
             print("number of classes : {}".format(self.n_classes))
@@ -112,14 +155,31 @@ class Datasets:
             print(self.get_class_proportions())
         print("")
 
-class Higgs(Datasets):#binary
-    
-    def __init__(self, filename=None, subsample=None, test_split=0.005, random_state=0, normalize_intervals=False, as_pandas=False):
+
+class Higgs(Datasets):  # binary
+
+    def __init__(
+        self,
+        filename=None,
+        subsample=None,
+        test_split=0.005,
+        random_state=0,
+        normalize_intervals=False,
+        as_pandas=False,
+    ):
         filename = filename or os.path.dirname(__file__) + "/HIGGS.csv.gz"
         URL = "https://archive.ics.uci.edu/ml/machine-learning-databases/00280/HIGGS.csv.gz"
         if not os.path.exists(filename):
-            reply = str(input("Higgs dataset file not provided, would you like to download it ? (2.6 Go) (y/n): ")).lower().strip()
-            if reply == 'y':
+            reply = (
+                str(
+                    input(
+                        "Higgs dataset file not provided, would you like to download it ? (2.6 Go) (y/n): "
+                    )
+                )
+                .lower()
+                .strip()
+            )
+            if reply == "y":
                 print(f"Downloading {URL} to {filename} (2.6 GB)...")
                 urlretrieve(URL, filename)
                 print("done.")
@@ -142,7 +202,7 @@ class Higgs(Datasets):#binary
 
         if normalize_intervals:
             mins = self.data.min()
-            self.data = (self.data - mins)/(self.data.max() - mins)
+            self.data = (self.data - mins) / (self.data.max() - mins)
 
         if not as_pandas:
             self.data = np.ascontiguousarray(self.data.values)
@@ -154,23 +214,25 @@ class Higgs(Datasets):#binary
         self.size, self.n_features = self.data.shape
         self.nb_continuous_features = self.n_features
 
-
         print("Making train/test split ...")
-        
+
         self.split_train_test(test_split, random_state)
-        #self.data_train, self.data_test, self.target_train, self.target_test = train_test_split(
+        # self.data_train, self.data_test, self.target_train, self.target_test = train_test_split(
         #    self.data, self.target, test_size=self.get_test_size(test_split), random_state=random_state)
 
         print("Done.")
 
-    
-class Moons(Datasets):#binary
-    
-    def __init__(self, n_samples=10000, test_split=0.3, random_state=0, normalize_intervals=False):
-        
+
+class Moons(Datasets):  # binary
+    def __init__(
+        self, n_samples=10000, test_split=0.3, random_state=0, normalize_intervals=False
+    ):
+
         from sklearn.datasets import make_moons
-        
-        self.data, self.target = make_moons(n_samples=n_samples, random_state=random_state)
+
+        self.data, self.target = make_moons(
+            n_samples=n_samples, random_state=random_state
+        )
         if normalize_intervals:
             self.data = MinMaxScaler.fit_transform(self.data)
 
@@ -182,15 +244,22 @@ class Moons(Datasets):#binary
         self.n_features = 2
         self.nb_continuous_features = self.n_features
 
-
         self.split_train_test(test_split, random_state)
-        #self.data_train, self.data_test, self.target_train, self.target_test = train_test_split(
+        # self.data_train, self.data_test, self.target_train, self.target_test = train_test_split(
         #    self.data, self.target, test_size=self.get_test_size(test_split), random_state=random_state)
 
 
-class Adult(Datasets):#binary
-
-    def __init__(self, path="data", test_split=0.3, random_state=0, normalize_intervals=False, one_hot_categoricals=False, as_pandas=False, subsample=None):
+class Adult(Datasets):  # binary
+    def __init__(
+        self,
+        path="data",
+        test_split=0.3,
+        random_state=0,
+        normalize_intervals=False,
+        one_hot_categoricals=False,
+        as_pandas=False,
+        subsample=None,
+    ):
         archive = zipfile.ZipFile(os.path.join(path, "adult.csv.zip"), "r")
         with archive.open("adult.csv") as f:
             data = pd.read_csv(f, header=None)
@@ -201,22 +270,23 @@ class Adult(Datasets):#binary
         X_continuous = data[continuous].astype("float32")
 
         if normalize_intervals:
-            #X_continuous = MinMaxScaler().fit_transform(X_continuous)
+            # X_continuous = MinMaxScaler().fit_transform(X_continuous)
             min_cols = X_continuous.min()
-            X_continuous = (X_continuous - min_cols)/(X_continuous.max() - min_cols)
+            X_continuous = (X_continuous - min_cols) / (X_continuous.max() - min_cols)
 
         if one_hot_categoricals:
-            X_discrete = pd.get_dummies(data[discrete], prefix_sep="#")#.values
+            X_discrete = pd.get_dummies(data[discrete], prefix_sep="#")  # .values
         else:
-            #X_discrete = data[discrete].apply(lambda x: pd.factorize(x)[0]).values.astype(int)
-            X_discrete = data[discrete].apply(lambda x: pd.factorize(x)[0]).astype(np.int32)
-
+            # X_discrete = data[discrete].apply(lambda x: pd.factorize(x)[0]).values.astype(int)
+            X_discrete = (
+                data[discrete].apply(lambda x: pd.factorize(x)[0]).astype(np.int32)
+            )
 
         self.binary = True
         self.task = "classification"
 
         self.n_classes = 2
-        self.nb_continuous_features = len(continuous)#X_continuous.shape[1]
+        self.nb_continuous_features = len(continuous)  # X_continuous.shape[1]
         self.target = pd.get_dummies(y).values[:, 1]
         if as_pandas:
             self.data = X_continuous.join(X_discrete)
@@ -229,8 +299,18 @@ class Adult(Datasets):#binary
         self.split_train_test(test_split, random_state)
 
 
-class Bank(Datasets):#binary
-    def __init__(self, path="data", test_split=0.3, random_state=0, normalize_intervals=False, one_hot_categoricals=False, as_pandas=False, subsample=None):
+
+class Bank(Datasets):  # binary
+    def __init__(
+        self,
+        path="data",
+        test_split=0.3,
+        random_state=0,
+        normalize_intervals=False,
+        one_hot_categoricals=False,
+        as_pandas=False,
+        subsample=None,
+    ):
         archive = zipfile.ZipFile(os.path.join(path, "bank.csv.zip"), "r")
         with archive.open("bank.csv") as f:
             data = pd.read_csv(f)
@@ -252,15 +332,14 @@ class Bank(Datasets):#binary
         continuous = ["age", "balance", "duration", "pdays", "previous"]
         X_continuous = data[continuous].astype("float32")
 
-
         if normalize_intervals:
             min_cols = X_continuous.min()
-            X_continuous = (X_continuous - min_cols)/(X_continuous.max() - min_cols)
+            X_continuous = (X_continuous - min_cols) / (X_continuous.max() - min_cols)
 
         if one_hot_categoricals:
-            X_discrete = pd.get_dummies(data[discrete], prefix_sep="#")#.values
+            X_discrete = pd.get_dummies(data[discrete], prefix_sep="#")  # .values
         else:
-            #X_discrete = data[discrete].apply(lambda x: pd.factorize(x)[0]).values.astype(int)
+            # X_discrete = data[discrete].apply(lambda x: pd.factorize(x)[0]).values.astype(int)
             X_discrete = data[discrete].apply(lambda x: pd.factorize(x)[0]).astype(int)
 
         self.binary = True
@@ -276,12 +355,22 @@ class Bank(Datasets):#binary
 
         self.one_hot_categoricals = one_hot_categoricals
         self.size, self.n_features = self.data.shape
-        self.nb_continuous_features = len(continuous)#X_continuous.shape[1]
-        #X = MinMaxScaler().fit_transform(X) # Why normalize again after adding discrete features ??
+        self.nb_continuous_features = len(continuous)  # X_continuous.shape[1]
+        # X = MinMaxScaler().fit_transform(X) # Why normalize again after adding discrete features ??
         self.split_train_test(test_split, random_state)
 
-class Car(Datasets):#multiclass
-    def __init__(self, path="data", test_split=0.3, random_state=0, normalize_intervals=False, one_hot_categoricals=False, as_pandas=False, subsample=None):
+
+class Car(Datasets):  # multiclass
+    def __init__(
+        self,
+        path="data",
+        test_split=0.3,
+        random_state=0,
+        normalize_intervals=False,
+        one_hot_categoricals=False,
+        as_pandas=False,
+        subsample=None,
+    ):
         archive = zipfile.ZipFile(os.path.join(path, "car.csv.zip"), "r")
         with archive.open("car.csv") as f:
             data = pd.read_csv(f, header=None)
@@ -291,17 +380,18 @@ class Car(Datasets):#multiclass
         self.task = "classification"
 
         self.target = np.argmax(pd.get_dummies(y).values, axis=1)
-        self.n_classes = np.max(self.target).astype(int)+1
+        self.n_classes = np.max(self.target).astype(int) + 1
 
-        #if normalize_intervals:
+        # if normalize_intervals:
         #    mins = self.data.min()
         #    self.data = (self.data - mins)/(self.data.max() - mins)
 
         if one_hot_categoricals:
             self.data = pd.get_dummies(data, prefix_sep="#").astype("float32")
         else:
-            self.data = data.apply(lambda x: pd.factorize(x)[0]).astype(int)#.values#.astype("float32")
-
+            self.data = data.apply(lambda x: pd.factorize(x)[0]).astype(
+                int
+            )  # .values#.astype("float32")
 
         if not as_pandas:
             self.data = self.data.values
@@ -312,10 +402,20 @@ class Car(Datasets):#multiclass
 
         self.split_train_test(test_split, random_state)
 
-class Cardio(Datasets):#multiclass
-    def __init__(self, path="data", test_split=0.3, random_state=0, normalize_intervals=False, one_hot_categoricals=False, as_pandas=False, subsample=None):
+
+class Cardio(Datasets):  # multiclass
+    def __init__(
+        self,
+        path="data",
+        test_split=0.3,
+        random_state=0,
+        normalize_intervals=False,
+        one_hot_categoricals=False,
+        as_pandas=False,
+        subsample=None,
+    ):
         archive = zipfile.ZipFile(os.path.join(path, "cardiotocography.csv.zip"), "r")
-        with archive.open("cardiotocography.csv", ) as f:
+        with archive.open("cardiotocography.csv",) as f:
             data = pd.read_csv(f, sep=";", decimal=",")
 
         data = data[:subsample]
@@ -374,10 +474,10 @@ class Cardio(Datasets):#multiclass
 
         if normalize_intervals:
             min_cols = X_continuous.min()
-            X_continuous = (X_continuous - min_cols)/(X_continuous.max() - min_cols)
+            X_continuous = (X_continuous - min_cols) / (X_continuous.max() - min_cols)
 
         if one_hot_categoricals:
-            X_discrete = pd.get_dummies(data[discrete], prefix_sep="#")#.values
+            X_discrete = pd.get_dummies(data[discrete], prefix_sep="#")  # .values
         else:
             X_discrete = data[discrete].apply(lambda x: pd.factorize(x)[0]).astype(int)
 
@@ -391,7 +491,7 @@ class Cardio(Datasets):#multiclass
         self.binary = False
         self.task = "classification"
 
-        self.n_classes = np.max(self.target).astype(int)+1
+        self.n_classes = np.max(self.target).astype(int) + 1
 
         self.one_hot_categoricals = one_hot_categoricals
         self.size, self.n_features = self.data.shape
@@ -399,8 +499,18 @@ class Cardio(Datasets):#multiclass
 
         self.split_train_test(test_split, random_state)
 
-class Churn(Datasets):#binary
-    def __init__(self, path="data", test_split=0.3, random_state=0, normalize_intervals=False, one_hot_categoricals=False, as_pandas=False, subsample=None):
+
+class Churn(Datasets):  # binary
+    def __init__(
+        self,
+        path="data",
+        test_split=0.3,
+        random_state=0,
+        normalize_intervals=False,
+        one_hot_categoricals=False,
+        as_pandas=False,
+        subsample=None,
+    ):
         archive = zipfile.ZipFile(os.path.join(path, "churn.csv.zip"), "r")
         with archive.open("churn.csv") as f:
             data = pd.read_csv(f)
@@ -439,19 +549,20 @@ class Churn(Datasets):#binary
         X_continuous = data[continuous].astype("float32")
 
         if one_hot_categoricals:
-            X_discrete = pd.get_dummies(data[discrete], prefix_sep="#")#.values
+            X_discrete = pd.get_dummies(data[discrete], prefix_sep="#")  # .values
         else:
             X_discrete = data[discrete].apply(lambda x: pd.factorize(x)[0]).astype(int)
         if normalize_intervals:
             min_cols = X_continuous.min()
-            X_continuous = (X_continuous - min_cols)/(X_continuous.max() - min_cols)
+            X_continuous = (X_continuous - min_cols) / (X_continuous.max() - min_cols)
 
         if as_pandas:
             self.data = X_continuous.join(X_discrete)
-            self.data.columns = list(range(self.data.shape[1]))#len(discrete)+len(continuous)))
+            self.data.columns = list(
+                range(self.data.shape[1])
+            )  # len(discrete)+len(continuous)))
         else:
             self.data = np.hstack((X_continuous, X_discrete)).astype("float32")
-
 
         self.one_hot_categoricals = one_hot_categoricals
         self.size = data.shape[0]
@@ -460,8 +571,18 @@ class Churn(Datasets):#binary
 
         self.split_train_test(test_split, random_state)
 
-class Default_cb(Datasets):#binary
-    def __init__(self, path="data", test_split=0.3, random_state=0, normalize_intervals=False, one_hot_categoricals=False, as_pandas=False, subsample=None):
+
+class Default_cb(Datasets):  # binary
+    def __init__(
+        self,
+        path="data",
+        test_split=0.3,
+        random_state=0,
+        normalize_intervals=False,
+        one_hot_categoricals=False,
+        as_pandas=False,
+        subsample=None,
+    ):
         archive = zipfile.ZipFile(os.path.join(path, "default_cb.csv.zip"), "r")
         with archive.open("default_cb.csv") as f:
             data = pd.read_csv(f)
@@ -505,10 +626,10 @@ class Default_cb(Datasets):#binary
 
         if normalize_intervals:
             min_cols = X_continuous.min()
-            X_continuous = (X_continuous - min_cols)/(X_continuous.max() - min_cols)
+            X_continuous = (X_continuous - min_cols) / (X_continuous.max() - min_cols)
 
         if one_hot_categoricals:
-            X_discrete = pd.get_dummies(data[discrete], prefix_sep="#")#.values
+            X_discrete = pd.get_dummies(data[discrete], prefix_sep="#")  # .values
         else:
             X_discrete = data[discrete].apply(lambda x: pd.factorize(x)[0]).astype(int)
 
@@ -518,7 +639,6 @@ class Default_cb(Datasets):#binary
         else:
             self.data = np.hstack((X_continuous, X_discrete)).astype("float32")
 
-
         self.one_hot_categoricals = one_hot_categoricals
         self.size = data.shape[0]
         self.n_features = len(continuous) + len(discrete)
@@ -526,8 +646,18 @@ class Default_cb(Datasets):#binary
 
         self.split_train_test(test_split, random_state)
 
-class Letter(Datasets):#multiclass
-    def __init__(self, path="data", test_split=0.3, random_state=0, normalize_intervals=False, one_hot_categoricals=False, as_pandas=False, subsample=None):
+
+class Letter(Datasets):  # multiclass
+    def __init__(
+        self,
+        path="data",
+        test_split=0.3,
+        random_state=0,
+        normalize_intervals=False,
+        one_hot_categoricals=False,
+        as_pandas=False,
+        subsample=None,
+    ):
         archive = zipfile.ZipFile(os.path.join(path, "letter.csv.zip"), "r")
         with archive.open("letter.csv") as f:
             data = pd.read_csv(f)
@@ -537,13 +667,13 @@ class Letter(Datasets):#multiclass
         self.data = data.astype("float32")
         if normalize_intervals:
             mins = self.data.min()
-            self.data = (self.data - mins)/(self.data.max() - mins)
+            self.data = (self.data - mins) / (self.data.max() - mins)
         if not as_pandas:
             self.data = self.data.values
         self.binary = False
         self.task = "classification"
 
-        self.n_classes = np.max(self.target).astype(int)+1
+        self.n_classes = np.max(self.target).astype(int) + 1
 
         self.one_hot_categoricals = one_hot_categoricals
         self.size, self.n_features = self.data.shape
@@ -551,8 +681,18 @@ class Letter(Datasets):#multiclass
 
         self.split_train_test(test_split, random_state)
 
-class Satimage(Datasets):#multiclass
-    def __init__(self, path="data", test_split=0.3, random_state=0, normalize_intervals=False, one_hot_categoricals=False, as_pandas=False, subsample=None):
+
+class Satimage(Datasets):  # multiclass
+    def __init__(
+        self,
+        path="data",
+        test_split=0.3,
+        random_state=0,
+        normalize_intervals=False,
+        one_hot_categoricals=False,
+        as_pandas=False,
+        subsample=None,
+    ):
         archive = zipfile.ZipFile(os.path.join(path, "satimage.csv.zip"), "r")
         with archive.open("satimage.csv") as f:
             data = pd.read_csv(f)
@@ -562,13 +702,13 @@ class Satimage(Datasets):#multiclass
         self.data = data.astype("float32")
         if normalize_intervals:
             mins = self.data.min()
-            self.data = (self.data - mins)/(self.data.max() - mins)
+            self.data = (self.data - mins) / (self.data.max() - mins)
         if not as_pandas:
             self.data = self.data.values
         self.binary = False
         self.task = "classification"
 
-        self.n_classes = np.max(self.target).astype(int)+1
+        self.n_classes = np.max(self.target).astype(int) + 1
 
         self.one_hot_categoricals = one_hot_categoricals
         self.size, self.n_features = self.data.shape
@@ -576,8 +716,18 @@ class Satimage(Datasets):#multiclass
 
         self.split_train_test(test_split, random_state)
 
-class Sensorless(Datasets):#multiclass
-    def __init__(self, path="data", test_split=0.3, random_state=0, normalize_intervals=False, one_hot_categoricals=False, as_pandas=False, subsample=None):
+
+class Sensorless(Datasets):  # multiclass
+    def __init__(
+        self,
+        path="data",
+        test_split=0.3,
+        random_state=0,
+        normalize_intervals=False,
+        one_hot_categoricals=False,
+        as_pandas=False,
+        subsample=None,
+    ):
         archive = zipfile.ZipFile(os.path.join(path, "sensorless.csv.zip"), "r")
         with archive.open("sensorless.csv") as f:
             data = pd.read_csv(f, sep=" ", header=None)
@@ -589,11 +739,11 @@ class Sensorless(Datasets):#multiclass
         self.binary = False
         self.task = "classification"
 
-        self.n_classes = np.max(self.target).astype(int)+1
+        self.n_classes = np.max(self.target).astype(int) + 1
         self.data = data.astype("float32")
         if normalize_intervals:
             mins = self.data.min()
-            self.data = (self.data - mins)/(self.data.max() - mins)
+            self.data = (self.data - mins) / (self.data.max() - mins)
         if not as_pandas:
             self.data = self.data.values
 
@@ -603,8 +753,18 @@ class Sensorless(Datasets):#multiclass
 
         self.split_train_test(test_split, random_state)
 
-class Spambase(Datasets):#binary
-    def __init__(self, path="data", test_split=0.3, random_state=0, normalize_intervals=False, one_hot_categoricals=False, as_pandas=False, subsample=None):
+
+class Spambase(Datasets):  # binary
+    def __init__(
+        self,
+        path="data",
+        test_split=0.3,
+        random_state=0,
+        normalize_intervals=False,
+        one_hot_categoricals=False,
+        as_pandas=False,
+        subsample=None,
+    ):
         archive = zipfile.ZipFile(os.path.join(path, "spambase.csv.zip"), "r")
         with archive.open("spambase.csv") as f:
             data = pd.read_csv(f, header=None)
@@ -621,7 +781,7 @@ class Spambase(Datasets):#binary
         self.data = data.astype("float32")
         if normalize_intervals:
             mins = self.data.min()
-            self.data = (self.data - mins)/(self.data.max() - mins)
+            self.data = (self.data - mins) / (self.data.max() - mins)
         if not as_pandas:
             self.data = self.data.values
 
@@ -631,10 +791,23 @@ class Spambase(Datasets):#binary
 
         self.split_train_test(test_split, random_state)
 
-class Covtype(Datasets):#multiclass
-    def __init__(self, path=None, test_split=0.3, random_state=0, normalize_intervals=False, one_hot_categoricals=False, as_pandas=False, subsample=None):
+
+class Covtype(Datasets):  # multiclass
+    def __init__(
+        self,
+        path=None,
+        test_split=0.3,
+        random_state=0,
+        normalize_intervals=False,
+        one_hot_categoricals=False,
+        as_pandas=False,
+        subsample=None,
+    ):
         from sklearn.datasets import fetch_covtype
-        data, target = fetch_covtype(return_X_y=True, random_state=random_state, as_frame = True)#as_pandas)
+
+        data, target = fetch_covtype(
+            return_X_y=True, random_state=random_state, as_frame=True
+        )  # as_pandas)
 
         if subsample is not None:
             print("Subsampling dataset with subsample={}".format(subsample))
@@ -642,23 +815,22 @@ class Covtype(Datasets):#multiclass
         data = data[:subsample]
         target = target[:subsample]
 
-        self.target = target.astype(int) - 1#.values
+        self.target = target.astype(int) - 1  # .values
         self.binary = False
         self.task = "classification"
 
         self.n_classes = 7
 
-        self.data = data#.astype("float32")
-
+        self.data = data  # .astype("float32")
 
         X_continuous = data[data.columns[:10]]
         if normalize_intervals:
             mins = X_continuous.min()
-            X_continuous = (X_continuous - mins)/(X_continuous.max() - mins)
+            X_continuous = (X_continuous - mins) / (X_continuous.max() - mins)
 
         if not one_hot_categoricals:
-            soil_type = data.apply(lambda x : x[14:].argmax(), axis=1)
-            wilderness_area = data.apply(lambda x : x[10:14].argmax(), axis=1)
+            soil_type = data.apply(lambda x: x[14:].argmax(), axis=1)
+            wilderness_area = data.apply(lambda x: x[10:14].argmax(), axis=1)
             X_discrete = pd.concat([soil_type, wilderness_area], axis=1)
         else:
             X_discrete = data[data.columns[10:]]
@@ -676,12 +848,25 @@ class Covtype(Datasets):#multiclass
 
         self.split_train_test(test_split, random_state)
 
-class KDDCup(Datasets):#multiclass
-    def __init__(self, path=None, test_split=0.3, random_state=0, normalize_intervals=False, one_hot_categoricals=False, as_pandas=False, subsample=None):
+
+class KDDCup(Datasets):  # multiclass
+    def __init__(
+        self,
+        path=None,
+        test_split=0.3,
+        random_state=0,
+        normalize_intervals=False,
+        one_hot_categoricals=False,
+        as_pandas=False,
+        subsample=None,
+    ):
         from sklearn.datasets import fetch_kddcup99
+
         print("Loading full KDDCdup dataset (percent10=False)")
         print("")
-        data, target = fetch_kddcup99(percent10=False, return_X_y=True, random_state=random_state, as_frame = True)#as_pandas)
+        data, target = fetch_kddcup99(
+            percent10=False, return_X_y=True, random_state=random_state, as_frame=True
+        )  # as_pandas)
 
         if subsample is not None:
             print("Subsampling dataset with subsample={}".format(subsample))
@@ -689,32 +874,38 @@ class KDDCup(Datasets):#multiclass
         data = data[:subsample]
         target = target[:subsample]
 
-        discrete = ["protocol_type", "service", "flag", "land", "logged_in", "is_host_login", "is_guest_login"]
-        continuous  = list(set(data.columns) - set(discrete))
+        discrete = [
+            "protocol_type",
+            "service",
+            "flag",
+            "land",
+            "logged_in",
+            "is_host_login",
+            "is_guest_login",
+        ]
+        continuous = list(set(data.columns) - set(discrete))
 
         dummies = pd.get_dummies(target)
         dummies.columns = list(range(len(dummies.columns)))
-        self.target = dummies.idxmax(axis=1)#.values
+        self.target = dummies.idxmax(axis=1)  # .values
         self.binary = False
         self.task = "classification"
 
-        self.n_classes = self.target.max()+1#23
-
+        self.n_classes = self.target.max() + 1  # 23
 
         X_continuous = data[continuous].astype("float32")
         if normalize_intervals:
             mins = X_continuous.min()
-            X_continuous = (X_continuous - mins)/(X_continuous.max() - mins)
+            X_continuous = (X_continuous - mins) / (X_continuous.max() - mins)
 
         if one_hot_categoricals:
             X_discrete = pd.get_dummies(data[discrete], prefix_sep="#")  # .values
         else:
-            #X_discrete = (data[discrete]).apply(lambda x: pd.factorize(x)[0])
+            # X_discrete = (data[discrete]).apply(lambda x: pd.factorize(x)[0])
             X_discrete = data[discrete].apply(lambda x: pd.factorize(x)[0]).astype(int)
 
         self.one_hot_categoricals = one_hot_categoricals
         self.data = X_continuous.join(X_discrete)
-
 
         if not as_pandas:
             self.data = self.data.values
@@ -723,15 +914,27 @@ class KDDCup(Datasets):#multiclass
             self.data.columns = list(range(self.data.shape[1]))
 
         self.size, self.n_features = self.data.shape
-        self.nb_continuous_features = len(continuous)#34#32
+        self.nb_continuous_features = len(continuous)  # 34#32
 
         self.split_train_test(test_split, random_state)
 
-class NewsGroups(Datasets):#multiclass
-    def __init__(self, path=None, test_split=0.3, random_state=0, normalize_intervals=False, one_hot_categoricals=False, as_pandas=False, subsample=None):
+
+class NewsGroups(Datasets):  # multiclass
+    def __init__(
+        self,
+        path=None,
+        test_split=0.3,
+        random_state=0,
+        normalize_intervals=False,
+        one_hot_categoricals=False,
+        as_pandas=False,
+        subsample=None,
+    ):
         from sklearn.datasets import fetch_20newsgroups_vectorized
 
-        data, target = fetch_20newsgroups_vectorized(return_X_y=True, as_frame = True)#as_pandas)
+        data, target = fetch_20newsgroups_vectorized(
+            return_X_y=True, as_frame=True
+        )  # as_pandas)
 
         if subsample is not None:
             print("Subsampling dataset with subsample={}".format(subsample))
@@ -743,11 +946,11 @@ class NewsGroups(Datasets):#multiclass
         self.binary = False
         self.task = "classification"
 
-        self.n_classes = self.target.max()+1
+        self.n_classes = self.target.max() + 1
 
         if normalize_intervals:
             mins = data.min()
-            data = (data - mins)/(data.max() - mins)
+            data = (data - mins) / (data.max() - mins)
 
         self.data = data
 
@@ -760,11 +963,21 @@ class NewsGroups(Datasets):#multiclass
 
         self.split_train_test(test_split, random_state)
 
-class BreastCancer(Datasets):#binary
-    def __init__(self, path=None, test_split=0.3, random_state=0, normalize_intervals=False, one_hot_categoricals=False, as_pandas=False, subsample=None):
+
+class BreastCancer(Datasets):  # binary
+    def __init__(
+        self,
+        path=None,
+        test_split=0.3,
+        random_state=0,
+        normalize_intervals=False,
+        one_hot_categoricals=False,
+        as_pandas=False,
+        subsample=None,
+    ):
         from sklearn.datasets import load_breast_cancer
 
-        data, target = load_breast_cancer(return_X_y=True, as_frame = True)#as_pandas)
+        data, target = load_breast_cancer(return_X_y=True, as_frame=True)  # as_pandas)
 
         data = data[:subsample]
         target = target[:subsample]
@@ -776,13 +989,11 @@ class BreastCancer(Datasets):#binary
 
         self.n_classes = 2
 
-
         if normalize_intervals:
             mins = self.data.min()
-            self.data = (self.data - mins)/(self.data.max() - mins)
+            self.data = (self.data - mins) / (self.data.max() - mins)
 
         self.one_hot_categoricals = False
-
 
         if not as_pandas:
             self.data = self.data.values
@@ -796,11 +1007,22 @@ class BreastCancer(Datasets):#binary
         self.split_train_test(test_split, random_state)
 
 
-class CaliforniaHousing(Datasets):#regression
-    def __init__(self, path=None, test_split=0.3, random_state=0, normalize_intervals=False, one_hot_categoricals=False, as_pandas=False, subsample=None):
+class CaliforniaHousing(Datasets):  # regression
+    def __init__(
+        self,
+        path=None,
+        test_split=0.3,
+        random_state=0,
+        normalize_intervals=False,
+        one_hot_categoricals=False,
+        as_pandas=False,
+        subsample=None,
+    ):
         from sklearn.datasets import fetch_california_housing
 
-        data, target = fetch_california_housing(return_X_y=True, as_frame = True)#as_pandas)
+        data, target = fetch_california_housing(
+            return_X_y=True, as_frame=True
+        )  # as_pandas)
 
         data = data[:subsample]
         target = target[:subsample]
@@ -811,7 +1033,7 @@ class CaliforniaHousing(Datasets):#regression
 
         if normalize_intervals:
             mins = self.data.min()
-            self.data = (self.data - mins)/(self.data.max() - mins)
+            self.data = (self.data - mins) / (self.data.max() - mins)
 
         if not as_pandas:
             self.data = self.data.values
@@ -822,8 +1044,18 @@ class CaliforniaHousing(Datasets):#regression
 
         self.split_train_test(test_split, random_state)
 
-class Boston(Datasets):#regression
-    def __init__(self, path=None, test_split=0.3, random_state=0, normalize_intervals=False, one_hot_categoricals=False, as_pandas=False, subsample=None):
+
+class Boston(Datasets):  # regression
+    def __init__(
+        self,
+        path=None,
+        test_split=0.3,
+        random_state=0,
+        normalize_intervals=False,
+        one_hot_categoricals=False,
+        as_pandas=False,
+        subsample=None,
+    ):
         from sklearn.datasets import load_boston
 
         data, target = load_boston(return_X_y=True)
@@ -850,9 +1082,17 @@ class Boston(Datasets):#regression
         self.split_train_test(test_split, random_state)
 
 
-
-class Diabetes(Datasets):#regression
-    def __init__(self, path=None, test_split=0.3, random_state=0, normalize_intervals=False, one_hot_categoricals=False, as_pandas=False, subsample=None):
+class Diabetes(Datasets):  # regression
+    def __init__(
+        self,
+        path=None,
+        test_split=0.3,
+        random_state=0,
+        normalize_intervals=False,
+        one_hot_categoricals=False,
+        as_pandas=False,
+        subsample=None,
+    ):
         from sklearn.datasets import load_diabetes
 
         data, target = load_diabetes(return_X_y=True, as_frame=True)
@@ -860,12 +1100,11 @@ class Diabetes(Datasets):#regression
         self.data = data[:subsample]
         self.target = target[:subsample]
 
-
         self.task = "regression"
 
         if normalize_intervals:
             mins = self.data.min()
-            self.data = (self.data - mins)/(self.data.max() - mins)
+            self.data = (self.data - mins) / (self.data.max() - mins)
 
         if not one_hot_categoricals:
             sex = self.data.pop("sex").apply(lambda x: x > 0).astype(int)
@@ -881,71 +1120,172 @@ class Diabetes(Datasets):#regression
         self.split_train_test(test_split, random_state)
 
 
-
-
 def load_dataset(args, as_pandas=True):
     print("Loading dataset {}".format(args.dataset))
     if args.dataset == "Moons":
-        return Moons(random_state=args.random_state, normalize_intervals=args.normalize_intervals)
-    #elif args.dataset == "Adult":
+        return Moons(
+            random_state=args.random_state, normalize_intervals=args.normalize_intervals
+        )
+    # elif args.dataset == "Adult":
     #    return Adult(path=args.dataset_path, random_state=args.random_state,
     #                 normalize_intervals=args.normalize_intervals, subsample=args.dataset_subsample)
     elif args.dataset == "Higgs":
-        return Higgs(filename=args.dataset_path + "/HIGGS.csv.gz", subsample=args.dataset_subsample, random_state=args.random_state, normalize_intervals=args.normalize_intervals)
+        return Higgs(
+            filename=args.dataset_path + "/HIGGS.csv.gz",
+            subsample=args.dataset_subsample,
+            random_state=args.random_state,
+            normalize_intervals=args.normalize_intervals,
+        )
     elif args.dataset == "Adult":
-        return Adult(path=args.dataset_path, random_state=args.random_state, normalize_intervals=args.normalize_intervals, one_hot_categoricals=args.one_hot_categoricals, as_pandas=as_pandas, subsample=args.dataset_subsample)
+        return Adult(
+            path=args.dataset_path,
+            random_state=args.random_state,
+            normalize_intervals=args.normalize_intervals,
+            one_hot_categoricals=args.one_hot_categoricals,
+            as_pandas=as_pandas,
+            subsample=args.dataset_subsample,
+        )
     elif args.dataset == "Bank":
-        return Bank(path=args.dataset_path, random_state=args.random_state, normalize_intervals=args.normalize_intervals, one_hot_categoricals=args.one_hot_categoricals, as_pandas=as_pandas, subsample=args.dataset_subsample)
+        return Bank(
+            path=args.dataset_path,
+            random_state=args.random_state,
+            normalize_intervals=args.normalize_intervals,
+            one_hot_categoricals=args.one_hot_categoricals,
+            as_pandas=as_pandas,
+            subsample=args.dataset_subsample,
+        )
     elif args.dataset == "Car":
-        return Car(path=args.dataset_path, random_state=args.random_state, normalize_intervals=args.normalize_intervals,
-                     one_hot_categoricals=args.one_hot_categoricals, as_pandas=as_pandas, subsample=args.dataset_subsample)
+        return Car(
+            path=args.dataset_path,
+            random_state=args.random_state,
+            normalize_intervals=args.normalize_intervals,
+            one_hot_categoricals=args.one_hot_categoricals,
+            as_pandas=as_pandas,
+            subsample=args.dataset_subsample,
+        )
     elif args.dataset == "Cardio":
-        return Cardio(path=args.dataset_path, random_state=args.random_state, normalize_intervals=args.normalize_intervals,
-                   one_hot_categoricals=args.one_hot_categoricals, as_pandas=as_pandas, subsample=args.dataset_subsample)
+        return Cardio(
+            path=args.dataset_path,
+            random_state=args.random_state,
+            normalize_intervals=args.normalize_intervals,
+            one_hot_categoricals=args.one_hot_categoricals,
+            as_pandas=as_pandas,
+            subsample=args.dataset_subsample,
+        )
     elif args.dataset == "Churn":
-        return Churn(path=args.dataset_path, random_state=args.random_state, normalize_intervals=args.normalize_intervals,
-                          one_hot_categoricals=args.one_hot_categoricals, as_pandas=as_pandas, subsample=args.dataset_subsample)
+        return Churn(
+            path=args.dataset_path,
+            random_state=args.random_state,
+            normalize_intervals=args.normalize_intervals,
+            one_hot_categoricals=args.one_hot_categoricals,
+            as_pandas=as_pandas,
+            subsample=args.dataset_subsample,
+        )
     elif args.dataset == "Default_cb":
-        return Default_cb(path=args.dataset_path, random_state=args.random_state, normalize_intervals=args.normalize_intervals,
-                      one_hot_categoricals=args.one_hot_categoricals, as_pandas=as_pandas, subsample=args.dataset_subsample)
+        return Default_cb(
+            path=args.dataset_path,
+            random_state=args.random_state,
+            normalize_intervals=args.normalize_intervals,
+            one_hot_categoricals=args.one_hot_categoricals,
+            as_pandas=as_pandas,
+            subsample=args.dataset_subsample,
+        )
     elif args.dataset == "Letter":
-        return Letter(path=args.dataset_path, random_state=args.random_state, normalize_intervals=args.normalize_intervals,
-                        one_hot_categoricals=args.one_hot_categoricals, as_pandas=as_pandas, subsample=args.dataset_subsample)
+        return Letter(
+            path=args.dataset_path,
+            random_state=args.random_state,
+            normalize_intervals=args.normalize_intervals,
+            one_hot_categoricals=args.one_hot_categoricals,
+            as_pandas=as_pandas,
+            subsample=args.dataset_subsample,
+        )
     elif args.dataset == "Satimage":
-        return Satimage(path=args.dataset_path, random_state=args.random_state, normalize_intervals=args.normalize_intervals,
-                          one_hot_categoricals=args.one_hot_categoricals, as_pandas=as_pandas, subsample=args.dataset_subsample)
+        return Satimage(
+            path=args.dataset_path,
+            random_state=args.random_state,
+            normalize_intervals=args.normalize_intervals,
+            one_hot_categoricals=args.one_hot_categoricals,
+            as_pandas=as_pandas,
+            subsample=args.dataset_subsample,
+        )
     elif args.dataset == "Sensorless":
-        return Sensorless(path=args.dataset_path, random_state=args.random_state, normalize_intervals=args.normalize_intervals,
-                        one_hot_categoricals=args.one_hot_categoricals, as_pandas=as_pandas, subsample=args.dataset_subsample)
+        return Sensorless(
+            path=args.dataset_path,
+            random_state=args.random_state,
+            normalize_intervals=args.normalize_intervals,
+            one_hot_categoricals=args.one_hot_categoricals,
+            as_pandas=as_pandas,
+            subsample=args.dataset_subsample,
+        )
     elif args.dataset == "Spambase":
-        return Spambase(path=args.dataset_path, random_state=args.random_state, normalize_intervals=args.normalize_intervals,
-                    one_hot_categoricals=args.one_hot_categoricals, as_pandas=as_pandas, subsample=args.dataset_subsample)
+        return Spambase(
+            path=args.dataset_path,
+            random_state=args.random_state,
+            normalize_intervals=args.normalize_intervals,
+            one_hot_categoricals=args.one_hot_categoricals,
+            as_pandas=as_pandas,
+            subsample=args.dataset_subsample,
+        )
     elif args.dataset == "Covtype":
-        return Covtype(path=args.dataset_path, random_state=args.random_state, normalize_intervals=args.normalize_intervals,
-                    one_hot_categoricals=args.one_hot_categoricals, as_pandas=as_pandas, subsample=args.dataset_subsample)
+        return Covtype(
+            path=args.dataset_path,
+            random_state=args.random_state,
+            normalize_intervals=args.normalize_intervals,
+            one_hot_categoricals=args.one_hot_categoricals,
+            as_pandas=as_pandas,
+            subsample=args.dataset_subsample,
+        )
     elif args.dataset == "KDDCup":
-        return KDDCup(path=args.dataset_path, random_state=args.random_state, normalize_intervals=args.normalize_intervals,
-                   one_hot_categoricals=args.one_hot_categoricals, as_pandas=as_pandas, subsample=args.dataset_subsample)
+        return KDDCup(
+            path=args.dataset_path,
+            random_state=args.random_state,
+            normalize_intervals=args.normalize_intervals,
+            one_hot_categoricals=args.one_hot_categoricals,
+            as_pandas=as_pandas,
+            subsample=args.dataset_subsample,
+        )
     elif args.dataset == "NewsGroups":
-        return NewsGroups(path=args.dataset_path, random_state=args.random_state,
-                      normalize_intervals=args.normalize_intervals,
-                      one_hot_categoricals=args.one_hot_categoricals, as_pandas=as_pandas,
-                      subsample=args.dataset_subsample)
+        return NewsGroups(
+            path=args.dataset_path,
+            random_state=args.random_state,
+            normalize_intervals=args.normalize_intervals,
+            one_hot_categoricals=args.one_hot_categoricals,
+            as_pandas=as_pandas,
+            subsample=args.dataset_subsample,
+        )
     elif args.dataset == "BreastCancer":
-        return BreastCancer(path=args.dataset_path, random_state=args.random_state,
-                      normalize_intervals=args.normalize_intervals,
-                      one_hot_categoricals=args.one_hot_categoricals, as_pandas=as_pandas,
-                      subsample=args.dataset_subsample)
+        return BreastCancer(
+            path=args.dataset_path,
+            random_state=args.random_state,
+            normalize_intervals=args.normalize_intervals,
+            one_hot_categoricals=args.one_hot_categoricals,
+            as_pandas=as_pandas,
+            subsample=args.dataset_subsample,
+        )
     elif args.dataset == "CaliforniaHousing":
-        return CaliforniaHousing(path=args.dataset_path, random_state=args.random_state, normalize_intervals=args.normalize_intervals, as_pandas=as_pandas,
-                     subsample=args.dataset_subsample)
+        return CaliforniaHousing(
+            path=args.dataset_path,
+            random_state=args.random_state,
+            normalize_intervals=args.normalize_intervals,
+            as_pandas=as_pandas,
+            subsample=args.dataset_subsample,
+        )
     elif args.dataset == "Boston":
-        return Boston(path=args.dataset_path, random_state=args.random_state, normalize_intervals=args.normalize_intervals, as_pandas=as_pandas,
-                     subsample=args.dataset_subsample)
+        return Boston(
+            path=args.dataset_path,
+            random_state=args.random_state,
+            normalize_intervals=args.normalize_intervals,
+            as_pandas=as_pandas,
+            subsample=args.dataset_subsample,
+        )
     elif args.dataset == "Diabetes":
-        return Diabetes(path=args.dataset_path, random_state=args.random_state, normalize_intervals=args.normalize_intervals, as_pandas=as_pandas,
-                     subsample=args.dataset_subsample)
+        return Diabetes(
+            path=args.dataset_path,
+            random_state=args.random_state,
+            normalize_intervals=args.normalize_intervals,
+            as_pandas=as_pandas,
+            subsample=args.dataset_subsample,
+        )
 
     else:
         raise ValueError("unknown dataset " + args.dataset)
-
