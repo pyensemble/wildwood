@@ -1,198 +1,243 @@
-from time import time
-import pandas as pd
-import datasets
-from sklearn.linear_model import LogisticRegression
-import xgboost as xgb
-from catboost import CatBoostClassifier
-import lightgbm as lgb
-from sklearn.ensemble import RandomForestClassifier
-
-import argparse
-
-parser = argparse.ArgumentParser()
-parser.add_argument('--all-datasets', action="store_true", default=False)
-
-all_datasets = parser.parse_args().all_datasets
-del parser
-
 import sys
+import subprocess
+from time import time
+from datetime import datetime
+import logging
+import pickle as pkl
+import numpy as np
+import pandas as pd
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import (
+    roc_auc_score,
+    average_precision_score,
+    log_loss,
+    accuracy_score,
+)
+from sklearn.preprocessing import LabelBinarizer
+from sklearn.ensemble import RandomForestClassifier
 
 sys.path.extend([".", ".."])
 
+from wildwood.dataset import loaders_small_classification
 from wildwood.forest import ForestClassifier
-import pickle
-import datetime
-import subprocess
-
-def logistic_regression(dataset, penalty='l2', dual=False, random_state=0, n_jobs=-1, solver='lbfgs', verbose=0, max_iter=100):
-    clf = LogisticRegression(penalty=penalty, dual=dual, n_jobs=n_jobs, solver=solver,
-                             verbose=verbose, max_iter=max_iter, class_weight="balanced")
-    tic = time()
-    clf.fit(dataset.data_train, dataset.target_train)  # , sample_weight=sample_weights)
-    toc = time()
-    fit_time = toc - tic
-    print(f"fitted in {toc - tic:.3f}s")
-
-    return [fit_time] + datasets.evaluate_classifier(clf, dataset.data_test, dataset.target_test, binary=dataset.binary)
 
 
-def xgboost(dataset, random_state=0, use_label_encoder=False, n_estimators=100, n_jobs=-1, max_depth=None, verbose=False):
+import matplotlib.pyplot as plt
 
-    print("Training XGBoost classifier ...")
+# # import xgboost as xgb
+# from catboost import CatBoostClassifier
+# import lightgbm as lgb
 
-    clf = xgb.XGBClassifier(random_state= random_state, use_label_encoder=False, n_estimators=n_estimators,
-                            n_jobs= n_jobs, max_depth= max_depth)
-    print("Running XGBClassifier with use_label_encoder=False")
-    sample_weights = dataset.get_train_sample_weights()
+# TODO: for each classifier, apply the correct data extraction
 
-    tic = time()
-    clf.fit(dataset.data_train, dataset.target_train, verbose=verbose, sample_weight=sample_weights)
-    toc = time()
+# For LogisticRegression : one-hot encoding for categorical features
+# and standard
+# scaling of continuous features
 
-    fit_time = toc - tic
-    print(f"fitted in {toc - tic:.3f}s")
+# For RandomForestClassifier : one-hot encoding for categorical features and
+# continuous features are kept as such
 
-    return [fit_time] + datasets.evaluate_classifier(clf, dataset.data_test, dataset.target_test, binary=dataset.binary)
+# For HistRandomForestClassifier : categorical features and continuous features are
+# kept as such
 
+# For LightGBMClassifier : categorical features and continuous features are kept as such
 
-def catboost(dataset, n_estimators=100, n_jobs=-1, random_state=0, verbose=0):
-    cat_features = list(range(dataset.nb_continuous_features, dataset.n_features))
+# For CatBoostClassifier : categorical features and continuous features are kept as such
 
-    clf = CatBoostClassifier(n_estimators= n_estimators, random_seed= random_state, cat_features=cat_features,
-                             thread_count= n_jobs)
-    sample_weights = dataset.get_train_sample_weights()
-
-    tic = time()
-    clf.fit(dataset.data_train, dataset.target_train, verbose=bool(verbose), sample_weight=sample_weights,
-            cat_features=cat_features)
-    toc = time()
-    fit_time = toc - tic
-    print(f"fitted in {toc - tic:.3f}s")
-
-    return [fit_time] + datasets.evaluate_classifier(clf, dataset.data_test, dataset.target_test, binary=dataset.binary)
+# For WildWoodClassifier ? : categorical features and continuous features are kept as
+# such
 
 
-def lightgbm(dataset, n_estimators=100, n_jobs=-1, random_state=0, verbose=0):
-    cat_features = list(range(dataset.nb_continuous_features, dataset.n_features))
-
-    clf = lgb.LGBMClassifier(n_estimators= n_estimators, random_state= random_state, n_jobs= n_jobs)
-    sample_weights = dataset.get_train_sample_weights()
-
-    tic = time()
-    clf.fit(dataset.data_train, dataset.target_train, verbose=bool(verbose),
-            sample_weight=sample_weights, categorical_feature=cat_features)
-    toc = time()
-    fit_time = toc - tic
-    print(f"fitted in {toc - tic:.3f}s")
-
-    return [fit_time] + datasets.evaluate_classifier(clf, dataset.data_test, dataset.target_test, binary=dataset.binary)
+# TODO: pre-compile wildwood
 
 
-def sklearn_random_forest(dataset, n_estimators=100, n_jobs=-1, criterion='gini', random_state=0):
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+)
 
-    clf = RandomForestClassifier(n_estimators= n_estimators, criterion= criterion, random_state= random_state, n_jobs= n_jobs)
-    sample_weights = dataset.get_train_sample_weights()
-    tic = time()
-
-    clf.fit(dataset.data_train, dataset.target_train, sample_weight=sample_weights)
-    toc = time()
-
-    fit_time = toc - tic
-    print(f"fitted in {toc - tic:.3f}s")
-
-    return [fit_time] + datasets.evaluate_classifier(clf, dataset.data_test, dataset.target_test, binary=dataset.binary)
+random_state = 42
 
 
-def wildwood(dataset, n_estimators=100, n_jobs=-1, criterion='gini', random_state=0):
+# TODO: wildwood avec et sans aggregation ?
 
-    clf = ForestClassifier(n_estimators= n_estimators, random_state= random_state,
-                                 n_jobs= n_jobs , criterion=criterion)
-    clf.fit(dataset.data_train[:100], dataset.target_train[:100])# , sample_weight=train_sample_weights)
-    sample_weights = dataset.get_train_sample_weights()
-    tic = time()
-    clf.fit(dataset.data_train, dataset.target_train, sample_weight=sample_weights)
-    toc = time()
-    fit_time = toc - tic
-    print(f"fitted in {toc - tic:.3f}s")
+classifiers = [
+    lambda: (
+        "LRW",
+        LogisticRegression(
+            class_weight="balanced",
+            solver="saga",
+            random_state=random_state,
+            max_iter=100,
+            verbose=False,
+        ),
+    ),
+    # lambda: (
+    #     "LR",
+    #     LogisticRegression(
+    #         solver="saga", random_state=random_state, max_iter=100, verbose=False,
+    #     ),
+    # ),
+    # lambda: ("RF", RandomForestClassifier(n_jobs=-1, random_state=random_state)),
+    lambda: (
+        "RFW",
+        RandomForestClassifier(
+            class_weight="balanced", n_jobs=-1, random_state=random_state
+        ),
+    ),
+    # lambda: ("WW", ForestClassifier(n_jobs=-1, random_state=random_state)),
+    lambda: (
+        "WildWood (Agg)",
+        ForestClassifier(class_weight="balanced", n_jobs=-1, random_state=random_state),
+    ),
+    lambda: (
+        "WildWood (No Agg)",
+        ForestClassifier(class_weight="balanced", n_jobs=-1,
+                         random_state=random_state, aggregation=False),
+    ),
+]
 
-    clf.predict((dataset.data_test[:100]))
 
-    return [fit_time] + datasets.evaluate_classifier(clf, dataset.data_test, dataset.target_test, binary=dataset.binary)
-
-class args_class():
-    def __init__(self):
-        self.dataset = "Moons"
-        self.normalize_intervals=True
-        self.one_hot_categoricals=False
-        self.dataset_path="data"
-        self.random_state = 0
-        self.dataset_subsample=None#50000
-args = args_class()
-
-dataset_names = ["Adult", "Bank", "Car", "Cardio", "Churn", "Default_cb", "Letter", "Satimage", "Sensorless", "Spambase", "BreastCancer"]
-if all_datasets:
-    dataset_names = ["Higgs", "Covtype", "KDDCup", "NewsGroups"] + dataset_names #take the biggest ones first in case there are data loading issues ...
-    print("Using ALL datasets for benchmarking including : Higgs, Covtype, KDDCup, NewsGroups")
-
-classifiers_one_hot = [wildwood, logistic_regression, xgboost, sklearn_random_forest]
-classifiers_categorical = [catboost, lightgbm, wildwood]
-
-order = ["fit time", "predict time", "AUC", "accuracy", "log loss", "avg precision score"]
+data_extraction = {
+    "LogisticRegression": {
+        "one_hot_encode": True,
+        "standardize": True,
+        "drop": "first",
+    },
+    "RandomForestClassifier": {
+        "one_hot_encode": True,
+        "standardize": False,
+        "drop": None,
+    },
+    "ForestClassifier": {"one_hot_encode": True, "standardize": False, "drop": None}
+}
 
 
-stats = list()
+# Number of time each experiment is repeated, one for each seed (leading
+# data_random_states = [42, 43, 44, 46, 47, 49, 50, 52, 53, 55]
+data_random_states = [42]
+clf_random_state = 42
 
-for dataset_name in dataset_names:
+col_data = []
+col_classifier = []
+col_classifier_title = []
+col_repeat = []
+col_fit_time = []
+col_predict_time = []
+col_roc_auc = []
+col_roc_auc_weighted = []
+col_avg_precision_score = []
+col_avg_precision_score_weighted = []
+col_log_loss = []
+col_accuracy = []
 
-    args.dataset = dataset_name
-    args.one_hot_categoricals = False
-    print("")
-    print("Loading dataset {} with preserved categories".format(dataset_name))
-    print("")
-    dataset = datasets.load_dataset(args, as_pandas=True)
-    dataset.info()
 
-    for clf in classifiers_categorical:
+for Clf in classifiers:
+    clf_title, clf = Clf()
+    clf_name = clf.__class__.__name__
+    logging.info("=" * 128)
+    logging.info("Launching experiments for %s" % clf_name)
+    for loader in loaders_small_classification:
+        dataset = loader()
+        data_name = dataset.name
+        task = dataset.task
+        for key, val in data_extraction[clf_name].items():
+            setattr(dataset, key, val)
+        logging.info("-" * 64)
+        logging.info("Launching task for dataset %r" % dataset)
+        for repeat, data_random_state in enumerate(data_random_states):
+            clf_title, clf = Clf()
+            logging.info("Repeat: %d random_state: %d" % (repeat, data_random_state))
+            col_data.append(data_name)
+            col_classifier.append(clf_name)
+            col_classifier_title.append(clf_title)
+            col_repeat.append(repeat)
+            X_train, X_test, y_train, y_test = dataset.extract(
+                random_state=data_random_state
+            )
+            y_test_binary = LabelBinarizer().fit_transform(y_test)
+            tic = time()
+            clf.fit(X_train, y_train)
+            toc = time()
+            fit_time = toc - tic
+            logging.info("Fitted %s in %.2f seconds" % (clf_name, fit_time))
+            col_fit_time.append(fit_time)
+            tic = time()
+            y_scores = clf.predict_proba(X_test)
+            toc = time()
+            predict_time = toc - tic
+            col_predict_time.append(predict_time)
+            logging.info("Predict %s in %.2f seconds" % (clf_name, fit_time))
+            y_pred = np.argmax(y_scores, axis=1)
 
-        print("")
-        print("Benchmarking {} classifier on dataset {}".format(clf.__name__, dataset_name))
-        print("")
-        record = clf(dataset)
-        for i in range(len(record)):
-            stats.append([clf.__name__, dataset_name, order[i], record[i]])
+            if task == "binary-classification":
+                roc_auc = roc_auc_score(y_test, y_scores[:, 1])
+                roc_auc_weighted = roc_auc
+                avg_precision_score = average_precision_score(y_test, y_scores[:, 1])
+                avg_precision_score_weighted = avg_precision_score
+                log_loss_ = log_loss(y_test, y_scores)
+                accuracy = accuracy_score(y_test, y_pred)
+            elif task == "multiclass-classification":
+                roc_auc = roc_auc_score(
+                    y_test, y_scores, multi_class="ovr", average="macro"
+                )
+                roc_auc_weighted = roc_auc_score(
+                    y_test, y_scores, multi_class="ovr", average="weighted"
+                )
+                avg_precision_score = average_precision_score(y_test_binary, y_scores)
+                avg_precision_score_weighted = average_precision_score(
+                    y_test_binary, y_scores, average="weighted"
+                )
+                log_loss_ = log_loss(y_test, y_scores)
+                accuracy = accuracy_score(y_test, y_pred)
+            # TODO: regression
+            else:
+                raise ValueError("Task %s not understood" % task)
 
-    args.one_hot_categoricals = True
-    print("")
-    print("Loading dataset {} with one-hot categories".format(dataset_name))
-    print("")
-    dataset = datasets.load_dataset(args, as_pandas=True)
-    dataset.info()
+            col_roc_auc.append(roc_auc)
+            col_roc_auc_weighted.append(roc_auc_weighted)
+            col_avg_precision_score.append(avg_precision_score)
+            col_avg_precision_score_weighted.append(avg_precision_score_weighted)
+            col_log_loss.append(log_loss_)
+            col_accuracy.append(accuracy)
 
-    for clf in classifiers_one_hot:
-        clf_name = clf.__name__
-        print("")
-        print("Benchmarking {} classifier on dataset {}".format(clf_name, dataset_name))
-        print("")
-        record = clf(dataset)
-        for i in range(len(record)):
-            stats.append([clf.__name__ + "_oh", dataset_name, order[i], record[i]])
+            logging.info(
+                "AUC= %.2f, AUCW: %.2f, AVGP: %.2f, AVGPW: %.2f, LOGL: %.2f, ACC: %.2f"
+                % (
+                    roc_auc,
+                    roc_auc_weighted,
+                    avg_precision_score,
+                    avg_precision_score_weighted,
+                    log_loss_,
+                    accuracy,
+                )
+            )
 
-df = pd.DataFrame(stats, columns=["algorithm", "dataset", "metric", "value"])
 
-bench = df.pivot(index=["dataset", "metric"], columns="algorithm")
+results = pd.DataFrame(
+    {
+        "dataset": col_data,
+        "classifier": col_classifier,
+        "classifier_title": col_classifier_title,
+        "repeat": col_repeat,
+        "fit_time": col_fit_time,
+        "predict_time": col_predict_time,
+        "roc_auc": col_roc_auc,
+        "roc_auc_w": col_roc_auc_weighted,
+        "avg_prec": col_avg_precision_score,
+        "avg_prec_w": col_avg_precision_score_weighted,
+        "log_loss": col_log_loss,
+        "accuracy": col_accuracy,
+    }
+)
 
-#def extract_field(df, field):
-#    indexes = list(df.index)
-#    cols = list(df.columns)
-#    new_df = pd.DataFrame(index=indexes, columns=cols)
-#    for i in indexes:
-#        for c in cols:
-#            new_df.at[i, c] = df.loc[i, c][field]
-#    return new_df
+print(results)
 
-dtime1 = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-dtime2 = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+now = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+
+# Get the commit number as a string
 commit = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])
+commit = commit.decode("utf-8").strip()
 
-with open("benchmark_clf_"+dtime1+".pickle", 'wb') as f:
-    pickle.dump({"date_time" : dtime2, "commit": commit, "dataframe" : bench}, f)
+with open("benchmarks_" + now + ".pickle", "wb") as f:
+    pkl.dump({"datetime": now, "commit": commit, "results": results}, f)
