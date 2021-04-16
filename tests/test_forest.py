@@ -296,11 +296,11 @@ class TestForestClassifier(object):
             #    the trees are all the same
             clf = ForestClassifier(n_estimators=n_estimators, n_jobs=n_jobs)
 
-            def _my_generate_random_states(self):
+            def _my_generate_random_states(self, n_states=None):
                 self._random_states_bootstrap = np.ones(
-                    (clf.n_estimators), dtype=np.int32
+                    (n_states or clf.n_estimators), dtype=np.int32
                 )
-                self._random_states_trees = np.ones((clf.n_estimators), dtype=np.int32)
+                self._random_states_trees = np.ones((n_states or clf.n_estimators), dtype=np.int32)
 
             # Monkey patch the classifier
             clf._generate_random_states = types.MethodType(
@@ -324,13 +324,13 @@ class TestForestClassifier(object):
             #    different, all the trees are different
             clf = ForestClassifier(n_estimators=n_estimators, n_jobs=n_jobs)
 
-            def _my_generate_random_states(self):
+            def _my_generate_random_states(self, n_states=None):
                 # All bootstrap seeds are the same
                 self._random_states_bootstrap = np.ones(
-                    (clf.n_estimators), dtype=np.int32
+                    (n_states or clf.n_estimators), dtype=np.int32
                 )
                 # But column subsampling seeds are different
-                self._random_states_trees = np.arange(clf.n_estimators, dtype=np.int32)
+                self._random_states_trees = np.arange(n_states or clf.n_estimators, dtype=np.int32)
 
             # Monkey patch the classifier
             clf._generate_random_states = types.MethodType(
@@ -354,13 +354,13 @@ class TestForestClassifier(object):
             #    identical, all the trees are different
             clf = ForestClassifier(n_estimators=n_estimators, n_jobs=n_jobs)
 
-            def _my_generate_random_states(self):
+            def _my_generate_random_states(self, n_states=None):
                 # All bootstrap seeds are the same
                 self._random_states_bootstrap = np.arange(
-                    clf.n_estimators, dtype=np.int32
+                    n_states or clf.n_estimators, dtype=np.int32
                 )
                 # But column subsampling seeds are different
-                self._random_states_trees = np.ones((clf.n_estimators,), dtype=np.int32)
+                self._random_states_trees = np.ones((n_states or clf.n_estimators,), dtype=np.int32)
 
             # Monkey patch the classifier
             clf._generate_random_states = types.MethodType(
