@@ -8,7 +8,7 @@ from matplotlib.colors import ListedColormap
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, confusion_matrix, average_precision_score
 
-from wildwood.dataset import load_churn, load_bank
+from wildwood.datasets import load_churn, load_bank
 from wildwood.forest import ForestClassifier
 
 np.set_printoptions(precision=2)
@@ -67,6 +67,7 @@ print("AP(train):", avg_prec_train, "AP(test):", avg_prec_test)
 dataset.one_hot_encode = True
 dataset.standardize = False
 X_train, X_test, y_train, y_test = dataset.extract(random_state=data_random_state)
+
 
 clf = ForestClassifier(
     n_estimators=n_estimators,

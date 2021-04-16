@@ -10,11 +10,11 @@ from sklearn.linear_model import SGDClassifier
 from sklearn.metrics import accuracy_score
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--dataset', type=str, default="Moons")
+parser.add_argument('--datasets', type=str, default="Moons")
 parser.add_argument('--normalize-intervals', action="store_true", default=False)
 parser.add_argument('--one-hot-categoricals', action="store_true", default=False)
-parser.add_argument('--dataset-path', type=str, default="data")
-parser.add_argument('--dataset-subsample', type=int, default=100000)
+parser.add_argument('--datasets-path', type=str, default="data")
+parser.add_argument('--datasets-subsample', type=int, default=100000)
 parser.add_argument('--penalty', type=str, default='l2')
 parser.add_argument('--random-state', type=int, default=0)
 parser.add_argument('--n-jobs', type=int, default=None)

@@ -6,11 +6,11 @@ import datasets
 from sklearn.linear_model import LogisticRegression
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--dataset', type=str, default="Moons")
+parser.add_argument('--datasets', type=str, default="Moons")
 parser.add_argument('--normalize-intervals', action="store_true", default=False)
 parser.add_argument('--one-hot-categoricals', action="store_true", default=False)
-parser.add_argument('--dataset-path', type=str, default="data")
-parser.add_argument('--dataset-subsample', type=int, default=100000)
+parser.add_argument('--datasets-path', type=str, default="data")
+parser.add_argument('--datasets-subsample', type=int, default=100000)
 parser.add_argument('--penalty', type=str, default='l2')
 parser.add_argument('--dual', action="store_true", default=False)
 parser.add_argument('--random-state', type=int, default=0)
@@ -32,13 +32,13 @@ print ("")
 dataset = datasets.load_dataset(args, as_pandas=True)
 
 if dataset.task != "classification":
-    print("The loaded dataset is not for classification ... exiting")
+    print("The loaded datasets is not for classification ... exiting")
     exit()
 dataset.info()
-#sample_weights = dataset.get_train_sample_weights()
+#sample_weights = datasets.get_train_sample_weights()
 
 print("Training Scikit Learn Logistic regression classifier ...")
-### Using class_weights="balanced" instead of sample_weights to dodge LogisticRegression bug when n_jobs > 1 and dataset is too big
+### Using class_weights="balanced" instead of sample_weights to dodge LogisticRegression bug when n_jobs > 1 and datasets is too big
 clf = LogisticRegression(penalty=args.penalty, dual = args.dual, n_jobs=args.n_jobs, solver=args.solver, verbose=args.verbose, max_iter=args.max_iter, class_weight="balanced")
 
 

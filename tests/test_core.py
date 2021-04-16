@@ -9,17 +9,10 @@ import pytest
 import numpy as np
 
 from wildwood import ForestClassifier, ForestRegressor
-from wildwood.dataset import (
+from wildwood.datasets import (
     load_adult,
-    load_bank,
     load_boston,
-    load_car,
-    load_churn,
-    load_cardio,
-    load_letter,
-    load_breastcancer,
-    load_default_cb,
-    load_sensorless,
+    load_car
 )
 
 from wildwood._split import is_bin_in_partition

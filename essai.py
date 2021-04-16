@@ -4,7 +4,6 @@ import pandas as p
 
 import pytest
 
-
 from numba import jit, uint8, boolean, intp, uintp
 
 
