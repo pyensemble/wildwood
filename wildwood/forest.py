@@ -380,7 +380,7 @@ class ForestBase(BaseEstimator):
                     X_binned,
                     y if not ovr else y[ind // n_estimators],
                     sample_weight_,
-                    self._random_states_bootstrap[ind % n_estimators],
+                    self._random_states_bootstrap[ind],
                 )
                 for ind in range(len(trees))
             )
@@ -393,7 +393,7 @@ class ForestBase(BaseEstimator):
                     X_binned,
                     y if not ovr else y[ind // n_estimators],
                     sample_weight_,
-                    self._random_states_bootstrap[ind % n_estimators],
+                    self._random_states_bootstrap[ind],
                 )
                 for ind in range(len(trees))
             )
