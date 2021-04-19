@@ -17,7 +17,7 @@ from sklearn.ensemble._base import _partition_estimators
 from sklearn.utils import check_random_state, compute_sample_weight, check_array
 from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
 from sklearn.utils.validation import check_consistent_length, _check_sample_weight
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import LabelEncoder, LabelBinarizer
 
 from sklearn.utils.fixes import _joblib_parallel_args, delayed
 from sklearn.utils.multiclass import check_classification_targets
@@ -267,12 +267,16 @@ class ForestBase(BaseEstimator):
         if is_classifier:
             y = self._encode_y(y)
             class_weight = self.class_weight
+            multiclass = self.multiclass
             if class_weight is not None:
-                expanded_class_weight = compute_sample_weight(class_weight, y)
-                sample_weight_ *= expanded_class_weight
+                if multiclass == "multinomial":
+                    expanded_class_weight = compute_sample_weight(class_weight, y)
+                    sample_weight_ *= expanded_class_weight
+                else:
+                    sample_weight_ = [np.ascontiguousarray(sample_weight_ * compute_sample_weight(class_weight, yy), dtype=np.float32) for yy in y]
 
             n_classes = self._n_classes_
-            if self.multiclass == "ovr":
+            if multiclass == "ovr":
                 n_classes_trees = 2
                 n_trees = n_classes*n_estimators
             else:
@@ -379,7 +383,7 @@ class ForestBase(BaseEstimator):
                     trees[ind],
                     X_binned,
                     y if not ovr else y[ind // n_estimators],
-                    sample_weight_,
+                    sample_weight_ if not ovr else sample_weight_[ind // n_estimators],
                     self._random_states_bootstrap[ind],
                 )
                 for ind in range(len(trees))
@@ -392,7 +396,7 @@ class ForestBase(BaseEstimator):
                     trees[ind],
                     X_binned,
                     y if not ovr else y[ind // n_estimators],
-                    sample_weight_,
+                    sample_weight_ if not ovr else sample_weight_[ind // n_estimators],
                     self._random_states_bootstrap[ind],
                 )
                 for ind in range(len(trees))
@@ -1021,8 +1025,9 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         """
         #
         # and n_trees_per_iteration_
+        multiclass = self.multiclass
         check_classification_targets(y)
-        label_encoder = LabelEncoder()
+        label_encoder = LabelBinarizer() if multiclass == "ovr" else LabelEncoder()
         pre_encoded_y = label_encoder.fit_transform(y)
         self._classes_ = label_encoder.classes_
         n_classes_ = self._classes_.shape[0]
@@ -1030,16 +1035,19 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         # only 1 tree for binary classification.
         # TODO: For multiclass classification, we build 1 tree per class.
         # self.n_trees_per_iteration_ = 1 if n_classes_ <= 2 else n_classes_
-        if self.multiclass == "ovr" and n_classes_ <= 2:
+        if multiclass == "ovr" and n_classes_ <= 2:
             if self.verbose:
                 print("WARNING : no more than two classes detected, one versus all strategy will NOT be used")
             self.multiclass = "multinomial"
         if self.multiclass == "ovr":
-            encoded_y = np.zeros((len(pre_encoded_y), n_classes_), dtype=np.float32, order="F")
-            encoded_y[np.arange(len(pre_encoded_y)),pre_encoded_y] = 1
-            encoded_y = [np.ascontiguousarray(encoded_y[:,i], dtype=np.float32) for i in range(n_classes_)]
+            #encoded_y = np.zeros((len(pre_encoded_y), n_classes_), dtype=np.float32, order="F")
+            #encoded_y[np.arange(len(pre_encoded_y)),pre_encoded_y] = 1
+            encoded_y = [np.ascontiguousarray(pre_encoded_y[:,i], dtype=np.float32) for i in range(n_classes_)]
         else:
-            encoded_y = np.ascontiguousarray(pre_encoded_y, dtype=np.float32)
+            if multiclass == "multinomial":
+                encoded_y = np.ascontiguousarray(pre_encoded_y, dtype=np.float32)
+            else:
+                encoded_y = np.ascontiguousarray(pre_encoded_y.flatten(), dtype=np.float32)
         return encoded_y
 
     def _validate_y_class_weight(self, y):
