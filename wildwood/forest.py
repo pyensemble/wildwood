@@ -298,7 +298,7 @@ class ForestBase(BaseEstimator):
         n_jobs_ = self._get_n_jobs_(self.n_jobs, self.n_estimators)
         self.n_jobs_ = n_jobs_
 
-        self._generate_random_states(n_trees)
+        self._generate_random_states(n_states=n_trees)
 
         # Everywhere in the code, the convention is that n_bins == max_bins + 1,
         # since max_bins is the maximum number of bins, without the eventual bin for
