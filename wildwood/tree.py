@@ -23,8 +23,6 @@ from ._split import (
     SplitRegressor,
     find_best_split_classifier_along_feature,
     find_best_split_regressor_along_feature,
-    copy_split_classifier,
-    copy_split_regressor,
 )
 from ._grow import grow
 from ._node import (
@@ -43,8 +41,9 @@ from ._tree import (
     tree_regressor_weighted_depth,
     get_nodes_regressor,
     get_nodes_classifier,
-    tree_apply
+    tree_apply,
 )
+from ._tree import path_leaf as _path_leaf
 
 
 class TreeBase(BaseEstimator, metaclass=ABCMeta):
@@ -61,6 +60,7 @@ class TreeBase(BaseEstimator, metaclass=ABCMeta):
         min_samples_split,
         min_samples_leaf,
         categorical_features,
+        is_categorical,
         max_features,
         random_state,
         verbose=0,
@@ -79,6 +79,7 @@ class TreeBase(BaseEstimator, metaclass=ABCMeta):
         self.min_samples_split = min_samples_split
         self.min_samples_leaf = min_samples_leaf
         self.categorical_features = categorical_features
+        self.is_categorical = is_categorical
         self.max_features = max_features
         self.random_state = random_state
         self.verbose = verbose
@@ -95,7 +96,7 @@ class TreeBase(BaseEstimator, metaclass=ABCMeta):
             The maximum depth of the tree.
         """
         check_is_fitted(self)
-        return self.tree_.max_depth
+        return self._tree.max_depth
 
     def get_n_leaves(self):
         """Return the number of leaves of the decision tree.
@@ -106,7 +107,7 @@ class TreeBase(BaseEstimator, metaclass=ABCMeta):
             Number of leaves.
         """
         check_is_fitted(self)
-        return self.tree_.n_leaves
+        return self._tree.n_leaves
 
     def get_nodes(self):
         return get_nodes(self._tree)
@@ -130,6 +131,7 @@ class TreeClassifier(ClassifierMixin, TreeBase):
         min_samples_split,
         min_samples_leaf,
         categorical_features,
+        is_categorical,
         max_features,
         random_state,
         verbose=0,
@@ -144,6 +146,7 @@ class TreeClassifier(ClassifierMixin, TreeBase):
             min_samples_split=min_samples_split,
             min_samples_leaf=min_samples_leaf,
             categorical_features=categorical_features,
+            is_categorical=is_categorical,
             max_features=max_features,
             random_state=random_state,
             verbose=verbose,
@@ -179,11 +182,11 @@ class TreeClassifier(ClassifierMixin, TreeBase):
             self.aggregation,
             self.dirichlet,
             self.step,
+            self.is_categorical
         )
 
         node_context = NodeClassifierContext(tree_context)
         best_split = SplitClassifier(tree_context.n_classes)
-        candidate_split = SplitClassifier(tree_context.n_classes)
         compute_node_context = compute_node_classifier_context
         grow(
             tree,
@@ -191,9 +194,7 @@ class TreeClassifier(ClassifierMixin, TreeBase):
             node_context,
             compute_node_context,
             find_best_split_classifier_along_feature,
-            copy_split_classifier,
             best_split,
-            candidate_split,
         )
         self._train_indices = train_indices
         self._valid_indices = valid_indices
@@ -210,6 +211,9 @@ class TreeClassifier(ClassifierMixin, TreeBase):
     def get_nodes(self):
         return get_nodes_classifier(self._tree)
 
+    def path_leaf(self, X):
+        return _path_leaf(self._tree, X)
+
 
 class TreeRegressor(TreeBase, RegressorMixin):
     def __init__(
@@ -224,6 +228,7 @@ class TreeRegressor(TreeBase, RegressorMixin):
         min_samples_split=2,
         min_samples_leaf=1,
         categorical_features=None,
+        is_categorical=None,
         max_features="auto",
         random_state=None,
         verbose=0,
@@ -238,6 +243,7 @@ class TreeRegressor(TreeBase, RegressorMixin):
             min_samples_split=min_samples_split,
             min_samples_leaf=min_samples_leaf,
             categorical_features=categorical_features,
+            is_categorical=is_categorical,
             max_features=max_features,
             random_state=random_state,
             verbose=verbose,
@@ -264,15 +270,14 @@ class TreeRegressor(TreeBase, RegressorMixin):
             train_indices,
             valid_indices,
             self.n_bins - 1,
-            n_bins_per_feature,
             uintp(self.max_features),
             self.aggregation,
             float32(self.step),
+            self.is_categorical
         )
 
         node_context = NodeRegressorContext(tree_context)
         best_split = SplitRegressor()
-        candidate_split = SplitRegressor()
         compute_node_context = compute_node_regressor_context
 
         grow(
@@ -281,9 +286,7 @@ class TreeRegressor(TreeBase, RegressorMixin):
             node_context,
             compute_node_context,
             find_best_split_regressor_along_feature,
-            copy_split_regressor,
             best_split,
-            candidate_split,
         )
         self._train_indices = train_indices
         self._valid_indices = valid_indices

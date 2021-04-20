@@ -15,9 +15,9 @@ from ._utils import get_type, sample_without_replacement
 from ._tree_context import TreeClassifierContextType, TreeRegressorContextType
 
 
-# This data-type describes all the information saved about a node.
-# It's used in _tree.py where the Tree dataclass contains an attribute called nodes
-# that uses this data type.
+# This data type describes all the information saved about a node. It is used in
+#  _tree.py where the TreeClassifier and TreeRegressor dataclasses contain
+#  an attribute called nodes that uses this data type.
 node_dtype = np.dtype(
     [
         # Index of the node in the nodes array
@@ -51,8 +51,7 @@ node_dtype = np.dtype(
         ("bin_threshold", np.uint8),
         #
         # Impurity of the node. Used to avoid to split a "pure" node (with impurity=0).
-        #   Note that impurity is computed using training samples (as all tree-growing
-        #   related things)
+        #   Note that impurity is computed using training samples only.
         ("impurity", np.float32),
         #
         # Validation loss of the node, computed on validation (out-of-the-bag) samples
@@ -88,6 +87,21 @@ node_dtype = np.dtype(
         #
         # End-index of the slice containing the node's validation samples indexes
         ("end_valid", np.uintp),
+        #
+        # Is the split on a categorical feature ?
+        ("is_split_categorical", np.bool),
+        #
+        # Whenever the split is on a categorical features: start index of the bin
+        # partition for this node. The tree has a bin_partitions array,
+        # and bin_partitions[bin_partition_start:bin_partition_end] contains
+        # the bins that go to the left child
+        ("bin_partition_start", np.uintp),
+        #
+        # Whenever the split is on a categorical features: end index of the bin
+        # partition for this node. The tree has a bin_partitions array,
+        # and bin_partitions[bin_partition_start:bin_partition_end] contains
+        # the bins that go to the left child.
+        ("bin_partition_end", np.uintp),
     ]
 )
 
@@ -147,6 +161,14 @@ node_context_type = [
     #
     # Weighted number of validation samples for each (feature, bin) in the node
     ("w_samples_valid_in_bins", float32[:, ::1]),
+    #
+    # A vector that counts the number of non-empty bins for each feature. Only for
+    #   training samples, since it's useful for split finding only.
+    ("non_empty_bins_count", uint8[::1]),
+    #
+    # An array that saves the indices of non-empty bins for each feature. Only for
+    #   training samples, since it's useful for split finding only.
+    ("non_empty_bins", uint8[:, ::1]),
 ]
 
 
@@ -384,6 +406,8 @@ def init_node_context(tree_context, node_context):
     node_context.w_samples_valid_in_bins = np.empty(
         (max_features, max_bins), dtype=np.float32
     )
+    node_context.non_empty_bins = np.empty((max_features, max_bins), dtype=uint8)
+    node_context.non_empty_bins_count = np.empty((max_features,), dtype=uint8)
 
 
 @jit(
@@ -396,6 +420,8 @@ def init_node_context(tree_context, node_context):
     locals={
         "w_samples_train_in_bins": float32[:, ::1],
         "w_samples_valid_in_bins": float32[:, ::1],
+        "non_empty_bins": uint8[:, ::1],
+        "non_empty_bins_count": uint8[::1],
         "y_sum": float32[:, :, ::1],
         "y_pred": float32[::1],
         "features": uintp[::1],
@@ -450,9 +476,10 @@ def compute_node_classifier_context(
     end_valid : int
         End-index of the slice containing the node's validation samples indexes
     """
-    # Initialize the things from the node context
     w_samples_train_in_bins = node_context.w_samples_train_in_bins
     w_samples_valid_in_bins = node_context.w_samples_valid_in_bins
+    non_empty_bins = node_context.non_empty_bins
+    non_empty_bins_count = node_context.non_empty_bins_count
     y_sum = node_context.y_sum
     y_pred = node_context.y_pred
 
@@ -465,6 +492,8 @@ def compute_node_classifier_context(
     features = node_context.features_sampled
     w_samples_train_in_bins.fill(0.0)
     w_samples_valid_in_bins.fill(0.0)
+    non_empty_bins.fill(0)
+    non_empty_bins_count.fill(0)
     y_sum.fill(0.0)
     y_pred.fill(0.0)
 
@@ -492,7 +521,6 @@ def compute_node_classifier_context(
 
     # TODO: unrolling the for loop could be faster
     # For-loop on features first and then samples (X is F-major)
-
     for feature in features:
         # Compute statistics about training samples
         for sample in train_indices:
@@ -502,13 +530,23 @@ def compute_node_classifier_context(
             if f == 0:
                 w_samples_train += sample_weight
                 y_pred[label] += sample_weight
+
+            # TODO: because of this test, we should test somewhere that the
+            #  sample weights only has > 0 coordinates
+            if w_samples_train_in_bins[f, bin] == 0.0:
+                # It's the first time we find a sample for this (feature, bin)
+                # We save the bin number at index non_empty_bins_count[f]
+                non_empty_bins[f, non_empty_bins_count[f]] = bin
+                # We increase the count of non-empty bins for this feature
+                non_empty_bins_count[f] += 1
+
             # One more sample in this bin for the current feature
             w_samples_train_in_bins[f, bin] += sample_weight
             # One more sample in this bin for the current feature with this label
             y_sum[f, bin, label] += sample_weight
 
-        # TODO: we should put this outside so that we can change the dirichlet parameter
-        # without rebuilding the tree
+        # TODO: we should put this outside so that we can change the dirichlet
+        #  parameter without re-growing the tree
         # The prediction is given by the formula
         #   y_k = (n_k + dirichlet) / (n_samples + dirichlet * n_classes)
         # where n_k is the number of samples with label class k
@@ -527,7 +565,7 @@ def compute_node_classifier_context(
                 label = uintp(y[sample])
                 # TODO: aggregation loss is hard-coded here. Call a function instead
                 #  when implementing other losses
-                loss_valid += - w_samples_valid * log(y_pred[label])
+                loss_valid -= sample_weight * log(y_pred[label])
 
             w_samples_valid_in_bins[f, bin] += sample_weight
 
@@ -551,6 +589,8 @@ def compute_node_classifier_context(
     locals={
         "w_samples_train_in_bins": float32[:, ::1],
         "w_samples_valid_in_bins": float32[:, ::1],
+        "non_empty_bins": uint8[:, ::1],
+        "non_empty_bins_count": uint8[::1],
         "y_sum": float32[:, ::1],
         "y_sq_sum": float32[:, ::1],
         "y_pred": float32,
@@ -608,6 +648,8 @@ def compute_node_regressor_context(
     # Initialize the things from the node context
     w_samples_train_in_bins = node_context.w_samples_train_in_bins
     w_samples_valid_in_bins = node_context.w_samples_valid_in_bins
+    non_empty_bins = node_context.non_empty_bins
+    non_empty_bins_count = node_context.non_empty_bins_count
     y_sum = node_context.y_sum
     y_sq_sum = node_context.y_sq_sum
 
@@ -620,6 +662,8 @@ def compute_node_regressor_context(
     features = node_context.features_sampled
     w_samples_train_in_bins.fill(0.0)
     w_samples_valid_in_bins.fill(0.0)
+    non_empty_bins.fill(0)
+    non_empty_bins_count.fill(0)
     y_sum.fill(0.0)
     y_sq_sum.fill(0.0)
     y_pred = 0.0
@@ -646,7 +690,6 @@ def compute_node_regressor_context(
 
     # TODO: unrolling the for loop could be faster
     # For-loop on features first and then samples (X is F-major)
-
     for feature in features:
         # Compute statistics about training samples
         for sample in train_indices:
@@ -657,6 +700,16 @@ def compute_node_regressor_context(
             if f == 0:
                 w_samples_train += sample_weight
                 y_pred += w_y
+
+            # TODO: because of this test, we should test somewhere that the
+            #  sample weights only has > 0 coordinates
+            if w_samples_train_in_bins[f, bin] == 0.0:
+                # It's the first time we find a sample for this (feature, bin)
+                # We save the bin number at index non_empty_bins_count[f]
+                non_empty_bins[f, non_empty_bins_count[f]] = bin
+                # We increase the count of non-empty bins for this feature
+                non_empty_bins_count[f] += 1
+
             # One more sample in this bin for the current feature
             w_samples_train_in_bins[f, bin] += sample_weight
             # One more sample in this bin for the current feature with this label

@@ -1,45 +1,31 @@
+import sys
 import numpy as np
+import pandas as pd
 
-from numpy.random import randint
-from joblib import Parallel
-from sklearn.utils.fixes import _joblib_parallel_args, delayed
-from sklearn.utils import check_random_state
-from numba import njit, _helperlib
+sys.path.extend([".."])
 
-n = 10
-n_jobs = 4
-random_state = 42
+from wildwood.forest import ForestClassifier
+from wildwood.dataset import load_bank
 
-out = np.empty((n_jobs, n))
-
-
-@njit
-def f(out, n, random_state, idx):
-    # np.random.seed(random_state)
-    np.random.seed(random_state)
-    for i in range(n):
-        out[idx, i] = randint(100)
+dataset = load_bank()
+dataset.one_hot_encode = True
+dataset.standardize = False
+dataset.drop = None
+X_train, X_test, y_train, y_test = dataset.extract(random_state=42)
 
 
-def fit(random_state):
-    np.random.seed(random_state)
-    random_states = randint(np.iinfo(np.intp).max, size=n_jobs)
-    trees = Parallel(n_jobs=16, **_joblib_parallel_args(prefer="threads"),)(
-        delayed(f)(out, n, random_state, idx)
-        for idx, random_state in zip(range(n_jobs), random_states)
-    )
+clf = ForestClassifier(
+    n_estimators=1,
+    n_jobs=1,
+    class_weight="balanced",
+    random_state=42,
+    aggregation=False,
+    max_features=None,
+    dirichlet=0.0,
+)
+
+clf.fit(X_train, y_train)
 
 
-fit(random_state)
-print(out)
+print(clf.path_leaf(X_train[:1]))
 
-fit(random_state)
-print(out)
-
-fit(random_state)
-print(out)
-
-
-rng = check_random_state(0)
-
-print(rng.randint(np.iinfo(np.intp).max, size=10))
