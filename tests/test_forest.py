@@ -29,6 +29,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score
 
 from wildwood import ForestClassifier, ForestRegressor
+from wildwood.dataset import load_car
 
 
 # logging.basicConfig(
@@ -300,7 +301,9 @@ class TestForestClassifier(object):
                 self._random_states_bootstrap = np.ones(
                     (n_states or clf.n_estimators), dtype=np.int32
                 )
-                self._random_states_trees = np.ones((n_states or clf.n_estimators), dtype=np.int32)
+                self._random_states_trees = np.ones(
+                    (n_states or clf.n_estimators), dtype=np.int32
+                )
 
             # Monkey patch the classifier
             clf._generate_random_states = types.MethodType(
@@ -330,7 +333,9 @@ class TestForestClassifier(object):
                     (n_states or clf.n_estimators), dtype=np.int32
                 )
                 # But column subsampling seeds are different
-                self._random_states_trees = np.arange(n_states or clf.n_estimators, dtype=np.int32)
+                self._random_states_trees = np.arange(
+                    n_states or clf.n_estimators, dtype=np.int32
+                )
 
             # Monkey patch the classifier
             clf._generate_random_states = types.MethodType(
@@ -360,7 +365,9 @@ class TestForestClassifier(object):
                     n_states or clf.n_estimators, dtype=np.int32
                 )
                 # But column subsampling seeds are different
-                self._random_states_trees = np.ones((n_states or clf.n_estimators,), dtype=np.int32)
+                self._random_states_trees = np.ones(
+                    (n_states or clf.n_estimators,), dtype=np.int32
+                )
 
             # Monkey patch the classifier
             clf._generate_random_states = types.MethodType(
@@ -580,6 +587,46 @@ class TestForestClassifier(object):
         assert clf.categorical_features is None
         clf.categorical_features = [1, 3]
         assert clf.categorical_features == [1, 3]
+
+    def test_multiclass_vs_ovr_on_car(self):
+        dataset = load_car()
+        dataset.one_hot_encode = False
+        random_state = 42
+        X_train, X_test, y_train, y_test = dataset.extract(random_state=random_state)
+        y_test_binary = LabelBinarizer().fit_transform(y_test)
+
+        clf = ForestClassifier(
+            n_estimators=10,
+            n_jobs=-1,
+            multiclass="multinomial",
+            categorical_features=dataset.categorical_features_,
+            random_state=random_state,
+        )
+        clf.fit(X_train, y_train)
+        y_scores = clf.predict_proba(X_test)
+        avg_prec1 = average_precision_score(y_test_binary, y_scores, average="weighted")
+
+        clf = ForestClassifier(
+            n_estimators=10,
+            n_jobs=-1,
+            multiclass="ovr",
+            categorical_features=dataset.categorical_features_,
+            random_state=random_state,
+        )
+        clf.fit(X_train, y_train)
+        y_scores = clf.predict_proba(X_test)
+        avg_prec2 = average_precision_score(y_test_binary, y_scores, average="weighted")
+
+        clf = ForestClassifier(
+            n_estimators=10,
+            n_jobs=-1,
+            multiclass="ovr",
+            categorical_features=dataset.categorical_features_,
+            random_state=random_state,
+        )
+
+        assert avg_prec2 > avg_prec1 + 1
+
 
     def test_categorical_features_performance(self):
         pass
