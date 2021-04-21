@@ -57,6 +57,7 @@ class Dataset:
         one_hot_encode=True,
         sparse=False,
         drop="first",
+        pd_df_categories=False,
         verbose=False,
     ):
         self.name = name
@@ -72,6 +73,7 @@ class Dataset:
         self.filename = None
         self.url = None
         self.test_size = test_size
+        self.pd_df_categories = pd_df_categories
         self.verbose = verbose
 
         self.transformer = None
@@ -301,6 +303,14 @@ class Dataset:
             else:
                 columns.extend(self.categorical_columns_)
         self.columns_ = columns
+
+        if self.pd_df_categories:
+            #columns = (self.continuous_columns or [])+(self.categorical_columns or [])
+            X_train = pd.DataFrame(X_train, columns=columns)
+            X_test = pd.DataFrame(X_test, columns=columns)
+            if self.categorical_columns is not None:
+                X_train[self.categorical_columns] = X_train[self.categorical_columns].astype(int).astype('category')
+                X_test[self.categorical_columns] = X_test[self.categorical_columns].astype(int).astype('category')
 
         n_samples_train, n_columns = X_train.shape
         n_samples_test, _ = X_test.shape

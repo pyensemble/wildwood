@@ -244,7 +244,7 @@ class ForestBase(BaseEstimator):
         self._random_states_bootstrap = _random_states
         self._random_states_trees = _random_states
 
-    def fit(self, X, y, sample_weight=None):
+    def fit(self, X, y, sample_weight=None, categorical_features=None):
         """
         Trains WildWood's forest predictor from the training set (X, y).
 
@@ -270,6 +270,9 @@ class ForestBase(BaseEstimator):
         -------
         self : object
         """
+
+        if categorical_features is not None:
+            self.categorical_features = categorical_features
 
         # TODO: Why only float64 ? What if the data is already binned ?
         X, y = self._validate_data(
