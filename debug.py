@@ -40,4 +40,5 @@ clf = ForestClassifier(
     random_state=random_state,
 )
 
+clf.fit(X_train, y_train)
 print(classification_report(y_test, clf.predict(X_test)))
