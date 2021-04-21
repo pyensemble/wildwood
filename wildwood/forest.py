@@ -144,7 +144,7 @@ def _compute_weighted_depth(weighted_depth, X, out, lock, tree_idx):
 
 
 def _get_tree_prediction(predict, X, out, lock, tree_idx):
-    prediction = predict(X, check_input=False)
+    prediction = predict(X)  # here is called `tree.predict_proba`, so no need for check_input
     with lock:
         out[tree_idx] = prediction
 
@@ -572,15 +572,17 @@ class ForestBase(BaseEstimator):
 
         return X_binned
 
-    def predict_helper(self, X):
+    def predict_helper(self, X, data_binning=True):
         """A method used in all predict functions to avoid code duplication
         """
         # Is the forest fitted ?
         check_is_fitted(self)
         # Check data
         X = self._validate_X_predict(X, check_input=True)
-        # TODO: we can also avoid data binning for predictions...
-        X_binned = self._bin_data(X, is_training_data=False)
+        if data_binning:
+            X_binned = self._bin_data(X, is_training_data=False)
+        else:
+            X_binned = X
         n_jobs, _, _ = _partition_estimators(self.n_estimators, self.n_jobs)
         lock = threading.Lock()
         return X_binned, n_jobs, lock
@@ -1076,7 +1078,7 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         proba = self.predict_proba(X)
         return self.classes_.take(np.argmax(proba, axis=1), axis=0)
 
-    def predict_proba(self, X):
+    def predict_proba(self, X, data_binning=True):
         """
         Predict class probabilities for X.
 
@@ -1092,6 +1094,11 @@ class ForestClassifier(ForestBase, ClassifierMixin):
             ``dtype=np.float32``. If a sparse matrix is provided, it will be
             converted into a sparse ``csr_matrix``.
 
+        data_binning : bool
+            if True, X will be binned before sent to prediction;
+            if False, values in X are directly used to make prediction,
+            only available while there is no categorical feature.
+
         Returns
         -------
         p : ndarray of shape (n_samples, n_classes), or a list of n_outputs
@@ -1099,7 +1106,10 @@ class ForestClassifier(ForestBase, ClassifierMixin):
             The class probabilities of the input samples. The order of the
             classes corresponds to that in the attribute :term:`classes_`.
         """
-        X_binned, n_jobs, lock = self.predict_helper(X)
+        X_binned, n_jobs, lock = self.predict_helper(X, data_binning=data_binning)
+        if np.count_nonzero(self.is_categorical_) > 0 and (not data_binning):
+            raise NotImplementedError("There is at least one categorical feature,"
+                                      "prediction needed to be binned (`data_binning` must be True)")
         all_proba = np.zeros((X_binned.shape[0], self.n_classes_))
         Parallel(
             n_jobs=n_jobs,
@@ -1115,17 +1125,12 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         return all_proba
 
     def predict_proba_trees(self, X):
-        check_is_fitted(self)
-        # Check data
-        X = self._validate_X_predict(X)
         # TODO: we can also avoid data binning for predictions...
-        X_binned = self._bin_data(X, is_training_data=False)
+        X_binned, n_jobs, lock = self.predict_helper(X)
         n_samples, n_features = X.shape
         n_estimators = len(self.trees)
-        n_jobs, _, _ = _partition_estimators(self.n_estimators, self.n_jobs)
-        probas = np.empty((n_estimators, n_samples, n_features))
+        probas = np.empty((n_estimators, n_samples, self.n_classes_))
 
-        lock = threading.Lock()
         Parallel(
             n_jobs=n_jobs,
             verbose=self.verbose,

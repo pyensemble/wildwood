@@ -90,6 +90,11 @@ toc = time()
 print("time to predict_proba: ", toc - tic)
 
 tic = time()
+y_scores_no_binning = clf.predict_proba(X_test, False)
+toc = time()
+print("time to predict_proba without binning: ", toc - tic)
+
+tic = time()
 y_pred = clf.predict(X_test)
 toc = time()
 print("time to predict: ", toc - tic)
