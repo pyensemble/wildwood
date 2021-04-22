@@ -1178,7 +1178,11 @@ class ForestClassifier(ForestBase, ClassifierMixin):
             if val < 0.0:
                 raise ValueError("dirichlet must be positive")
             else:
+                recompute = hasattr(self, "_dirichlet") and self._dirichlet != val
                 self._dirichlet = val
+                if self._fitted and recompute:
+                    for tree in self.trees:
+                        tree.dirichlet = val
 
     @property
     def classes_(self):

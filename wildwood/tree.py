@@ -24,7 +24,7 @@ from ._split import (
     find_best_split_classifier_along_feature,
     find_best_split_regressor_along_feature,
 )
-from ._grow import grow
+from ._grow import grow, recompute_node_predictions
 from ._node import (
     NodeClassifierContext,
     NodeRegressorContext,
@@ -152,7 +152,8 @@ class TreeClassifier(ClassifierMixin, TreeBase):
             verbose=verbose,
         )
         self.n_classes = n_classes
-        self.dirichlet = dirichlet
+        # We set dirichlet like this at init to avoid launching what the property does
+        self._dirichlet = dirichlet
 
     def fit(self, X, y, train_indices, valid_indices, sample_weights):
         n_classes = self.n_classes
@@ -182,7 +183,7 @@ class TreeClassifier(ClassifierMixin, TreeBase):
             self.aggregation,
             self.dirichlet,
             self.step,
-            self.is_categorical
+            self.is_categorical,
         )
 
         node_context = NodeClassifierContext(tree_context)
@@ -213,6 +214,21 @@ class TreeClassifier(ClassifierMixin, TreeBase):
 
     def path_leaf(self, X):
         return _path_leaf(self._tree, X)
+
+    @property
+    def dirichlet(self):
+        return self._dirichlet
+
+    @dirichlet.setter
+    def dirichlet(self, val):
+        # We skip the checks and assume they are done by the forest
+        if val != self.dirichlet:
+            self._dirichlet = val
+            # If the attribute _tree_context is there, then the tree has
+            # already been trained and its predictions needs to be recomputed
+            if hasattr(self, "_tree_context"):
+                self._tree_context.dirichlet = val
+                recompute_node_predictions(self._tree, self._tree_context, val)
 
 
 class TreeRegressor(TreeBase, RegressorMixin):
@@ -273,7 +289,7 @@ class TreeRegressor(TreeBase, RegressorMixin):
             uintp(self.max_features),
             self.aggregation,
             float32(self.step),
-            self.is_categorical
+            self.is_categorical,
         )
 
         node_context = NodeRegressorContext(tree_context)

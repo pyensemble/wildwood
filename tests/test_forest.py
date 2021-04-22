@@ -584,6 +584,32 @@ class TestForestClassifier(object):
     def test_categorical_features_performance(self):
         pass
 
+    def test_dirichlet_switch(self):
+
+        breast_cancer = self.breast_cancer
+        X, y = breast_cancer["data"], breast_cancer["target"]
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, shuffle=True, stratify=y, random_state=42, test_size=0.3
+        )
+
+        clf1 = ForestClassifier(class_weight="balanced", random_state = 42)
+        clf2 = ForestClassifier(class_weight="balanced", random_state = 42, dirichlet=2.0)
+
+        clf1.fit(X_train, y_train)
+        clf2.fit(X_train, y_train)
+        y_score1 = clf1.predict_proba(X_test)
+        y_score2 = clf2.predict_proba(X_test)
+
+        assert np.max(np.abs(y_score1 - y_score2)) >= 0.01
+        clf2.dirichlet = 0.5
+        y_score2 = clf2.predict_proba(X_test)
+        assert np.max(np.abs(y_score1 - y_score2)) < 1e-5
+        clf1.dirichlet = 1.1
+        clf2.dirichlet = 1.1
+        y_score1 = clf1.predict_proba(X_test)
+        y_score2 = clf2.predict_proba(X_test)
+        assert np.max(np.abs(y_score1 - y_score2)) < 1e-5
+
         # inspired from
         # https://scikit-learn.org/stable/auto_examples/ensemble/plot_gradient_boosting_categorical.html#sphx-glr-auto-examples-ensemble-plot-gradient-boosting-categorical-py
         #  Ames Housing dataset¶

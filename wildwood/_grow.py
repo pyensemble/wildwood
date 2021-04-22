@@ -10,21 +10,17 @@ The grow function is the main entry point that grows the decision tree and perfo
 aggregation.
 """
 
+from math import log
+
 import numpy as np
 from numba import jit, from_dtype, void, boolean, uint8, intp, uintp, float32, optional
 from numba.types import Tuple
 from numba.experimental import jitclass
 
 from ._split import find_node_split, split_indices
-
 from ._node import node_type
-
-from ._tree import (
-    add_node_tree,
-    resize_tree,
-    TREE_UNDEFINED,
-)
-
+from ._tree import add_node_tree, resize_tree, TREE_UNDEFINED, TreeClassifierType
+from ._tree_context import TreeClassifierContextType
 from ._utils import resize, log_sum_2_exp, get_type
 
 INITIAL_STACK_SIZE = uintp(10)
@@ -557,3 +553,91 @@ def compute_tree_weights(nodes, node_count, step):
             node["log_weight_tree"] = log_sum_2_exp(
                 loss, log_weight_tree_left + log_weight_tree_right
             )
+
+
+@jit(
+    void(TreeClassifierType, TreeClassifierContextType, float32),
+    nopython=True,
+    nogil=True,
+    boundscheck=False,
+    locals={
+        "nodes": node_type[::1],
+        "n_classes": uintp,
+        "y_pred": float32[::1],
+        "y": float32[::1],
+        "sample_weights": float32[::1],
+        "partition_train": uintp[::1],
+        "partition_valid": uintp[::1],
+        "node_count": uintp,
+        "node": node_type,
+        "w_samples_train": float32,
+        "train_indices": uintp[::1],
+        "label": uintp,
+        "sample_weight": float32,
+        "valid_indices": uintp[::1],
+        "loss_valid": float32,
+        "w_samples_valid": float32,
+    },
+)
+def recompute_node_predictions(tree, tree_context, dirichlet):
+    """This function recomputes the node predictions and validation loss of nodes.
+    This is triggered by a change of the dirichlet parameter.
+
+    Parameters
+    ----------
+    tree : TreeClassifier
+        The tree object which holds nodes and prediction data
+
+    tree_context : TreeClassifierContext
+        A tree context which will contain tree-level information that is useful to
+        find splits
+
+    dirichlet : float
+        The dirichlet parameter
+
+    """
+    nodes = tree.nodes
+    n_classes = tree.n_classes
+    y_pred = np.zeros(n_classes, dtype=np.float32)
+    y = tree_context.y
+    sample_weights = tree_context.sample_weights
+    partition_train = tree_context.partition_train
+    partition_valid = tree_context.partition_valid
+
+    # Recompute y_pred with the new dirichlet parameter
+    for node_idx, node in enumerate(nodes[: tree.node_count]):
+        w_samples_train = 0.0
+        train_indices = partition_train[node["start_train"] : node["end_train"]]
+        y_pred.fill(0.0)
+        for sample in train_indices:
+            label = uintp(y[sample])
+            sample_weight = sample_weights[sample]
+            w_samples_train += sample_weight
+            y_pred[label] += sample_weight
+
+        for k in range(n_classes):
+            y_pred[k] = (y_pred[k] + dirichlet) / (
+                w_samples_train + n_classes * dirichlet
+            )
+
+        tree.y_pred[node_idx, :] = y_pred
+
+        # recompute valid_losses
+        valid_indices = partition_valid[node["start_valid"] : node["end_valid"]]
+        loss_valid = 0.0
+        w_samples_valid = 0.0
+
+        for sample in valid_indices:
+            sample_weight = sample_weights[sample]
+            w_samples_valid += sample_weight
+            label = uintp(y[sample])
+            # TODO: aggregation loss is hard-coded here. Call a function instead
+            #  when implementing other losses
+            loss_valid -= sample_weight * log(y_pred[label])
+
+        node["loss_valid"] = loss_valid
+
+    # TODO : compute tree weights anyway ? the program can be duped by switching
+    #  aggregation off, changing dirichlet and switching aggregation back on
+    if tree_context.aggregation:
+        compute_tree_weights(tree.nodes, tree.node_count, tree_context.step)
