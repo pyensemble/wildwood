@@ -11,7 +11,7 @@ aggregation.
 """
 
 import numpy as np
-from numba import jit, from_dtype, void, boolean, uint8, intp, uintp, float32
+from numba import jit, from_dtype, void, boolean, uint8, intp, uintp, float32, optional
 from numba.types import Tuple
 from numba.experimental import jitclass
 
@@ -29,6 +29,7 @@ from ._utils import resize, log_sum_2_exp, get_type
 
 INITIAL_STACK_SIZE = uintp(10)
 
+eps = np.finfo("float32").eps
 
 record_dtype = np.dtype(
     [
@@ -223,6 +224,7 @@ def pop_node_record(records):
 # TODO: for now, we don't specify the signature of grow, since it has first-order
 #  functions as argument and I don't know how specify the signature of those
 
+
 @jit(
     fastmath=False,
     nopython=True,
@@ -244,6 +246,9 @@ def pop_node_record(records):
         "bin": uint8,
         "feature": uintp,
         "found_split": boolean,
+        "is_split_categorical": boolean,
+        "bin_partition": optional(uint8[::1]),
+        "bin_partition_size": uint8,
         "threshold": float32,
         "w_samples_valid": float32,
         "pos_train": uintp,
@@ -259,9 +264,7 @@ def grow(
     node_context,
     compute_node_context,
     find_best_split_along_feature,
-    copy_split,
     best_split,
-    candidate_split,
 ):
     """This function grows a tree in the forest, it is the main entry point for the
     computations when fitting a forest.
@@ -285,14 +288,8 @@ def grow(
     find_best_split_along_feature : function
         The function used to find the best split along a feature
 
-    copy_split : SplitClassifier or SplitRegressor
-        A temporary split object used for split computations
-
     best_split : SplitClassifier or SplitRegressor
         A temporary split object used for split computations
-
-    candidate_split : SplitClassifier or SplitRegressor
-        Data about the best split found for the node
     """
     # Initialize the tree capacity
     init_capacity = 2047
@@ -353,6 +350,7 @@ def grow(
             node_context.n_samples_valid < min_samples_split
         )
 
+        # TODO: check that it's indeed the case
         # We don't split a node if it's pure: whenever it's impurity computed on
         # training samples is less than min_impurity split
         min_impurity_split = 0.0
@@ -364,25 +362,28 @@ def grow(
             bin = 0
             feature = 0
             found_split = False
+            is_split_categorical = False
+            bin_partition = None
+            bin_partition_size = 0
         else:
             find_node_split(
-                tree_context,
-                node_context,
-                find_best_split_along_feature,
-                copy_split,
-                best_split,
-                candidate_split,
+                tree_context, node_context, find_best_split_along_feature, best_split,
             )
             bin = best_split.bin_threshold
             feature = best_split.feature
             found_split = best_split.found_split
+            is_split_categorical = best_split.is_split_categorical
+            bin_partition = best_split.bin_partition
+            bin_partition_size = best_split.bin_partition_size
 
         # If we did not find a split then the node is a leaf, since we can't split it
         is_leaf = is_leaf or not found_split
+
         # TODO: correct this when actually using the threshold instead of
         #  bin_threshold
         threshold = 0.42
 
+        # print("add_node_tree")
         node_id = add_node_tree(
             # The tree
             tree,
@@ -420,6 +421,17 @@ def grow(
             end_valid,
             # Validation loss of the node, computed on validation samples
             node_context.loss_valid,
+            # Is the split on a categorical feature?
+            is_split_categorical,
+            # Whenever the split is on a categorical feature, ndarray such that
+            #   bins within `bin_partition[:bin_partition_size]` go to left child
+            #   all other bins go to right child
+            bin_partition,
+            # Whenever the split is on a categorical feature, index such that
+            #   bins within `bin_partition[:bin_partition_size]` go to left child
+            #   all other bins go to right child;
+            # If it is a leaf, bin_partition_size=0
+            bin_partition_size,
         )
         # Save in the tree the predictions of the node (works both for regression
         # where node_context.y_pred is a float32 and for classification where

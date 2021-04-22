@@ -32,15 +32,6 @@ __all__ = ["ForestClassifier", "ForestRegressor"]
 from wildwood.tree import TreeClassifier, TreeRegressor
 
 
-# TODO: bootstrap with stratification for unbalanced data ?
-# TODO: bon il faut gerer: 1. le bootstrap 2. la stratification 3. les
-#  sample_weight 4. le binning. On va pour l'instant aller au plus simple: 1.
-#  on binne les donnees des de debut et on ne s'emmerde pas avec les
-#  sample_weight. Le bootstrap et la stratification devront etre geres dans la
-#  fonction _generate_train_valid_samples au dessus (qu'on appelle avec un
-#  Parallel comme dans l'implem originelle des forets)
-
-
 def _generate_train_valid_samples(random_state, n_samples):
     """
     This functions generates "in-the-bag" (train) and "out-of-the-bag" samples
@@ -55,7 +46,7 @@ def _generate_train_valid_samples(random_state, n_samples):
 
     Returns
     -------
-    output : tuple of theer numpy arrays
+    output : tuple of three numpy arrays
         * output[0] contains the indices of the training samples
         * output[1] contains the indices of the validation samples
         * output[2] contains the counts of the training samples
@@ -107,7 +98,10 @@ def _parallel_build_trees(tree, X, y, sample_weight, random_state_bootstrap):
     output : TreeClassifier or TreeRegressor
         The fitted tree
     """
-
+    # print("X:", X[:10])
+    # print("y:", y[:10])
+    # print("sample_weight:", sample_weight[:10])
+    # print("random_state_bootstrap:", random_state_bootstrap)
     n_samples = X.shape[0]
     # A copy is required, since we'll modify it inplace for the bootstrap
     sample_weight = sample_weight.copy()
@@ -125,20 +119,36 @@ def _parallel_build_trees(tree, X, y, sample_weight, random_state_bootstrap):
     return tree
 
 
-def _accumulate_prediction(predict, X, out, lock, ovr_index=None):
-    """
-    This is a utility function for joblib's Parallel.
+def _accumulate_prediction(predict, X, out, lock, label_class_col=None):
+    """This is a utility function for joblib's Parallel. It can't go locally in
+    ForestClassifier or ForestRegressor, because joblib complains that it cannot
+    pickle it when placed there.
 
-    It can't go locally in ForestClassifier or ForestRegressor, because joblib
-    complains that it cannot pickle it when placed there.
+    Parameters
+    ----------
+    predict : function
+        The prediction function, such as tree.predict_proba
+
+    X : ndarray
+        The matrix of features of shape (n_samples, n_features) for which we predict
+        the labels
+
+    out : ndarray
+        An array of shape (n_samples, n_classes) in which we store the probabilities
+        predictions
+
+    label_class_col : int, default=None
+        When multiclass="ovr", a tree predicts the label in a one-versus-rest fashion.
+        In this case, this is the column index corresponding to the class for which
+        we add the predictions.
     """
     prediction = predict(X)
 
     with lock:
-        if ovr_index is None:
+        if label_class_col is None:
             out += prediction
         else:
-            out[:,ovr_index] += prediction[:,1]
+            out[:, label_class_col] += prediction[:, 1]
 
 
 def _compute_weighted_depth(weighted_depth, X, out, lock, tree_idx):
@@ -161,7 +171,7 @@ def _parallel_tree_apply(apply, X, out, lock, idx_tree):
 
 class ForestBase(BaseEstimator):
     """
-    BLABLA
+    TODO: BLABLA
     """
 
     def __init__(
@@ -202,6 +212,7 @@ class ForestBase(BaseEstimator):
         self.min_samples_leaf = min_samples_leaf
         self.max_bins = max_bins
         self.categorical_features = categorical_features
+        self.is_categorical_ = None
         self.max_features = max_features
         self.n_jobs = n_jobs
         self.random_state = random_state
@@ -215,12 +226,20 @@ class ForestBase(BaseEstimator):
         those into two separate arrays self._random_states_bootstrap and
         self._random_states_trees even if these are identical in non-testing settings
         """
+        n_estimators = self.n_estimators
         # Get the random instance
         random_instance = check_random_state(self.random_state)
         # Generate seeds for each tree and same them for testing
         _random_states = random_instance.randint(
-            np.iinfo(np.uint32).max, size=n_states or self.n_estimators
+            np.iinfo(np.uint32).max, size=n_estimators
         )
+        if self.multiclass == "ovr":
+            # TODO: an option random_state_ovr
+            # In the "ovr" case, we want the random_state to be the same across the
+            # trees used in the one-versus all strategy
+            # np.repeat(np.array([2, 1, 17, 3]), repeats=3)
+            _random_states = np.repeat(_random_states, repeats=self._n_classes_)
+
         self._random_states_bootstrap = _random_states
         self._random_states_trees = _random_states
 
@@ -253,7 +272,13 @@ class ForestBase(BaseEstimator):
 
         # TODO: Why only float64 ? What if the data is already binned ?
         X, y = self._validate_data(
-            X, y, dtype=[np.float32], force_all_finite=False, order="F"
+            X,
+            y,
+            dtype=[np.float64],
+            force_all_finite=False,
+            order="F"
+            # TODO: (with cat features) if np.float32 in previous line, would raise
+            #   ValueError: Buffer dtype mismatch, expected 'const X_DTYPE_C' but got 'float'
         )
         check_consistent_length(X, y)
 
@@ -268,26 +293,38 @@ class ForestBase(BaseEstimator):
             y = self._encode_y(y)
             class_weight = self.class_weight
             multiclass = self.multiclass
-            if class_weight is not None:
-                if multiclass == "multinomial":
-                    expanded_class_weight = compute_sample_weight(class_weight, y)
-                    sample_weight_ *= expanded_class_weight
-                else:
-                    sample_weight_ = [np.ascontiguousarray(sample_weight_ * compute_sample_weight(class_weight, yy), dtype=np.float32) for yy in y]
 
             n_classes = self._n_classes_
+
             if multiclass == "ovr":
-                n_classes_trees = 2
-                n_trees = n_classes*n_estimators
+                n_classes_per_tree = 2
+                n_trees = n_classes * n_estimators
             else:
-                n_classes_trees = n_classes
+                n_classes_per_tree = n_classes
                 n_trees = n_estimators
+
+            self.n_trees_ = n_trees
+            self.n_classes_per_tree_ = n_classes_per_tree
+
+            if multiclass == "multinomial":
+                if class_weight is not None:
+                    expanded_class_weight = compute_sample_weight(class_weight, y)
+                    sample_weight_ *= expanded_class_weight
+
+            else:
+                if class_weight is not None:
+                    sample_weight_ = [
+                        np.ascontiguousarray(
+                            sample_weight_ * compute_sample_weight(class_weight, yy),
+                            dtype=np.float32,
+                        )
+                        for yy in y
+                    ]
+                else:
+                    sample_weight_ = [sample_weight_] * n_classes
 
         else:
             y = np.ascontiguousarray(y, dtype=np.float32)
-
-        # TODO: deal properly with categorical features. What if these are specified ?
-        self.is_categorical_, known_categories = self._check_categories(X)
 
         n_samples, n_features = X.shape
         # Let's get actual parameters based on the parameters passed by the user and
@@ -298,26 +335,33 @@ class ForestBase(BaseEstimator):
         n_jobs_ = self._get_n_jobs_(self.n_jobs, self.n_estimators)
         self.n_jobs_ = n_jobs_
 
-        self._generate_random_states(n_states=n_trees)
+        self._generate_random_states()
 
         # Everywhere in the code, the convention is that n_bins == max_bins + 1,
         # since max_bins is the maximum number of bins, without the eventual bin for
         # missing values (+ 1 is for the missing values bin)
         n_bins = self.max_bins + 1  # + 1 for missing values
 
-        # TODO: ici ici ici faut que je reprenne le code de scikit et pas de pygbm
-        #  car ils gerent les features categorielles dans le mapper
-
         # TODO: Deal more intelligently with this. Do not bin if the data is already
         #  binned by test for dtype=='uint8' for instance
+        # If is is an array with dtypd uint8 then the data is already binned
+        # Otherwise we need to bin the features indicated by the either a boolean or
+        # integer array
+
+        is_categorical, self._known_categories = self._check_categories(X)
+
         self._bin_mapper = Binner(
             n_bins=n_bins,
-            is_categorical=self.is_categorical_,
-            known_categories=known_categories,
+            is_categorical=is_categorical,
+            known_categories=self._known_categories,
         )
+        if is_categorical is None:
+            self.is_categorical_ = np.zeros(X.shape[1], dtype=np.bool)
+        else:
+            self.is_categorical_ = np.asarray(is_categorical, dtype=np.bool)
         X_binned = self._bin_data(X, is_training_data=True)
 
-        # TODO: Deal with categorical data
+        # TODO: Deal with missing data
         # Uses binned data to check for missing values
         has_missing_values = (
             (X_binned == self._bin_mapper.missing_values_bin_idx_)
@@ -330,7 +374,7 @@ class ForestBase(BaseEstimator):
             trees = [
                 TreeClassifier(
                     n_bins=n_bins,
-                    n_classes=n_classes_trees,
+                    n_classes=n_classes_per_tree,
                     criterion=self.criterion,
                     loss=self.loss,
                     step=self.step,
@@ -340,14 +384,13 @@ class ForestBase(BaseEstimator):
                     min_samples_split=self.min_samples_split,
                     min_samples_leaf=self.min_samples_leaf,
                     categorical_features=self.categorical_features,
+                    is_categorical=self.is_categorical_,
                     max_features=max_features_,
                     random_state=random_state,
                     verbose=self.verbose,
                 )
-                for _, random_state in zip(
-                    range(n_trees), self._random_states_trees
-                )
-
+                for random_state in self._random_states_trees
+                # for _, random_state in zip(range(n_trees), self._random_states_trees)
             ]
 
         else:
@@ -363,6 +406,7 @@ class ForestBase(BaseEstimator):
                     min_samples_split=self.min_samples_split,
                     min_samples_leaf=self.min_samples_leaf,
                     categorical_features=self.categorical_features,
+                    is_categorical=self.is_categorical_,
                     max_features=max_features_,
                     random_state=random_state,
                     verbose=self.verbose,
@@ -380,26 +424,30 @@ class ForestBase(BaseEstimator):
                 n_jobs=self.n_jobs, **_joblib_parallel_args(prefer="threads"),
             )(
                 delayed(_parallel_build_trees)(
-                    trees[ind],
+                    tree,
                     X_binned,
-                    y if not ovr else y[ind // n_estimators],
-                    sample_weight_ if not ovr else sample_weight_[ind // n_estimators],
-                    self._random_states_bootstrap[ind],
+                    y if not ovr else y[tree_idx // n_estimators],
+                    sample_weight_
+                    if not ovr
+                    else sample_weight_[tree_idx // n_estimators],
+                    self._random_states_bootstrap[tree_idx],
                 )
-                for ind in range(len(trees))
+                for tree_idx, tree in enumerate(trees)
             )
         else:
             trees = Parallel(
                 n_jobs=self.n_jobs, **_joblib_parallel_args(prefer="threads"),
             )(
                 delayed(_parallel_build_trees)(
-                    trees[ind],
+                    tree,
                     X_binned,
-                    y if not ovr else y[ind // n_estimators],
-                    sample_weight_ if not ovr else sample_weight_[ind // n_estimators],
-                    self._random_states_bootstrap[ind],
+                    y if not ovr else y[tree_idx // n_estimators],
+                    sample_weight_
+                    if not ovr
+                    else sample_weight_[tree_idx // n_estimators],
+                    self._random_states_bootstrap[tree_idx],
                 )
-                for ind in range(len(trees))
+                for tree_idx, tree in enumerate(trees)
             )
         self.trees = trees
         self._fitted = True
@@ -424,6 +472,7 @@ class ForestBase(BaseEstimator):
             For each datapoint x in X and for each tree in the forest,
             return the index of the leaf x ends up in.
         """
+        # TODO: verifier apply
         X_binned, n_jobs, lock = self.predict_helper(X)
         n_samples = X_binned.shape[0]
         out = np.empty((len(self.trees), n_samples), dtype=np.uintp)
@@ -589,6 +638,12 @@ class ForestBase(BaseEstimator):
 
     def get_nodes(self, tree_idx):
         return self.trees[tree_idx].get_nodes()
+
+    def path_leaf(self, X, tree_idx=0):
+        check_is_fitted(self)
+        X = self._validate_X_predict(X, check_input=True)
+        X_binned = self._bin_data(X, is_training_data=False)
+        return self.trees[tree_idx].path_leaf(X_binned)
 
     @property
     def n_estimators(self):
@@ -952,17 +1007,19 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         Note that these weights will be multiplied with sample_weight (passed
         through the fit method) if sample_weight is specified.
 
-    multiclass : "multinomial" or "ovr", default="multinomial"
+    multiclass : {"multinomial", "ovr"}, default="multinomial"
         Strategy to adopt in the multiclass situation. If "multinomial", n_estimators
         trees will be trained to make multiclass predictions. In the "ovr" mode the
-        one versus all strategy is adopted, labels are binarized and n_classes*n_estimators
-        trees are trained to make binary predictions and the final predictions are obtained
-        as normalized scores. This parameter is ignored for binary classification.
+        one versus all strategy is adopted, labels are binarized and
+        ``n_classes * n_estimators`` trees are trained to make binary predictions and
+        the final predictions are obtained as normalized scores. Use
+        ``multiclass="ovr"`` together with ``categorical_features`` for the best results
+        in multiclass problems with categorical features.
+        This parameter is ignored for binary classification.
 
     References
     ----------
     TODO: insert references
-
     """
 
     def __init__(
@@ -973,7 +1030,7 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         loss: str = "log",
         step: float = 1.0,
         aggregation: bool = True,
-        dirichlet: bool = 0.5,
+        dirichlet: float = 0.5,
         max_depth: Union[None, int] = None,
         min_samples_split: int = 2,
         min_samples_leaf: int = 1,
@@ -1004,14 +1061,17 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         )
         self._classes_ = None
         self._n_classes_ = None
+        self.n_trees_ = None
+        self.n_classes_per_tree_ = None
         self.dirichlet = dirichlet
         self.class_weight = class_weight
         self.multiclass = multiclass
 
     def _encode_y(self, y):
-        """
-        Encode classes into {0, ..., n_classes - 1} and sets attributes classes_,
-        n_classes_ and n_trees_per_iteration_
+        """Encodes the label. When multiclass == "multinomial" this encodes the
+        modalities in y into classes {0, ..., n_classes - 1}. When multiclass ==
+        "ovr" this binarizes y, namely transforms y into a (n_samples, n_classes)
+        one-hot matrix.
 
         Parameters
         ----------
@@ -1023,10 +1083,10 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         output : ndarray
             Encoded array of labels
         """
-        #
-        # and n_trees_per_iteration_
         multiclass = self.multiclass
         check_classification_targets(y)
+        # One-hot encode the labels for "ovr", otherwise just use ordinal encoding
+
         label_encoder = LabelBinarizer() if multiclass == "ovr" else LabelEncoder()
         pre_encoded_y = label_encoder.fit_transform(y)
         self._classes_ = label_encoder.classes_
@@ -1035,19 +1095,30 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         # only 1 tree for binary classification.
         # TODO: For multiclass classification, we build 1 tree per class.
         # self.n_trees_per_iteration_ = 1 if n_classes_ <= 2 else n_classes_
+
         if multiclass == "ovr" and n_classes_ <= 2:
             if self.verbose:
-                print("WARNING : no more than two classes detected, one versus all strategy will NOT be used")
-            self.multiclass = "multinomial"
-        if self.multiclass == "ovr":
-            #encoded_y = np.zeros((len(pre_encoded_y), n_classes_), dtype=np.float32, order="F")
-            #encoded_y[np.arange(len(pre_encoded_y)),pre_encoded_y] = 1
-            encoded_y = [np.ascontiguousarray(pre_encoded_y[:,i], dtype=np.float32) for i in range(n_classes_)]
+                warn(
+                    "Only two classes where detected: switching to "
+                    'multiclass="multiclass" instead of "ovr"'
+                )
+            multiclass = "multinomial"
+            self.multiclass = multiclass
+
+        if multiclass == "ovr":
+            # TODO: pourquoi une liste de arrays et numpy array 2D ?
+            encoded_y = [
+                np.ascontiguousarray(pre_encoded_y[:, i], dtype=np.float32)
+                for i in range(n_classes_)
+            ]
         else:
-            if multiclass == "multinomial":
-                encoded_y = np.ascontiguousarray(pre_encoded_y, dtype=np.float32)
-            else:
-                encoded_y = np.ascontiguousarray(pre_encoded_y.flatten(), dtype=np.float32)
+            encoded_y = np.ascontiguousarray(pre_encoded_y, dtype=np.float32)
+            # if multiclass == "multinomial":
+            #
+            # else:
+            #     encoded_y = np.ascontiguousarray(
+            #         pre_encoded_y.flatten(), dtype=np.float32
+            #     )
         return encoded_y
 
     def _validate_y_class_weight(self, y):
@@ -1095,50 +1166,32 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         return self.classes_.take(np.argmax(proba, axis=1), axis=0)
 
     def predict_proba(self, X):
-        """
-        Predict class probabilities for X.
-
-        The predicted class probabilities of an input sample are computed as
-        the mean predicted class probabilities of the trees in the forest.
-        The class probability of a single tree is the fraction of samples of
-        the same class in a leaf.
-
-        Parameters
-        ----------
-        X : {array-like, sparse matrix} of shape (n_samples, n_features)
-            The input samples. Internally, its dtype will be converted to
-            ``dtype=np.float32``. If a sparse matrix is provided, it will be
-            converted into a sparse ``csr_matrix``.
-
-        Returns
-        -------
-        p : ndarray of shape (n_samples, n_classes), or a list of n_outputs
-            such arrays if n_outputs > 1.
-            The class probabilities of the input samples. The order of the
-            classes corresponds to that in the attribute :term:`classes_`.
-        """
+        # TODO: write the correct docstring
         X_binned, n_jobs, lock = self.predict_helper(X)
         all_proba = np.zeros((X_binned.shape[0], self.n_classes_))
         n_estimators = self.n_estimators
 
-        if self.multiclass == "ovr":
-            ovr_index = lambda ind : ind // n_estimators
-        else:
-            ovr_index = lambda _ : None
+        ovr = self.multiclass == "ovr"
         Parallel(
             n_jobs=n_jobs,
             verbose=self.verbose,
             **_joblib_parallel_args(require="sharedmem"),
         )(
             delayed(_accumulate_prediction)(
-                self.trees[ind].predict_proba, X_binned, all_proba, lock, ovr_index=ovr_index(ind)
+                tree.predict_proba,
+                X_binned,
+                all_proba,
+                lock,
+                label_class_col=tree_idx // n_estimators if ovr else None,
             )
-            for ind in range(len(self.trees))
+            for tree_idx, tree in enumerate(self.trees)
         )
-        if ovr_index(0) is None: # quick check if we are doing ovr
-            all_proba /= len(self.trees)
-        else: # if yes, the normalization is not known in advance
+
+        if ovr:
             all_proba /= all_proba.sum(axis=1, keepdims=True)
+        else:
+            all_proba /= len(self.trees)
+
         return all_proba
 
     def predict_proba_trees(self, X):
@@ -1151,7 +1204,13 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         n_estimators = len(self.trees)
         n_jobs, _, _ = _partition_estimators(n_estimators, self.n_jobs)
         n_classes = self.n_classes_
-        probas = np.empty((n_estimators, n_samples, 2 if n_classes > 2 and self.multiclass == "ovr" else n_classes))
+        probas = np.empty(
+            (
+                n_estimators,
+                n_samples,
+                2 if n_classes > 2 and self.multiclass == "ovr" else n_classes,
+            )
+        )
 
         lock = threading.Lock()
         Parallel(
@@ -1253,12 +1312,14 @@ class ForestClassifier(ForestBase, ClassifierMixin):
     @multiclass.setter
     def multiclass(self, val):
         if self._fitted:
-            raise AttributeError("You cannot change the multiclass option after calling fit")
+            raise AttributeError(
+                "You cannot change the multiclass option after calling fit"
+            )
         if not isinstance(val, str):
             raise ValueError("multiclass must be a str")
         else:
-            if val not in ["multinomial", "ovr"]:
-                raise ValueError("multiclass must be either 'multinomial' or 'ovr'")
+            if val not in {"multinomial", "ovr"}:
+                raise ValueError('multiclass must be either "multinomial" or "ovr"')
             else:
                 self._multiclass = val
 

@@ -21,49 +21,79 @@ from ._utils import get_type
 
 # TODO: X is uint8[:, :] while it could be uint8[::1, :] namely forced F-major,
 #  but if X has shape (n_samples, 1) (only one feature) then it is both F and C and
-#  this raises a numba compulation error. But, it should not affect performance
+#  this raises a numba compilation error. But, it should not affect performance
 
 # A pure data class which contains global context information, such as the dataset,
 # training and validation indices, etc.
 tree_context_type = [
     # The binned matrix of features
     ("X", uint8[:, :]),
+    #
     # The vector of labels
     ("y", float32[::1]),
+    #
     # Sample weights
     ("sample_weights", float32[::1]),
+    #
     # Training sample indices for tree growth
     ("train_indices", uintp[::1]),
+    #
     # Validation sample indices for tree aggregation
     ("valid_indices", uintp[::1]),
+    #
     # Total sample size
     ("n_samples", uintp),
+    #
     # Training sample size
     ("n_samples_train", uintp),
+    #
     # Validation sample size
     ("n_samples_valid", uintp),
+    #
     # The total number of features
     ("n_features", uintp),
+    #
     # Maximum number of bins
-    ("max_bins", intp),
-    # Actual number of bins used for each feature
-    ("n_bins_per_feature", intp[::1]),
+    ("max_bins", intp),  # TODO: obsolete ?
+    #
     # Maximum number of features to try for splitting
     ("max_features", uintp),
+    #
+    # Is aggregation used ?
     ("aggregation", boolean),
+    #
     # Step-size used in the aggregation weights
     ("step", float32),
+    #
+    # Categorical features indicator of shape (n_features,)
+    ("is_categorical", boolean[::1]),
+    #
+    # A node in the tree contains start_train and end_train indices such that
+    #  partition_train[start_train:end_train] contains the indexes of the node's
+    #  training samples. This array is updated each time a node is split by the
+    #  `split_indices` function from the _split.py module
     ("partition_train", uintp[::1]),
+    #
+    # A node in the tree contains start_valid and end_valid indices such that
+    #  partition_valid[start_valid:end_valid] contains the indexes of the node's
+    #  validation samples. This array is updated each time a node is split by the
+    #  `split_indices` function from the _split.py module
     ("partition_valid", uintp[::1]),
+    #
+    # A "buffer" used in the split_indices function
     ("left_buffer", uintp[::1]),
+    #
+    # A "buffer" used in the split_indices function
     ("right_buffer", uintp[::1]),
 ]
 
 
 tree_classifier_context_type = [
     *tree_context_type,
+    #
     # The number of classes
     ("n_classes", uintp),
+    #
     # Dirichlet parameter
     ("dirichlet", float32),
 ]
@@ -93,6 +123,7 @@ class TreeClassifierContext:
         aggregation,
         dirichlet,
         step,
+        is_categorical,
     ):
         init_tree_context(
             self,
@@ -102,10 +133,10 @@ class TreeClassifierContext:
             train_indices,
             valid_indices,
             max_bins,
-            n_bins_per_feature,
             max_features,
             aggregation,
             step,
+            is_categorical
         )
         self.n_classes = n_classes
         self.dirichlet = dirichlet
@@ -125,10 +156,10 @@ class TreeRegressorContext:
         train_indices,
         valid_indices,
         max_bins,
-        n_bins_per_feature,
         max_features,
         aggregation,
         step,
+        is_categorical
     ):
         init_tree_context(
             self,
@@ -138,10 +169,10 @@ class TreeRegressorContext:
             train_indices,
             valid_indices,
             max_bins,
-            n_bins_per_feature,
             max_features,
             aggregation,
             step,
+            is_categorical
         )
 
 
@@ -159,10 +190,10 @@ TreeRegressorContextType = get_type(TreeRegressorContext)
             uintp[::1],
             uintp[::1],
             intp,
-            intp[::1],
-            uintp,
+            intp,
             boolean,
             float32,
+            boolean[::1]
         ),
         void(
             TreeRegressorContextType,
@@ -172,10 +203,10 @@ TreeRegressorContextType = get_type(TreeRegressorContext)
             uintp[::1],
             uintp[::1],
             intp,
-            intp[::1],
-            uintp,
+            intp,
             boolean,
             float32,
+            boolean[::1]
         ),
     ],
     nopython=True,
@@ -189,16 +220,15 @@ def init_tree_context(
     train_indices,
     valid_indices,
     max_bins,
-    n_bins_per_feature,
     max_features,
     aggregation,
     step,
+    is_categorical
 ):
     tree_context.X = X
     tree_context.y = y
     tree_context.sample_weights = sample_weights
     tree_context.max_bins = max_bins
-    tree_context.n_bins_per_feature = n_bins_per_feature
     tree_context.max_features = max_features
     tree_context.train_indices = train_indices
     tree_context.valid_indices = valid_indices
@@ -206,6 +236,7 @@ def init_tree_context(
     tree_context.step = step
     tree_context.partition_train = train_indices.copy()
     tree_context.partition_valid = valid_indices.copy()
+    tree_context.is_categorical = is_categorical.copy()
 
     n_samples, n_features = X.shape
     tree_context.n_samples = n_samples
