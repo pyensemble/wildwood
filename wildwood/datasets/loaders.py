@@ -298,6 +298,69 @@ def load_diabetes():
     return dataset
 
 
+
+
+def load_kddcup():
+    from sklearn.datasets import fetch_kddcup99
+
+    # We load the full datasets with 4.8 million rows
+    data = fetch_kddcup99(as_frame=True, percent10=False)
+    df = data["frame"]
+    # We change the dtypes (for some weird reason everything is "object"...)
+    dtype = {
+        "duration": np.float32,
+        "protocol_type": "category",
+        "service": "category",
+        "flag": "category",
+        "src_bytes": np.float32,
+        "dst_bytes": np.float32,
+        "land": "category",
+        "wrong_fragment": np.float32,
+        "urgent": np.float32,
+        "hot": np.float32,
+        "num_failed_logins": np.float32,
+        "logged_in": "category",
+        "num_compromised": np.float32,
+        "root_shell": "category",
+        "su_attempted": "category",
+        "num_root": np.float32,
+        "num_file_creations": np.float32,
+        "num_shells": np.float32,
+        "num_access_files": np.float32,
+        "num_outbound_cmds": np.float32,
+        "is_host_login": "category",
+        "is_guest_login": "category",
+        "count": np.float32,
+        "srv_count": np.float32,
+        "serror_rate": np.float32,
+        "srv_serror_rate": np.float32,
+        "rerror_rate": np.float32,
+        "srv_rerror_rate": np.float32,
+        "same_srv_rate": np.float32,
+        "diff_srv_rate": np.float32,
+        "srv_diff_host_rate": np.float32,
+        "dst_host_count": np.float32,
+        "dst_host_srv_count": np.float32,
+        "dst_host_same_srv_rate": np.float32,
+        "dst_host_diff_srv_rate": np.float32,
+        "dst_host_same_src_port_rate": np.float32,
+        "dst_host_srv_diff_host_rate": np.float32,
+        "dst_host_serror_rate": np.float32,
+        "dst_host_srv_serror_rate": np.float32,
+        "dst_host_rerror_rate": np.float32,
+        "dst_host_srv_rerror_rate": np.float32,
+    }
+    df = df.astype(dtype)
+    dataset = Dataset.from_dtype(
+        name="kddcup",
+        task="multiclass-classification",
+        label_column="labels",
+        dtype=dtype,
+    )
+    dataset.df_raw = df
+    return dataset
+
+
 def load_letter():
     dtype = {
         "X0": np.float,
@@ -498,139 +561,7 @@ def load_spambase():
     return dataset.load_from_csv("spambase.csv.gz", header=None, dtype=dtype)
 
 
-def load_higgs():
-    pass
-
-
-# #
-# class Higgs(Datasets):  # binary
 #
-#     def __init__(
-#         self,
-#         filename=None,
-#         subsample=None,
-#         test_split=0.005,
-#         random_state=0,
-#         normalize_intervals=False,
-#         as_pandas=False,
-#     ):
-#         filename = filename or os.path.dirname(__file__) + "/HIGGS.csv.gz"
-#         URL = "https://archive.ics.uci.edu/ml/machine-learning-databases/00280/HIGGS.csv.gz"
-#         if not os.path.exists(filename):
-#             reply = (
-#                 str(
-#                     input(
-#                         "Higgs datasets file not provided, would you like to download it ? (2.6 Go) (y/n): "
-#                     )
-#                 )
-#                 .lower()
-#                 .strip()
-#             )
-#             if reply == "y":
-#                 print(f"Downloading {URL} to {filename} (2.6 GB)...")
-#                 urlretrieve(URL, filename)
-#                 print("done.")
-#             else:
-#                 print("Higgs boson datasets unavailable, exiting")
-#                 exit()
-#
-#         print(f"Loading Higgs boson datasets from {filename}...")
-#         tic = time()
-#         with GzipFile(filename) as f:
-#             self.df = pd.read_csv(f, header=None, dtype=np.float32)
-#         toc = time()
-#         print(f"Loaded {self.df.values.nbytes / 1e9:0.3f} GB in {toc - tic:0.3f}s")
-#
-#         if subsample is not None:
-#             print("Subsampling datasets with subsample={}".format(subsample))
-#
-#         self.data = self.df[:subsample]
-#         self.target = self.data.pop(0).astype(int).values
-#
-#         if normalize_intervals:
-#             mins = self.data.min()
-#             self.data = (self.data - mins) / (self.data.max() - mins)
-#
-#         if not as_pandas:
-#             self.data = np.ascontiguousarray(self.data.values)
-#
-#         self.binary = True
-#         self.task = "classification"
-#         self.n_classes = 2
-#         self.one_hot_categoricals = False
-#         self.size, self.n_features = self.data.shape
-#         self.nb_continuous_features = self.n_features
-#
-#         print("Making train/test split ...")
-#
-#         self.split_train_test(test_split, random_state)
-#         # self.data_train, self.data_test, self.target_train, self.target_test = train_test_split(
-#         #    self.data, self.target, test_size=self.get_test_size(test_split), random_state=random_state)
-#
-#         print("Done.")
-
-#
-
-
-def load_kddcup():
-    from sklearn.datasets import fetch_kddcup99
-
-    # We load the full datasets with 4.8 million rows
-    data = fetch_kddcup99(as_frame=True, percent10=False)
-    df = data["frame"]
-    # We change the dtypes (for some weird reason everything is "object"...)
-    dtype = {
-        "duration": np.float32,
-        "protocol_type": "category",
-        "service": "category",
-        "flag": "category",
-        "src_bytes": np.float32,
-        "dst_bytes": np.float32,
-        "land": "category",
-        "wrong_fragment": np.float32,
-        "urgent": np.float32,
-        "hot": np.float32,
-        "num_failed_logins": np.float32,
-        "logged_in": "category",
-        "num_compromised": np.float32,
-        "root_shell": "category",
-        "su_attempted": "category",
-        "num_root": np.float32,
-        "num_file_creations": np.float32,
-        "num_shells": np.float32,
-        "num_access_files": np.float32,
-        "num_outbound_cmds": np.float32,
-        "is_host_login": "category",
-        "is_guest_login": "category",
-        "count": np.float32,
-        "srv_count": np.float32,
-        "serror_rate": np.float32,
-        "srv_serror_rate": np.float32,
-        "rerror_rate": np.float32,
-        "srv_rerror_rate": np.float32,
-        "same_srv_rate": np.float32,
-        "diff_srv_rate": np.float32,
-        "srv_diff_host_rate": np.float32,
-        "dst_host_count": np.float32,
-        "dst_host_srv_count": np.float32,
-        "dst_host_same_srv_rate": np.float32,
-        "dst_host_diff_srv_rate": np.float32,
-        "dst_host_same_src_port_rate": np.float32,
-        "dst_host_srv_diff_host_rate": np.float32,
-        "dst_host_serror_rate": np.float32,
-        "dst_host_srv_serror_rate": np.float32,
-        "dst_host_rerror_rate": np.float32,
-        "dst_host_srv_rerror_rate": np.float32,
-    }
-    df = df.astype(dtype)
-    dataset = Dataset.from_dtype(
-        name="kddcup",
-        task="multiclass-classification",
-        label_column="labels",
-        dtype=dtype,
-    )
-    dataset.df_raw = df
-    return dataset
 
 
 # class KDDCup(Datasets):  # multiclass
@@ -816,7 +747,7 @@ def describe_datasets(include="small-classification", random_state=42):
     if "regression" in include:
         df_description = pd.DataFrame(
             {
-                "datasets": col_name,
+                "dataset": col_name,
                 "task": col_task,
                 "n_samples": col_n_samples,
                 "n_samples_train": col_n_samples_train,
@@ -830,7 +761,7 @@ def describe_datasets(include="small-classification", random_state=42):
     else:
         df_description = pd.DataFrame(
             {
-                "datasets": col_name,
+                "dataset": col_name,
                 "task": col_task,
                 "n_samples": col_n_samples,
                 "n_samples_train": col_n_samples_train,
