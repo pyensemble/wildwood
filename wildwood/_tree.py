@@ -679,27 +679,39 @@ def find_leaf(tree, xi, data_binning=True):
             bin_partition_end = node["bin_partition_end"]
             bin_partition = bin_partitions[bin_partition_start:bin_partition_end]
             if data_binning:
+                print("xi_f=", xi_f, "bin_partition=", bin_partition)
                 if is_bin_in_partition(xi_f, bin_partition):
                     leaf_idx = node["left_child"]
+                    print("go left")
                 else:
                     leaf_idx = node["right_child"]
+                    print("go right")
             else:
+                print("xi_f=", xi_f, "bin_partition=", bin_partition)
                 if is_bin_in_partition(uint8(xi_f), bin_partition):
+                    print("go left")
                     leaf_idx = node["left_child"]
                 else:
+                    print("go right")
                     leaf_idx = node["right_child"]
         else:  # the split is on a continuous feature,
             if data_binning:
                 # we use its bin_threshold
+                print("xi_f=", xi_f, "node[bin_threshold]=", node["bin_threshold"])
                 if xi_f <= node["bin_threshold"]:
                     leaf_idx = node["left_child"]
+                    print("go left")
                 else:
                     leaf_idx = node["right_child"]
+                    print("go right")
             else:  # data_binning=False, we use its threshold
+                print("xi_f=", xi_f, "node[threshold]=", node["threshold"])
                 if xi_f <= node["threshold"]:
                     leaf_idx = node["left_child"]
+                    print("go left")
                 else:
                     leaf_idx = node["right_child"]
+                    print("go right")
         node = nodes[leaf_idx]
     return leaf_idx
 
@@ -880,6 +892,7 @@ def tree_classifier_predict_proba(tree, X, aggregation, step, data_binning=True)
     out = np.zeros((n_samples, n_classes), dtype=float32)
     for i in range(n_samples):
         # Find the leaf containing X[i]
+        print("i=", i, ", idx_current=", idx_current)
         idx_current = find_leaf(tree, X[i], data_binning=data_binning)
         # Get a view to save the prediction for X[i]
         pred_i = out[i]

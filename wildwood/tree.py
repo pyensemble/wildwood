@@ -160,12 +160,9 @@ class TreeClassifier(ClassifierMixin, TreeBase):
 
     def fit(self, X, y, train_indices, valid_indices, sample_weights):
         n_classes = self.n_classes
-        # max_bins = self.n_bins - 1
         random_state = self.random_state
         # TODO: on obtiendra cette info via le binner qui est dans la foret
         n_samples, n_features = X.shape
-        # n_bins_per_feature = max_bins * np.ones(n_features)
-        # n_bins_per_feature = n_bins_per_feature.astype(np.intp)
 
         # Create the tree object, which is mostly a data container for the nodes
         tree = _TreeClassifier(n_features, n_classes, random_state)
@@ -181,13 +178,12 @@ class TreeClassifier(ClassifierMixin, TreeBase):
             valid_indices,
             self.n_classes,
             self.n_bins - 1,
-            # n_bins_per_feature,
             self.max_features,
             self.aggregation,
             self.dirichlet,
             self.step,
             self.is_categorical,
-            self.bin_thresholds
+            self.bin_thresholds,
         )
 
         node_context = NodeClassifierContext(tree_context)
@@ -207,9 +203,9 @@ class TreeClassifier(ClassifierMixin, TreeBase):
         self._tree_context = tree_context
         return self
 
-    def predict_proba(self, X):
+    def predict_proba(self, X, data_binning):
         proba = tree_classifier_predict_proba(
-            self._tree, X, self._tree_context.aggregation, self._tree_context.step
+            self._tree, X, self._tree_context.aggregation, self._tree_context.step, data_binning=data_binning
         )
         return proba
 
@@ -280,7 +276,7 @@ class TreeRegressor(TreeBase, RegressorMixin):
             uintp(self.max_features),
             self.aggregation,
             float32(self.step),
-            self.is_categorical
+            self.is_categorical,
         )
 
         node_context = NodeRegressorContext(tree_context)

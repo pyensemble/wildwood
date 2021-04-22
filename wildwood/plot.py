@@ -122,7 +122,7 @@ if __name__ == "__main__":
     X = np.repeat(np.arange(5), 20).reshape((-1, 1))
     y = np.repeat([1, 0, 0, 1, 0], 20)
     clf = ForestClassifier(
-        n_estimators=1, random_state=42, categorical_features=[True], dirichlet=0.0
+        n_estimators=1, random_state=42, categorical_features=[False], dirichlet=0.0
     )
     # X_onehot = OneHotEncoder(sparse=False).fit_transform(X)
     clf.fit(X, y)

@@ -125,14 +125,14 @@ def _parallel_build_trees(tree, X, y, sample_weight, random_state_bootstrap):
     return tree
 
 
-def _accumulate_prediction(predict, X, out, lock):
+def _accumulate_prediction(predict, X, out, lock, data_binning):
     """
     This is a utility function for joblib's Parallel.
 
     It can't go locally in ForestClassifier or ForestRegressor, because joblib
     complains that it cannot pickle it when placed there.
     """
-    prediction = predict(X)
+    prediction = predict(X, data_binning)
     with lock:
         out += prediction
 
@@ -1123,7 +1123,7 @@ class ForestClassifier(ForestBase, ClassifierMixin):
             **_joblib_parallel_args(require="sharedmem"),
         )(
             delayed(_accumulate_prediction)(
-                tree.predict_proba, X_binned, all_proba, lock
+                tree.predict_proba, X_binned, all_proba, lock, data_binning
             )
             for tree in self.trees
         )
@@ -1131,7 +1131,7 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         return all_proba
 
     def predict_proba_trees(self, X):
-        # TODO: we can also avoid data binning for predictions...
+        # TODO: is this function really useful??
         X_binned, n_jobs, lock = self.predict_helper(X)
         n_samples, n_features = X.shape
         n_estimators = len(self.trees)
