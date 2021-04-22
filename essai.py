@@ -5,7 +5,7 @@ import pandas as pd
 sys.path.extend([".."])
 
 from wildwood.forest import ForestClassifier
-from wildwood.dataset import load_bank
+from wildwood.datasets import load_bank
 
 dataset = load_bank()
 dataset.one_hot_encode = True

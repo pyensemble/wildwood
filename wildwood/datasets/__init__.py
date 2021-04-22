@@ -1,5 +1,10 @@
-from .dataset import (
-    Dataset,
+"""
+This modules includes dataset loaders for experiments conducted with WildWood
+"""
+
+from .dataset import Dataset
+
+from .loaders import (
     load_adult,
     load_bank,
     load_boston,
@@ -10,12 +15,11 @@ from .dataset import (
     load_covtype,
     load_diabetes,
     load_default_cb,
+    load_kddcup,
     load_letter,
     load_satimage,
     load_sensorless,
     load_spambase,
-    loaders_small_classification,
-    loaders_small_regression,
     describe_datasets,
 )
 

@@ -63,8 +63,8 @@ st.title("`WildWood` playground")
 
 # The sidebar
 # st.sidebar.title("Dataset")
-# st.sidebar.markdown("Choose the dataset below")
-# dataset = st.sidebar.selectbox("dataset", ["moons"], index=0)
+# st.sidebar.markdown("Choose the datasets below")
+# datasets = st.sidebar.selectbox("datasets", ["moons"], index=0)
 st.sidebar.title("Parameters")
 st.sidebar.markdown(
     """You can tune below some 

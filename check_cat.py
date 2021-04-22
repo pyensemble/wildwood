@@ -8,7 +8,7 @@ from matplotlib.colors import ListedColormap
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, confusion_matrix
 
-from wildwood.dataset import load_churn, load_bank
+from wildwood.datasets import load_churn, load_bank
 from wildwood.forest import ForestClassifier
 
 np.set_printoptions(precision=2)
@@ -49,8 +49,8 @@ y_scores = clf.predict_proba(X_test)
 # random_state = 42
 # np.random.seed(0)
 #
-# dataset = load_dataset(args=args)
-# categorical_features = np.arange(dataset.nb_continuous_features, dataset.n_features)
+# datasets = load_dataset(args=args)
+# categorical_features = np.arange(datasets.nb_continuous_features, datasets.n_features)
 # print("categorical features are ", categorical_features)
 #
 # print('wildwood clf with `categorical_features=None`')
@@ -59,8 +59,8 @@ y_scores = clf.predict_proba(X_test)
 #                        categorical_features=None,
 #                        n_jobs=-1, class_weight='balanced')
 #
-# clf_without_cat.fit(dataset.data_train, dataset.target_train)
-# evaluate_classifier(clf_without_cat, dataset.data_test, dataset.target_test, binary=dataset.binary)
+# clf_without_cat.fit(datasets.data_train, datasets.target_train)
+# evaluate_classifier(clf_without_cat, datasets.data_test, datasets.target_test, binary=datasets.binary)
 #
 # print('wildwood clf with `categorical_features`')
 # clf_with_cat = ForestClassifier(n_estimators=100,
@@ -68,5 +68,5 @@ y_scores = clf.predict_proba(X_test)
 #                        categorical_features=categorical_features,
 #                        n_jobs=-1, class_weight='balanced')
 #
-# clf_with_cat.fit(dataset.data_train, dataset.target_train)
-# evaluate_classifier(clf_with_cat, dataset.data_test, dataset.target_test, binary=dataset.binary)
+# clf_with_cat.fit(datasets.data_train, datasets.target_train)
+# evaluate_classifier(clf_with_cat, datasets.data_test, datasets.target_test, binary=datasets.binary)

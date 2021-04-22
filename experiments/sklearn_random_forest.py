@@ -11,11 +11,11 @@ from sklearn.metrics import accuracy_score, roc_auc_score, log_loss, average_pre
 from sklearn.ensemble import RandomForestClassifier
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--dataset', type=str, default="Moons")
+parser.add_argument('--datasets', type=str, default="Moons")
 parser.add_argument('--normalize-intervals', action="store_true", default=False)
 parser.add_argument('--one-hot-categoricals', action="store_true", default=False)
-parser.add_argument('--dataset-path', type=str, default="data")
-parser.add_argument('--dataset-subsample', type=int, default=100000)
+parser.add_argument('--datasets-path', type=str, default="data")
+parser.add_argument('--datasets-subsample', type=int, default=100000)
 parser.add_argument('--n-estimators', type=int, default=100)
 parser.add_argument('--n-jobs', type=int, default=-1)
 parser.add_argument('--criterion', type=str, default='gini')

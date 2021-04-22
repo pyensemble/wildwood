@@ -173,7 +173,7 @@ class Higgs(Datasets):  # binary
             reply = (
                 str(
                     input(
-                        "Higgs dataset file not provided, would you like to download it ? (2.6 Go) (y/n): "
+                        "Higgs datasets file not provided, would you like to download it ? (2.6 Go) (y/n): "
                     )
                 )
                 .lower()
@@ -184,10 +184,10 @@ class Higgs(Datasets):  # binary
                 urlretrieve(URL, filename)
                 print("done.")
             else:
-                print("Higgs boson dataset unavailable, exiting")
+                print("Higgs boson datasets unavailable, exiting")
                 exit()
 
-        print(f"Loading Higgs boson dataset from {filename}...")
+        print(f"Loading Higgs boson datasets from {filename}...")
         tic = time()
         with GzipFile(filename) as f:
             self.df = pd.read_csv(f, header=None, dtype=np.float32)
@@ -195,7 +195,7 @@ class Higgs(Datasets):  # binary
         print(f"Loaded {self.df.values.nbytes / 1e9:0.3f} GB in {toc - tic:0.3f}s")
 
         if subsample is not None:
-            print("Subsampling dataset with subsample={}".format(subsample))
+            print("Subsampling datasets with subsample={}".format(subsample))
 
         self.data = self.df[:subsample]
         self.target = self.data.pop(0).astype(int).values
@@ -810,7 +810,7 @@ class Covtype(Datasets):  # multiclass
         )  # as_pandas)
 
         if subsample is not None:
-            print("Subsampling dataset with subsample={}".format(subsample))
+            print("Subsampling datasets with subsample={}".format(subsample))
 
         data = data[:subsample]
         target = target[:subsample]
@@ -862,14 +862,14 @@ class KDDCup(Datasets):  # multiclass
     ):
         from sklearn.datasets import fetch_kddcup99
 
-        print("Loading full KDDCdup dataset (percent10=False)")
+        print("Loading full KDDCdup datasets (percent10=False)")
         print("")
         data, target = fetch_kddcup99(
             percent10=False, return_X_y=True, random_state=random_state, as_frame=True
         )  # as_pandas)
 
         if subsample is not None:
-            print("Subsampling dataset with subsample={}".format(subsample))
+            print("Subsampling datasets with subsample={}".format(subsample))
 
         data = data[:subsample]
         target = target[:subsample]
@@ -937,7 +937,7 @@ class NewsGroups(Datasets):  # multiclass
         )  # as_pandas)
 
         if subsample is not None:
-            print("Subsampling dataset with subsample={}".format(subsample))
+            print("Subsampling datasets with subsample={}".format(subsample))
 
         data = data[:subsample]
         target = target[:subsample]
@@ -1121,12 +1121,12 @@ class Diabetes(Datasets):  # regression
 
 
 def load_dataset(args, as_pandas=True):
-    print("Loading dataset {}".format(args.dataset))
+    print("Loading datasets {}".format(args.dataset))
     if args.dataset == "Moons":
         return Moons(
             random_state=args.random_state, normalize_intervals=args.normalize_intervals
         )
-    # elif args.dataset == "Adult":
+    # elif args.datasets == "Adult":
     #    return Adult(path=args.dataset_path, random_state=args.random_state,
     #                 normalize_intervals=args.normalize_intervals, subsample=args.dataset_subsample)
     elif args.dataset == "Higgs":
@@ -1288,4 +1288,4 @@ def load_dataset(args, as_pandas=True):
         )
 
     else:
-        raise ValueError("unknown dataset " + args.dataset)
+        raise ValueError("unknown datasets " + args.dataset)

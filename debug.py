@@ -2,7 +2,7 @@
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.metrics import average_precision_score, classification_report
 
-from wildwood.dataset import load_car
+from wildwood.datasets import load_car
 from wildwood import ForestClassifier
 
 

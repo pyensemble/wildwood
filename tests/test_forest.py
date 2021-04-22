@@ -29,7 +29,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score
 
 from wildwood import ForestClassifier, ForestRegressor
-from wildwood.dataset import load_car
+from wildwood.datasets import load_car
 
 
 # logging.basicConfig(
@@ -440,7 +440,7 @@ class TestForestClassifier(object):
         assert clf1.apply(X) == approx(clf2.apply(X))
         assert clf1.predict_proba(X) == approx(clf2.predict_proba(X))
 
-        # Simulate unbalanced data from the iris dataset
+        # Simulate unbalanced data from the iris datasets
         X_unb = np.concatenate((X[0:50], X[50:56], X[100:106]), axis=0)
         y_unb = np.concatenate((y[0:50], y[50:56], y[100:106]), axis=0)
 
@@ -633,7 +633,7 @@ class TestForestClassifier(object):
 
         # inspired from
         # https://scikit-learn.org/stable/auto_examples/ensemble/plot_gradient_boosting_categorical.html#sphx-glr-auto-examples-ensemble-plot-gradient-boosting-categorical-py
-        #  Ames Housing dataset¶
+        #  Ames Housing datasets¶
 
         # from sklearn.datasets import fetch_openml
         # from sklearn.pipeline import make_pipeline

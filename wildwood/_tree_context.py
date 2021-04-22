@@ -23,7 +23,7 @@ from ._utils import get_type
 #  but if X has shape (n_samples, 1) (only one feature) then it is both F and C and
 #  this raises a numba compilation error. But, it should not affect performance
 
-# A pure data class which contains global context information, such as the dataset,
+# A pure data class which contains global context information, such as the datasets,
 # training and validation indices, etc.
 tree_context_type = [
     # The binned matrix of features

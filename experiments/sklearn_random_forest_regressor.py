@@ -9,11 +9,11 @@ import datasets
 from sklearn.ensemble import RandomForestRegressor
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--dataset', type=str, default="BreastCancer")
+parser.add_argument('--datasets', type=str, default="BreastCancer")
 parser.add_argument('--normalize-intervals', action="store_true", default=False)
 parser.add_argument('--one-hot-categoricals', action="store_false", default=True)
-parser.add_argument('--dataset-path', type=str, default="data")
-parser.add_argument('--dataset-subsample', type=int, default=100000)
+parser.add_argument('--datasets-path', type=str, default="data")
+parser.add_argument('--datasets-subsample', type=int, default=100000)
 parser.add_argument('--random-state', type=int, default=0)
 parser.add_argument('--n-estimators', type=int, default=100)
 parser.add_argument('--n-jobs', type=int, default=-1)
@@ -27,10 +27,10 @@ args = parser.parse_args()
 print("Running sklearn Random Forest regressor with training set {}".format(args.dataset))
 
 dataset = datasets.load_dataset(args)
-#train_sample_weights = dataset.get_train_sample_weights()
+#train_sample_weights = datasets.get_train_sample_weights()
 
 if dataset.task != "regression":
-    print("The loaded dataset is not for regression ... exiting")
+    print("The loaded datasets is not for regression ... exiting")
     exit()
 
 print("Training Scikit Learn Random forest regressor ...")
