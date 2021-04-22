@@ -658,6 +658,10 @@ def find_leaf(tree, xi, data_binning=True):
         Array of input features with shape (n_features,)
         uint8 dtype (data_binning=True) or float32 dtype (data_binning=False`)
 
+    data_binning : bool
+        if True, xi was binned before sent to prediction;
+        if False, values in xi are directly used to make prediction.
+
     Returns
     -------
     output : int
@@ -669,32 +673,33 @@ def find_leaf(tree, xi, data_binning=True):
     bin_partitions = tree.bin_partitions
     while not node["is_leaf"]:
         xi_f = xi[node["feature"]]
-        if node["is_split_categorical"] and data_binning:
-            # If the split is on a categorical features, we use its bin_partition
+        if node["is_split_categorical"]:
+            # the split is on a categorical features, we use its bin_partition
             bin_partition_start = node["bin_partition_start"]
             bin_partition_end = node["bin_partition_end"]
             bin_partition = bin_partitions[bin_partition_start:bin_partition_end]
-            if is_bin_in_partition(xi_f, bin_partition):
-                leaf_idx = node["left_child"]
+            if data_binning:
+                if is_bin_in_partition(xi_f, bin_partition):
+                    leaf_idx = node["left_child"]
+                else:
+                    leaf_idx = node["right_child"]
             else:
-                leaf_idx = node["right_child"]
-        elif (not node["is_split_categorical"]) and data_binning:
-            # If the split is on a continuous feature, we use its bin_threshold
-            if xi_f <= node["bin_threshold"]:
-                leaf_idx = node["left_child"]
-            else:
-                leaf_idx = node["right_child"]
-        elif (not node["is_split_categorical"]) and (not data_binning):
-            # the split is on a continuous feature, we use its threshold
-            if xi_f <= node["threshold"]:
-                leaf_idx = node["left_child"]
-            else:
-                leaf_idx = node["right_child"]
-        else:  # the split is on a categorical features, and we do not bin data
-            raise NotImplementedError(
-                "There is at least one categorical feature,"
-                "prediction needed to be binned (`data_binning` must be True)"
-            )
+                if is_bin_in_partition(uint8(xi_f), bin_partition):
+                    leaf_idx = node["left_child"]
+                else:
+                    leaf_idx = node["right_child"]
+        else:  # the split is on a continuous feature,
+            if data_binning:
+                # we use its bin_threshold
+                if xi_f <= node["bin_threshold"]:
+                    leaf_idx = node["left_child"]
+                else:
+                    leaf_idx = node["right_child"]
+            else:  # data_binning=False, we use its threshold
+                if xi_f <= node["threshold"]:
+                    leaf_idx = node["left_child"]
+                else:
+                    leaf_idx = node["right_child"]
         node = nodes[leaf_idx]
     return leaf_idx
 

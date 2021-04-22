@@ -292,8 +292,9 @@ class ForestBase(BaseEstimator):
 
         # TODO: Deal more intelligently with this. Do not bin if the data is already
         #  binned by test for dtype=='uint8' for instance
+        #  Question: but dtype=='float64' necessarily after self._validate_data
 
-        # If is is an array with dtypd uint8 then the data is already binned
+        # If is is an array with dtype uint8 then the data is already binned
         # Otherwise we need to bin the features indicated by the either a boolean or
         # integer array
 
@@ -310,7 +311,14 @@ class ForestBase(BaseEstimator):
             self.is_categorical_ = np.asarray(is_categorical,
                                               dtype=np.bool)
         X_binned = self._bin_data(X, is_training_data=True)
-        bin_thresholds = self._bin_mapper.bin_thresholds_
+
+        bin_thresholds_list = self._bin_mapper.bin_thresholds_
+        # list of ndarray of shape(min(max_bins, n_unique_values) - 1,)
+        # A given value x will be mapped into bin value i iff
+        # bining_thresholds[i - 1] < x <= binning_thresholds[i]
+        bin_thresholds = np.zeros([n_features, len(max(bin_thresholds_list, key=len))], dtype=np.float32)
+        for (f, f_thres) in enumerate(bin_thresholds_list):
+            bin_thresholds[f][:len(f_thres)] = f_thres
 
         # TODO: Deal with missing data
         # Uses binned data to check for missing values
@@ -338,6 +346,7 @@ class ForestBase(BaseEstimator):
                     categorical_features=self.categorical_features,
                     is_categorical=self.is_categorical_,
                     max_features=max_features_,
+                    bin_thresholds=bin_thresholds,
                     random_state=random_state,
                     verbose=self.verbose,
                 )
@@ -1097,8 +1106,7 @@ class ForestClassifier(ForestBase, ClassifierMixin):
 
         data_binning : bool
             if True, X will be binned before sent to prediction;
-            if False, values in X are directly used to make prediction,
-            only available while there is no categorical feature.
+            if False, values in X are directly used to make prediction.
 
         Returns
         -------
@@ -1108,9 +1116,6 @@ class ForestClassifier(ForestBase, ClassifierMixin):
             classes corresponds to that in the attribute :term:`classes_`.
         """
         X_binned, n_jobs, lock = self.predict_helper(X, data_binning=data_binning)
-        if np.count_nonzero(self.is_categorical_) > 0 and (not data_binning):
-            raise NotImplementedError("There is at least one categorical feature,"
-                                      "prediction needed to be binned (`data_binning` must be True)")
         all_proba = np.zeros((X_binned.shape[0], self.n_classes_))
         Parallel(
             n_jobs=n_jobs,

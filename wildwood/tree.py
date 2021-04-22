@@ -62,6 +62,7 @@ class TreeBase(BaseEstimator, metaclass=ABCMeta):
         categorical_features,
         is_categorical,
         max_features,
+        bin_thresholds,
         random_state,
         verbose=0,
     ):
@@ -81,6 +82,7 @@ class TreeBase(BaseEstimator, metaclass=ABCMeta):
         self.categorical_features = categorical_features
         self.is_categorical = is_categorical
         self.max_features = max_features
+        self.bin_thresholds = bin_thresholds
         self.random_state = random_state
         self.verbose = verbose
 
@@ -133,6 +135,7 @@ class TreeClassifier(ClassifierMixin, TreeBase):
         categorical_features,
         is_categorical,
         max_features,
+        bin_thresholds,
         random_state,
         verbose=0,
     ):
@@ -148,6 +151,7 @@ class TreeClassifier(ClassifierMixin, TreeBase):
             categorical_features=categorical_features,
             is_categorical=is_categorical,
             max_features=max_features,
+            bin_thresholds=bin_thresholds,
             random_state=random_state,
             verbose=verbose,
         )
@@ -156,12 +160,12 @@ class TreeClassifier(ClassifierMixin, TreeBase):
 
     def fit(self, X, y, train_indices, valid_indices, sample_weights):
         n_classes = self.n_classes
-        max_bins = self.n_bins - 1
+        # max_bins = self.n_bins - 1
         random_state = self.random_state
         # TODO: on obtiendra cette info via le binner qui est dans la foret
         n_samples, n_features = X.shape
-        n_bins_per_feature = max_bins * np.ones(n_features)
-        n_bins_per_feature = n_bins_per_feature.astype(np.intp)
+        # n_bins_per_feature = max_bins * np.ones(n_features)
+        # n_bins_per_feature = n_bins_per_feature.astype(np.intp)
 
         # Create the tree object, which is mostly a data container for the nodes
         tree = _TreeClassifier(n_features, n_classes, random_state)
@@ -177,12 +181,13 @@ class TreeClassifier(ClassifierMixin, TreeBase):
             valid_indices,
             self.n_classes,
             self.n_bins - 1,
-            n_bins_per_feature,
+            # n_bins_per_feature,
             self.max_features,
             self.aggregation,
             self.dirichlet,
             self.step,
-            self.is_categorical
+            self.is_categorical,
+            self.bin_thresholds
         )
 
         node_context = NodeClassifierContext(tree_context)
@@ -230,6 +235,7 @@ class TreeRegressor(TreeBase, RegressorMixin):
         categorical_features=None,
         is_categorical=None,
         max_features="auto",
+        bin_thresholds=None,
         random_state=None,
         verbose=0,
     ):
@@ -245,17 +251,18 @@ class TreeRegressor(TreeBase, RegressorMixin):
             categorical_features=categorical_features,
             is_categorical=is_categorical,
             max_features=max_features,
+            bin_thresholds=bin_thresholds,
             random_state=random_state,
             verbose=verbose,
         )
 
     def fit(self, X, y, train_indices, valid_indices, sample_weights):
-        max_bins = self.n_bins - 1
+        # max_bins = self.n_bins - 1
         random_state = self.random_state
         # TODO: on obtiendra cette info via le binner qui est dans la foret
         n_samples, n_features = X.shape
-        n_bins_per_feature = max_bins * np.ones(n_features)
-        n_bins_per_feature = n_bins_per_feature.astype(np.intp)
+        # n_bins_per_feature = max_bins * np.ones(n_features)
+        # n_bins_per_feature = n_bins_per_feature.astype(np.intp)
 
         # Create the tree object, which is mostly a data container for the nodes
         tree = _TreeRegressor(n_features, random_state)
