@@ -135,8 +135,6 @@ def _fetch_remote(remote, dirname=None):
     urlretrieve(remote.url, file_path)
     checksum = _sha256(file_path)
 
-    print(checksum)
-
     if remote.checksum != checksum:
         raise IOError(
             "{} has an SHA256 checksum ({}) "
@@ -147,11 +145,6 @@ def _fetch_remote(remote, dirname=None):
 
 
 def load_higgs(download_if_missing=True):
-
-    # def fetch_kddcup99(*, subset=None, data_home=None, shuffle=False,
-    #                    random_state=None,
-    #                    percent10=True, download_if_missing=True, return_X_y=False,
-    #                    as_frame=False):
 
     data_home = get_data_home()
     higgs = _fetch_higgs(download_if_missing=download_if_missing)
@@ -246,8 +239,10 @@ def _fetch_higgs(download_if_missing=True):
     higgs_dir = join(data_home, "higgs" + dir_suffix)
     archive = ARCHIVE
 
-    data_path = join(higgs_dir, "higgs")
+    data_path = join(higgs_dir, "higgs.csv.gz")
+
     available = exists(data_path)
+    # available = True
 
     print("samples_path:", data_path)
     print("available:", available)
@@ -299,53 +294,59 @@ def _fetch_higgs(download_if_missing=True):
     # target_names = column_names[-1]
     # feature_names = column_names[:-1]
 
-    exit(0)
+    # exit(0)
 
     if download_if_missing and not available:
         _mkdirp(higgs_dir)
         logger.info("Downloading %s" % archive.url)
         _fetch_remote(archive, dirname=higgs_dir)
+        logger.debug("extracting archive")
+        archive_path = join(higgs_dir, archive.filename)
+        file_ = GzipFile(filename=archive_path, mode='r')
+        Xy = []
+        for line in file_.readlines():
+            line = line.decode()
+            Xy.append(line.replace('\n', '').split(','))
+        file_.close()
+        logger.debug('extraction done')
+        os.remove(archive_path)
 
-    #     DT = np.dtype(dt)
-    #     logger.debug("extracting archive")
-    #     archive_path = join(higgs_dir, archive.filename)
-    #     file_ = GzipFile(filename=archive_path, mode='r')
-    #     Xy = []
-    #     for line in file_.readlines():
-    #         line = line.decode()
-    #         Xy.append(line.replace('\n', '').split(','))
-    #     file_.close()
-    #     logger.debug('extraction done')
-    #     os.remove(archive_path)
-    #
-    #     Xy = np.asarray(Xy, dtype=object)
-    #     for j in range(42):
-    #         Xy[:, j] = Xy[:, j].astype(DT[j])
-    #
-    #     X = Xy[:, :-1]
-    #     y = Xy[:, -1]
-    #     # XXX bug when compress!=0:
-    #     # (error: 'Incorrect data length while decompressing[...] the file
-    #     #  could be corrupted.')
-    #
-    #     joblib.dump(X, samples_path, compress=0)
-    #     joblib.dump(y, targets_path, compress=0)
-    # elif not available:
-    #     if not download_if_missing:
-    #         raise IOError("Data not found and `download_if_missing` is False")
-    #
-    # try:
-    #     X, y
-    # except NameError:
-    #     X = joblib.load(samples_path)
-    #     y = joblib.load(targets_path)
-    #
-    # return Bunch(
-    #     data=X,
-    #     target=y,
-    #     feature_names=feature_names,
-    #     target_names=[target_names],
-    # )
+        Xy = np.asarray(Xy, dtype=object)
+
+        # for j in range(42):
+        #     Xy[:, j] = Xy[:, j].astype(DT[j])
+        # X = Xy[:, :-1]
+        # y = Xy[:, -1]
+        # XXX bug when compress!=0:
+        # (error: 'Incorrect data length while decompressing[...] the file
+        #  could be corrupted.')
+
+        joblib.dump(Xy, data_path, compress=0)
+
+    try:
+        Xy
+    except NameError:
+        Xy = joblib.load(data_path)
+
+    return Xy
+
+        # joblib.dump(y, targets_path, compress=0)
+        # elif not available:
+        #     if not download_if_missing:
+        #         raise IOError("Data not found and `download_if_missing` is False")
+        #
+        # try:
+        #     X, y
+        # except NameError:
+        #     X = joblib.load(samples_path)
+        #     y = joblib.load(targets_path)
+        #
+        # return Bunch(
+        #     data=X,
+        #     target=y,
+        #     feature_names=feature_names,
+        #     target_names=[target_names],
+        # )
 
 
 def _mkdirp(d):
