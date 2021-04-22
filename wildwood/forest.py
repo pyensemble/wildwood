@@ -310,6 +310,7 @@ class ForestBase(BaseEstimator):
             self.is_categorical_ = np.asarray(is_categorical,
                                               dtype=np.bool)
         X_binned = self._bin_data(X, is_training_data=True)
+        bin_thresholds = self._bin_mapper.bin_thresholds_
 
         # TODO: Deal with missing data
         # Uses binned data to check for missing values

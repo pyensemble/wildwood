@@ -69,7 +69,7 @@ clf_kwargs = {
     "n_jobs": -1,
     "dirichlet": 1e-5,
     "step": 2.0,
-    "aggregation": True
+    "aggregation": False
 }
 
 clf = ForestClassifier(**clf_kwargs)

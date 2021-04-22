@@ -9,17 +9,7 @@ of a tree.
 from math import exp
 import numpy as np
 
-from numba import (
-    jit,
-    boolean,
-    uint8,
-    int32,
-    intp,
-    uintp,
-    float32,
-    void,
-    optional
-)
+from numba import jit, boolean, uint8, int32, intp, uintp, float32, void, optional
 from numba.core.types.misc import Omitted
 from numba.experimental import jitclass
 
@@ -635,11 +625,16 @@ def add_node_tree(
 
 
 @jit(
-    [uintp(TreeClassifierType, uint8[:], boolean), uintp(TreeRegressorType, uint8[:], boolean),
-     uintp(TreeClassifierType, float32[:], boolean), uintp(TreeRegressorType, float32[:], boolean),
-     uintp(TreeClassifierType, uint8[:], Omitted(True)), uintp(TreeRegressorType, uint8[:], Omitted(True)),
-     uintp(TreeClassifierType, float32[:], Omitted(True)), uintp(TreeRegressorType, float32[:], Omitted(True))
-     ],
+    [
+        uintp(TreeClassifierType, uint8[:], boolean),
+        uintp(TreeRegressorType, uint8[:], boolean),
+        uintp(TreeClassifierType, float32[:], boolean),
+        uintp(TreeRegressorType, float32[:], boolean),
+        uintp(TreeClassifierType, uint8[:], Omitted(True)),
+        uintp(TreeRegressorType, uint8[:], Omitted(True)),
+        uintp(TreeClassifierType, float32[:], Omitted(True)),
+        uintp(TreeRegressorType, float32[:], Omitted(True)),
+    ],
     nopython=True,
     nogil=True,
     locals={
@@ -696,8 +691,10 @@ def find_leaf(tree, xi, data_binning=True):
             else:
                 leaf_idx = node["right_child"]
         else:  # the split is on a categorical features, and we do not bin data
-            raise NotImplementedError("There is at least one categorical feature,"
-                                      "prediction needed to be binned (`data_binning` must be True)")
+            raise NotImplementedError(
+                "There is at least one categorical feature,"
+                "prediction needed to be binned (`data_binning` must be True)"
+            )
         node = nodes[leaf_idx]
     return leaf_idx
 
@@ -813,10 +810,16 @@ def tree_apply(tree, X):
 
 
 @jit(
-    [float32[:, ::1](TreeClassifierType, uint8[:, :], boolean, float32, boolean),
-     float32[:, ::1](TreeClassifierType, uint8[:, :], boolean, float32, Omitted(True)),
-     float32[:, ::1](TreeClassifierType, float32[:, :], boolean, float32, boolean),
-     float32[:, ::1](TreeClassifierType, float32[:, :], boolean, float32, Omitted(True))],
+    [
+        float32[:, ::1](TreeClassifierType, uint8[:, :], boolean, float32, boolean),
+        float32[:, ::1](
+            TreeClassifierType, uint8[:, :], boolean, float32, Omitted(True)
+        ),
+        float32[:, ::1](TreeClassifierType, float32[:, :], boolean, float32, boolean),
+        float32[:, ::1](
+            TreeClassifierType, float32[:, :], boolean, float32, Omitted(True)
+        ),
+    ],
     nopython=True,
     nogil=True,
     locals={
@@ -854,6 +857,10 @@ def tree_classifier_predict_proba(tree, X, aggregation, step, data_binning=True)
     step : float
         Step-size used for the computation of the aggregation weights. Used only if
         aggregation=True
+
+    data_binning : boolean
+        Indicates if we predict with binned data (data_binning=True),
+        or with raw data (data_binning=False)
 
     Returns
     -------

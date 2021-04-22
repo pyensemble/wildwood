@@ -397,7 +397,7 @@ def grow(
             is_leaf,
             # The feature used for splitting
             feature,
-            # NOT USED FOR NOW
+            # The numerical threshold used for splitting
             threshold,
             # The bin threshold used for splitting
             bin,
