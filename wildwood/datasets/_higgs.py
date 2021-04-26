@@ -109,45 +109,13 @@ logger = logging.getLogger(__name__)
 # #         print("Done.")
 
 
-def _fetch_remote(remote, dirname=None):
-    """Helper function to download a remote dataset into path
-
-    Fetch a dataset pointed by remote's url, save into path using remote's
-    filename and ensure its integrity based on the SHA256 Checksum of the
-    downloaded file.
-
-    Parameters
-    ----------
-    remote : RemoteFileMetadata
-        Named tuple containing remote dataset meta information: url, filename
-        and checksum
-
-    dirname : string
-        Directory to save the file to.
-
-    Returns
-    -------
-    file_path: string
-        Full path of the created file.
-    """
-
-    file_path = remote.filename if dirname is None else join(dirname, remote.filename)
-    urlretrieve(remote.url, file_path)
-    checksum = _sha256(file_path)
-
-    if remote.checksum != checksum:
-        raise IOError(
-            "{} has an SHA256 checksum ({}) "
-            "differing from expected ({}), "
-            "file may be corrupted.".format(file_path, checksum, remote.checksum)
-        )
-    return file_path
-
 
 def load_higgs(download_if_missing=True):
 
     data_home = get_data_home()
     higgs = _fetch_higgs(download_if_missing=download_if_missing)
+
+    print(type(higgs))
 
     # data = kddcup99.data
     # target = kddcup99.target
@@ -234,15 +202,10 @@ def load_higgs(download_if_missing=True):
 
 def _fetch_higgs(download_if_missing=True):
     data_home = get_data_home()
-    dir_suffix = "-py3"
-
-    higgs_dir = join(data_home, "higgs" + dir_suffix)
+    higgs_dir = join(data_home, "higgs")
     archive = ARCHIVE
-
     data_path = join(higgs_dir, "higgs.csv.gz")
-
     available = exists(data_path)
-    # available = True
 
     print("samples_path:", data_path)
     print("available:", available)
@@ -302,13 +265,13 @@ def _fetch_higgs(download_if_missing=True):
         _fetch_remote(archive, dirname=higgs_dir)
         logger.debug("extracting archive")
         archive_path = join(higgs_dir, archive.filename)
-        file_ = GzipFile(filename=archive_path, mode='r')
+        file_ = GzipFile(filename=archive_path, mode="r")
         Xy = []
         for line in file_.readlines():
             line = line.decode()
-            Xy.append(line.replace('\n', '').split(','))
+            Xy.append(line.replace("\n", "").split(","))
         file_.close()
-        logger.debug('extraction done')
+        logger.debug("extraction done")
         os.remove(archive_path)
 
         Xy = np.asarray(Xy, dtype=object)
@@ -323,30 +286,30 @@ def _fetch_higgs(download_if_missing=True):
 
         joblib.dump(Xy, data_path, compress=0)
 
-    try:
-        Xy
-    except NameError:
+    else:
+        print("else reading data from %s" % data_path)
         Xy = joblib.load(data_path)
+        print("done reading data")
 
     return Xy
 
-        # joblib.dump(y, targets_path, compress=0)
-        # elif not available:
-        #     if not download_if_missing:
-        #         raise IOError("Data not found and `download_if_missing` is False")
-        #
-        # try:
-        #     X, y
-        # except NameError:
-        #     X = joblib.load(samples_path)
-        #     y = joblib.load(targets_path)
-        #
-        # return Bunch(
-        #     data=X,
-        #     target=y,
-        #     feature_names=feature_names,
-        #     target_names=[target_names],
-        # )
+    # joblib.dump(y, targets_path, compress=0)
+    # elif not available:
+    #     if not download_if_missing:
+    #         raise IOError("Data not found and `download_if_missing` is False")
+    #
+    # try:
+    #     X, y
+    # except NameError:
+    #     X = joblib.load(samples_path)
+    #     y = joblib.load(targets_path)
+    #
+    # return Bunch(
+    #     data=X,
+    #     target=y,
+    #     feature_names=feature_names,
+    #     target_names=[target_names],
+    # )
 
 
 def _mkdirp(d):

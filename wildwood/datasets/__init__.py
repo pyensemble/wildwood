@@ -4,8 +4,9 @@ This modules includes dataset loaders for experiments conducted with WildWood
 
 from .dataset import Dataset
 
+from ._adult import load_adult
+
 from .loaders import (
-    load_adult,
     load_bank,
     load_boston,
     load_breastcancer,
