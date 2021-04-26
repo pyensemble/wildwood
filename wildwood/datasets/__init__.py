@@ -5,6 +5,7 @@ This modules includes dataset loaders for experiments conducted with WildWood
 from .dataset import Dataset
 
 from ._adult import load_adult
+from ._higgs import load_higgs
 
 from .loaders import (
     load_bank,
@@ -16,7 +17,7 @@ from .loaders import (
     load_covtype,
     load_diabetes,
     load_default_cb,
-    load_kddcup,
+    load_kddcup99,
     load_letter,
     load_satimage,
     load_sensorless,

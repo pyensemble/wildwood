@@ -23,10 +23,6 @@ ARCHIVE_TEST = RemoteFileMetadata(
     checksum="a2a9044bc167a35b2361efbabec64e89d69ce82d9790d2980119aac5fd7e9c05",
 )
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-)
-
 
 logger = logging.getLogger(__name__)
 

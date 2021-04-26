@@ -1,34 +1,33 @@
 # Authors: Stephane Gaiffas <stephane.gaiffas@gmail.com>
 # License: BSD 3 clause
 
-
 import pandas as pd
 import numpy as np
 
 from .dataset import Dataset
+from ._adult import load_adult
 
-
-def load_adult():
-    dtype = {
-        "age": np.int,
-        "workclass": "category",
-        "fnlwgt": np.int,
-        "education": "category",
-        "education-num": np.int,
-        "marital-status": "category",
-        "occupation": "category",
-        "relationship": "category",
-        "race": "category",
-        "sex": "category",
-        "capital-gain": np.int,
-        "capital-loss": np.int,
-        "hours-per-week": np.int,
-        "native-country": "category",
-    }
-    dataset = Dataset.from_dtype(
-        name="adult", task="binary-classification", label_column=">50K?", dtype=dtype
-    )
-    return dataset.load_from_csv("adult.csv.gz", dtype=dtype)
+# def load_adult():
+#     dtype = {
+#         "age": np.int,
+#         "workclass": "category",
+#         "fnlwgt": np.int,
+#         "education": "category",
+#         "education-num": np.int,
+#         "marital-status": "category",
+#         "occupation": "category",
+#         "relationship": "category",
+#         "race": "category",
+#         "sex": "category",
+#         "capital-gain": np.int,
+#         "capital-loss": np.int,
+#         "hours-per-week": np.int,
+#         "native-country": "category",
+#     }
+#     dataset = Dataset.from_dtype(
+#         name="adult", task="binary-classification", label_column=">50K?", dtype=dtype
+#     )
+#     return dataset.load_from_csv("adult.csv.gz", dtype=dtype)
 
 
 def load_bank():
@@ -191,6 +190,17 @@ def load_cardio():
     )
 
 
+def load_amazon():
+    from catboost.datasets import amazon
+
+    df_train, df_test = amazon()
+    df = pd.concat([df_train, df_test], axis="column")
+
+    df.info()
+
+
+
+
 def load_churn():
     dtype = {
         "State": "category",
@@ -298,9 +308,7 @@ def load_diabetes():
     return dataset
 
 
-
-
-def load_kddcup():
+def load_kddcup99():
     from sklearn.datasets import fetch_kddcup99
 
     # We load the full datasets with 4.8 million rows
@@ -784,6 +792,6 @@ if __name__ == "__main__":
     #
     # datasets = load_covtype()
 
-    load_kddcup()
+    load_kddcup99()
 
     # print(datasets)

@@ -1,10 +1,8 @@
-from wildwood.datasets._adult import _fetch_adult, load_adult
-
+from wildwood.datasets._adult import load_adult
 
 dataset = load_adult()
 
 print(dataset)
-
 print(dataset.df_raw)
 
 X_train, X_test, y_train, y_test = dataset.extract(42)
