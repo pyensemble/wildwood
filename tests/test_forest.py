@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 
 from sklearn.utils import compute_sample_weight
-from sklearn.metrics import classification_report, average_precision_score
+from sklearn.metrics import classification_report, average_precision_score, log_loss
 from sklearn.datasets import make_moons
 from sklearn.preprocessing import LabelBinarizer
 
@@ -29,6 +29,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score
 
 from wildwood import ForestClassifier, ForestRegressor
+from wildwood.dataset import load_car, load_adult
 
 
 # logging.basicConfig(
@@ -44,7 +45,7 @@ class TestForestClassifier(object):
         self.iris = load_iris()
         self.breast_cancer = load_breast_cancer()
         self.effective_n_jobs = effective_n_jobs()
-
+        self.adult = load_adult()
         # logging.info(
         #     "%d jobs can be effectively be run in parallel on this machine"
         #     % self.effective_n_jobs
@@ -296,11 +297,13 @@ class TestForestClassifier(object):
             #    the trees are all the same
             clf = ForestClassifier(n_estimators=n_estimators, n_jobs=n_jobs)
 
-            def _my_generate_random_states(self):
+            def _my_generate_random_states(self, n_states=None):
                 self._random_states_bootstrap = np.ones(
-                    (clf.n_estimators), dtype=np.int32
+                    (n_states or clf.n_estimators), dtype=np.int32
                 )
-                self._random_states_trees = np.ones((clf.n_estimators), dtype=np.int32)
+                self._random_states_trees = np.ones(
+                    (n_states or clf.n_estimators), dtype=np.int32
+                )
 
             # Monkey patch the classifier
             clf._generate_random_states = types.MethodType(
@@ -324,13 +327,15 @@ class TestForestClassifier(object):
             #    different, all the trees are different
             clf = ForestClassifier(n_estimators=n_estimators, n_jobs=n_jobs)
 
-            def _my_generate_random_states(self):
+            def _my_generate_random_states(self, n_states=None):
                 # All bootstrap seeds are the same
                 self._random_states_bootstrap = np.ones(
-                    (clf.n_estimators), dtype=np.int32
+                    (n_states or clf.n_estimators), dtype=np.int32
                 )
                 # But column subsampling seeds are different
-                self._random_states_trees = np.arange(clf.n_estimators, dtype=np.int32)
+                self._random_states_trees = np.arange(
+                    n_states or clf.n_estimators, dtype=np.int32
+                )
 
             # Monkey patch the classifier
             clf._generate_random_states = types.MethodType(
@@ -354,13 +359,15 @@ class TestForestClassifier(object):
             #    identical, all the trees are different
             clf = ForestClassifier(n_estimators=n_estimators, n_jobs=n_jobs)
 
-            def _my_generate_random_states(self):
+            def _my_generate_random_states(self, n_states=None):
                 # All bootstrap seeds are the same
                 self._random_states_bootstrap = np.arange(
-                    clf.n_estimators, dtype=np.int32
+                    n_states or clf.n_estimators, dtype=np.int32
                 )
                 # But column subsampling seeds are different
-                self._random_states_trees = np.ones((clf.n_estimators,), dtype=np.int32)
+                self._random_states_trees = np.ones(
+                    (n_states or clf.n_estimators,), dtype=np.int32
+                )
 
             # Monkey patch the classifier
             clf._generate_random_states = types.MethodType(
@@ -581,19 +588,166 @@ class TestForestClassifier(object):
         clf.categorical_features = [1, 3]
         assert clf.categorical_features == [1, 3]
 
-    def test_categorical_features_performance(self):
-        pass
+    def test_multiclass_vs_ovr_on_car(self):
+        dataset = load_car()
+        dataset.one_hot_encode = False
+        dataset.test_size = 1.0 / 5
+        random_state = 42
+        X_train, X_test, y_train, y_test = dataset.extract(random_state=random_state)
+
+        n_estimators = 100
+        aggregation = False
+        class_weight = "balanced"
+        n_jobs = -1
+        max_features = None
+        random_state = 42
+        dirichlet = 0.0
+        categorical_features = dataset.categorical_features_
+
+        multiclass = "multinomial"
+        clf = ForestClassifier(
+            n_estimators=n_estimators,
+            n_jobs=n_jobs,
+            multiclass=multiclass,
+            aggregation=aggregation,
+            max_features=max_features,
+            class_weight=class_weight,
+            categorical_features=categorical_features,
+            random_state=random_state,
+            dirichlet=dirichlet,
+        )
+        clf.fit(X_train, y_train)
+        y_scores = clf.predict_proba(X_test)
+        lloss1 = log_loss(y_test, y_scores)
+
+        multiclass = "ovr"
+        clf = ForestClassifier(
+            n_estimators=n_estimators,
+            n_jobs=n_jobs,
+            multiclass=multiclass,
+            aggregation=aggregation,
+            max_features=max_features,
+            class_weight=class_weight,
+            categorical_features=categorical_features,
+            random_state=random_state,
+            dirichlet=dirichlet,
+        )
+        clf.fit(X_train, y_train)
+        y_scores = clf.predict_proba(X_test)
+        lloss2 = log_loss(y_test, y_scores)
+
+        assert lloss1 > lloss2
+
+    def test_categorical_performances_on_adult(self):
+        dataset = self.adult
+        n_estimators = 10
+        aggregation = False
+        class_weight = "balanced"
+        n_jobs = -1
+        max_features = None
+        random_state = 42
+        dirichlet = 0.0
+        step = 1.0
+
+        def run(multiclass, categorical_features, one_hot_encode):
+            dataset.one_hot_encode = one_hot_encode
+            X_train, X_test, y_train, y_test = dataset.extract(
+                random_state=random_state
+            )
+
+            clf = ForestClassifier(
+                n_estimators=n_estimators,
+                n_jobs=n_jobs,
+                multiclass=multiclass,
+                aggregation=aggregation,
+                max_features=max_features,
+                class_weight=class_weight,
+                categorical_features=categorical_features,
+                random_state=random_state,
+                dirichlet=dirichlet,
+                step=step,
+            )
+            clf.fit(X_train, y_train)
+            y_scores_test = clf.predict_proba(X_test)
+            return log_loss(y_test, y_scores_test)
+
+        multiclass = "multinomial"
+        categorical_features = None
+        one_hot_encode = True
+        lloss1 = run(multiclass, categorical_features, one_hot_encode)
+
+        multiclass = "multinomial"
+        categorical_features = None
+        one_hot_encode = False
+        lloss2 = run(multiclass, categorical_features, one_hot_encode)
+
+        multiclass = "multinomial"
+        categorical_features = dataset.categorical_features_
+        one_hot_encode = False
+        lloss3 = run(multiclass, categorical_features, one_hot_encode)
+
+        assert lloss3 < lloss2
+        assert lloss3 < lloss1
+
+    def test_ovr_with_two_classes(self):
+        """Test on a binary classification problem that 'ovr' and 'multiclass' are
+        exactly identical"""
+        dataset = self.adult
+        dataset.one_hot_encode = False
+        random_state = 42
+        X_train, X_test, y_train, y_test = dataset.extract(
+            random_state=random_state
+        )
+
+        n_estimators = 2
+        aggregation = False
+        class_weight = "balanced"
+        n_jobs = -1
+        max_features = None
+        dirichlet = 0.0
+        categorical_features = dataset.categorical_features_
+
+        multiclass = "multinomial"
+        clf = ForestClassifier(
+            n_estimators=n_estimators,
+            n_jobs=n_jobs,
+            multiclass=multiclass,
+            aggregation=aggregation,
+            max_features=max_features,
+            class_weight=class_weight,
+            categorical_features=categorical_features,
+            random_state=random_state,
+            dirichlet=dirichlet,
+        )
+        clf.fit(X_train, y_train)
+        y_scores_test1 = clf.predict_proba(X_test)
+
+        multiclass = "ovr"
+        clf = ForestClassifier(
+            n_estimators=n_estimators,
+            n_jobs=n_jobs,
+            multiclass=multiclass,
+            aggregation=aggregation,
+            max_features=max_features,
+            class_weight=class_weight,
+            categorical_features=categorical_features,
+            random_state=random_state,
+            dirichlet=dirichlet,
+        )
+        clf.fit(X_train, y_train)
+        y_scores_test2 = clf.predict_proba(X_test)
+
+        assert y_scores_test1 == approx(y_scores_test2)
 
     def test_dirichlet_switch(self):
-
         breast_cancer = self.breast_cancer
         X, y = breast_cancer["data"], breast_cancer["target"]
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, shuffle=True, stratify=y, random_state=42, test_size=0.3
         )
 
-        clf1 = ForestClassifier(class_weight="balanced", random_state = 42)
-        clf2 = ForestClassifier(class_weight="balanced", random_state = 42, dirichlet=2.0)
+        clf1 = ForestClassifier(class_weight="balanced", random_state=42)
+        clf2 = ForestClassifier(class_weight="balanced", random_state=42, dirichlet=2.0)
 
         clf1.fit(X_train, y_train)
         clf2.fit(X_train, y_train)
