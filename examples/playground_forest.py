@@ -238,7 +238,7 @@ def fit_forest(
 #     i = 1
 #     # iterate over datasets
 #     for ds_cnt, ds in enumerate(datasets):
-#         # preprocess dataset, split into training and test part
+#         # preprocess datasets, split into training and test part
 #         ds_name, (X, y) = ds
 #         X_train, X_test, y_train, y_test = train_test_split(
 #             X, y, test_size=0.4, random_state=42
@@ -247,7 +247,7 @@ def fit_forest(
 #         x_min, x_max = X[:, 0].min() - 0.5, X[:, 0].max() + 0.5
 #         y_min, y_max = X[:, 1].min() - 0.5, X[:, 1].max() + 0.5
 #         xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
-#         # just plot the dataset first
+#         # just plot the datasets first
 #         cm = plt.cm.RdBu
 #         cm_bright = ListedColormap(["#FF0000", "#0000FF"])
 #         ax = plt.subplot(n_datasets, n_classifiers + 1, i)
@@ -306,9 +306,9 @@ def get_normalizer(normalize):
 
 st.title("`WildWood` playground")
 st.sidebar.title("Dataset")
-st.sidebar.markdown("Choose the dataset below")
+st.sidebar.markdown("Choose the datasets below")
 dataset = st.sidebar.selectbox(
-    "dataset", ["moons", "circles", "linear", "blobs"], index=0
+    "datasets", ["moons", "circles", "linear", "blobs"], index=0
 )
 st.sidebar.title("Parameters")
 st.sidebar.markdown(

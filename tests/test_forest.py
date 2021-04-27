@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 
 from sklearn.utils import compute_sample_weight
-from sklearn.metrics import classification_report, average_precision_score, log_loss
+from sklearn.metrics import classification_report, average_precision_score
 from sklearn.datasets import make_moons
 from sklearn.preprocessing import LabelBinarizer
 
@@ -29,7 +29,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score
 
 from wildwood import ForestClassifier, ForestRegressor
-from wildwood.dataset import load_car, load_adult
+from wildwood.datasets import load_car
 
 
 # logging.basicConfig(
@@ -45,7 +45,7 @@ class TestForestClassifier(object):
         self.iris = load_iris()
         self.breast_cancer = load_breast_cancer()
         self.effective_n_jobs = effective_n_jobs()
-        self.adult = load_adult()
+
         # logging.info(
         #     "%d jobs can be effectively be run in parallel on this machine"
         #     % self.effective_n_jobs
@@ -440,7 +440,7 @@ class TestForestClassifier(object):
         assert clf1.apply(X) == approx(clf2.apply(X))
         assert clf1.predict_proba(X) == approx(clf2.predict_proba(X))
 
-        # Simulate unbalanced data from the iris dataset
+        # Simulate unbalanced data from the iris datasets
         X_unb = np.concatenate((X[0:50], X[50:56], X[100:106]), axis=0)
         y_unb = np.concatenate((y[0:50], y[50:56], y[100:106]), axis=0)
 
@@ -591,182 +591,49 @@ class TestForestClassifier(object):
     def test_multiclass_vs_ovr_on_car(self):
         dataset = load_car()
         dataset.one_hot_encode = False
-        dataset.test_size = 1.0 / 5
         random_state = 42
         X_train, X_test, y_train, y_test = dataset.extract(random_state=random_state)
+        y_test_binary = LabelBinarizer().fit_transform(y_test)
 
-        n_estimators = 100
-        aggregation = False
-        class_weight = "balanced"
-        n_jobs = -1
-        max_features = None
-        random_state = 42
-        dirichlet = 0.0
-        categorical_features = dataset.categorical_features_
-
-        multiclass = "multinomial"
         clf = ForestClassifier(
-            n_estimators=n_estimators,
-            n_jobs=n_jobs,
-            multiclass=multiclass,
-            aggregation=aggregation,
-            max_features=max_features,
-            class_weight=class_weight,
-            categorical_features=categorical_features,
+            n_estimators=10,
+            n_jobs=-1,
+            multiclass="multinomial",
+            categorical_features=dataset.categorical_features_,
             random_state=random_state,
-            dirichlet=dirichlet,
         )
         clf.fit(X_train, y_train)
         y_scores = clf.predict_proba(X_test)
-        lloss1 = log_loss(y_test, y_scores)
+        avg_prec1 = average_precision_score(y_test_binary, y_scores, average="weighted")
 
-        multiclass = "ovr"
         clf = ForestClassifier(
-            n_estimators=n_estimators,
-            n_jobs=n_jobs,
-            multiclass=multiclass,
-            aggregation=aggregation,
-            max_features=max_features,
-            class_weight=class_weight,
-            categorical_features=categorical_features,
+            n_estimators=10,
+            n_jobs=-1,
+            multiclass="ovr",
+            categorical_features=dataset.categorical_features_,
             random_state=random_state,
-            dirichlet=dirichlet,
         )
         clf.fit(X_train, y_train)
         y_scores = clf.predict_proba(X_test)
-        lloss2 = log_loss(y_test, y_scores)
+        avg_prec2 = average_precision_score(y_test_binary, y_scores, average="weighted")
 
-        assert lloss1 > lloss2
-
-    def test_categorical_performances_on_adult(self):
-        dataset = self.adult
-        n_estimators = 10
-        aggregation = False
-        class_weight = "balanced"
-        n_jobs = -1
-        max_features = None
-        random_state = 42
-        dirichlet = 0.0
-        step = 1.0
-
-        def run(multiclass, categorical_features, one_hot_encode):
-            dataset.one_hot_encode = one_hot_encode
-            X_train, X_test, y_train, y_test = dataset.extract(
-                random_state=random_state
-            )
-
-            clf = ForestClassifier(
-                n_estimators=n_estimators,
-                n_jobs=n_jobs,
-                multiclass=multiclass,
-                aggregation=aggregation,
-                max_features=max_features,
-                class_weight=class_weight,
-                categorical_features=categorical_features,
-                random_state=random_state,
-                dirichlet=dirichlet,
-                step=step,
-            )
-            clf.fit(X_train, y_train)
-            y_scores_test = clf.predict_proba(X_test)
-            return log_loss(y_test, y_scores_test)
-
-        multiclass = "multinomial"
-        categorical_features = None
-        one_hot_encode = True
-        lloss1 = run(multiclass, categorical_features, one_hot_encode)
-
-        multiclass = "multinomial"
-        categorical_features = None
-        one_hot_encode = False
-        lloss2 = run(multiclass, categorical_features, one_hot_encode)
-
-        multiclass = "multinomial"
-        categorical_features = dataset.categorical_features_
-        one_hot_encode = False
-        lloss3 = run(multiclass, categorical_features, one_hot_encode)
-
-        assert lloss3 < lloss2
-        assert lloss3 < lloss1
-
-    def test_ovr_with_two_classes(self):
-        """Test on a binary classification problem that 'ovr' and 'multiclass' are
-        exactly identical"""
-        dataset = self.adult
-        dataset.one_hot_encode = False
-        random_state = 42
-        X_train, X_test, y_train, y_test = dataset.extract(
-            random_state=random_state
-        )
-
-        n_estimators = 2
-        aggregation = False
-        class_weight = "balanced"
-        n_jobs = -1
-        max_features = None
-        dirichlet = 0.0
-        categorical_features = dataset.categorical_features_
-
-        multiclass = "multinomial"
         clf = ForestClassifier(
-            n_estimators=n_estimators,
-            n_jobs=n_jobs,
-            multiclass=multiclass,
-            aggregation=aggregation,
-            max_features=max_features,
-            class_weight=class_weight,
-            categorical_features=categorical_features,
+            n_estimators=10,
+            n_jobs=-1,
+            multiclass="ovr",
+            categorical_features=dataset.categorical_features_,
             random_state=random_state,
-            dirichlet=dirichlet,
-        )
-        clf.fit(X_train, y_train)
-        y_scores_test1 = clf.predict_proba(X_test)
-
-        multiclass = "ovr"
-        clf = ForestClassifier(
-            n_estimators=n_estimators,
-            n_jobs=n_jobs,
-            multiclass=multiclass,
-            aggregation=aggregation,
-            max_features=max_features,
-            class_weight=class_weight,
-            categorical_features=categorical_features,
-            random_state=random_state,
-            dirichlet=dirichlet,
-        )
-        clf.fit(X_train, y_train)
-        y_scores_test2 = clf.predict_proba(X_test)
-
-        assert y_scores_test1 == approx(y_scores_test2)
-
-    def test_dirichlet_switch(self):
-        breast_cancer = self.breast_cancer
-        X, y = breast_cancer["data"], breast_cancer["target"]
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, shuffle=True, stratify=y, random_state=42, test_size=0.3
         )
 
-        clf1 = ForestClassifier(class_weight="balanced", random_state=42)
-        clf2 = ForestClassifier(class_weight="balanced", random_state=42, dirichlet=2.0)
+        assert avg_prec2 > avg_prec1 + 1
 
-        clf1.fit(X_train, y_train)
-        clf2.fit(X_train, y_train)
-        y_score1 = clf1.predict_proba(X_test)
-        y_score2 = clf2.predict_proba(X_test)
 
-        assert np.max(np.abs(y_score1 - y_score2)) >= 0.01
-        clf2.dirichlet = 0.5
-        y_score2 = clf2.predict_proba(X_test)
-        assert np.max(np.abs(y_score1 - y_score2)) < 1e-5
-        clf1.dirichlet = 1.1
-        clf2.dirichlet = 1.1
-        y_score1 = clf1.predict_proba(X_test)
-        y_score2 = clf2.predict_proba(X_test)
-        assert np.max(np.abs(y_score1 - y_score2)) < 1e-5
+    def test_categorical_features_performance(self):
+        pass
 
         # inspired from
         # https://scikit-learn.org/stable/auto_examples/ensemble/plot_gradient_boosting_categorical.html#sphx-glr-auto-examples-ensemble-plot-gradient-boosting-categorical-py
-        #  Ames Housing dataset¶
+        #  Ames Housing datasets¶
 
         # from sklearn.datasets import fetch_openml
         # from sklearn.pipeline import make_pipeline

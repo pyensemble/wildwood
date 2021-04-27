@@ -237,7 +237,7 @@ class ForestBase(BaseEstimator):
             # In the "ovr" case, we want the random_state to be the same across the
             # trees used in the one-versus all strategy
             # np.repeat(np.array([2, 1, 17, 3]), repeats=3)
-            _random_states = np.repeat(_random_states, repeats=self._n_classes_)
+            _random_states = np.repeat(_random_states, repeats=self.n_classes_per_tree_)
 
         self._random_states_bootstrap = _random_states
         self._random_states_trees = _random_states
@@ -1032,7 +1032,7 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         min_samples_leaf: int = 1,
         max_bins: int = 255,
         categorical_features=None,
-        max_features: Union[None, str, int] = "auto",
+        max_features: Union[str, int] = "auto",
         n_jobs: int = 1,
         random_state=None,
         verbose: bool = False,
@@ -1059,8 +1059,6 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         self._n_classes_ = None
         self.n_trees_ = None
         self.n_classes_per_tree_ = None
-        self._multiclass = None
-
         self.dirichlet = dirichlet
         self.class_weight = class_weight
         self.multiclass = multiclass
@@ -1089,27 +1087,33 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         self._classes_ = label_encoder.classes_
         n_classes_ = self._classes_.shape[0]
         self._n_classes_ = n_classes_
+        # only 1 tree for binary classification.
+        # TODO: For multiclass classification, we build 1 tree per class.
+        # self.n_trees_per_iteration_ = 1 if n_classes_ <= 2 else n_classes_
+
+        if multiclass == "ovr" and n_classes_ <= 2:
+            if self.verbose:
+                warn(
+                    "Only two classes where detected: switching to "
+                    'multiclass="multiclass" instead of "ovr"'
+                )
+            multiclass = "multinomial"
+            self.multiclass = multiclass
+
         if multiclass == "ovr":
-            if n_classes_ <= 2:
-                if self.verbose:
-                    warn(
-                        'Only two classes where detected: switching to '
-                        'multiclass="multiclass" instead of "ovr"'
-                    )
-                # We switch back to "multinomial" encoding
-                self.multiclass = "multinomial"
-                # And we need to flatten the array in this case (since LabelBinarizer
-                # returns a (n_samples, 2) array in this case)
-                encoded_y = pre_encoded_y.ravel().astype(np.float32)
-            else:
-                # TODO: pourquoi une liste de arrays et numpy array 2D ?
-                encoded_y = [
-                    np.ascontiguousarray(pre_encoded_y[:, i], dtype=np.float32)
-                    for i in range(n_classes_)
-                ]
+            # TODO: pourquoi une liste de arrays et numpy array 2D ?
+            encoded_y = [
+                np.ascontiguousarray(pre_encoded_y[:, i], dtype=np.float32)
+                for i in range(n_classes_)
+            ]
         else:
             encoded_y = np.ascontiguousarray(pre_encoded_y, dtype=np.float32)
-
+            # if multiclass == "multinomial":
+            #
+            # else:
+            #     encoded_y = np.ascontiguousarray(
+            #         pre_encoded_y.flatten(), dtype=np.float32
+            #     )
         return encoded_y
 
     def _validate_y_class_weight(self, y):
@@ -1257,11 +1261,7 @@ class ForestClassifier(ForestBase, ClassifierMixin):
             if val < 0.0:
                 raise ValueError("dirichlet must be positive")
             else:
-                recompute = hasattr(self, "_dirichlet") and self._dirichlet != val
                 self._dirichlet = val
-                if self._fitted and recompute:
-                    for tree in self.trees:
-                        tree.dirichlet = val
 
     @property
     def classes_(self):

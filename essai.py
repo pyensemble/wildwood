@@ -2,17 +2,30 @@ import sys
 import numpy as np
 import pandas as pd
 
+sys.path.extend([".."])
 
-from sklearn.preprocessing import LabelEncoder, LabelBinarizer
+from wildwood.forest import ForestClassifier
+from wildwood.datasets import load_bank
+
+dataset = load_bank()
+dataset.one_hot_encode = True
+dataset.standardize = False
+dataset.drop = None
+X_train, X_test, y_train, y_test = dataset.extract(random_state=42)
 
 
-y = ["one", "one", "three", "two", "one"]
+clf = ForestClassifier(
+    n_estimators=1,
+    n_jobs=1,
+    class_weight="balanced",
+    random_state=42,
+    aggregation=False,
+    max_features=None,
+    dirichlet=0.0,
+)
 
-print(LabelBinarizer().fit_transform(y))
-print(LabelEncoder().fit_transform(y))
+clf.fit(X_train, y_train)
 
 
-y = ["one", "one", "two", "two", "one"]
+print(clf.path_leaf(X_train[:1]))
 
-print(LabelBinarizer().fit_transform(y).astype(np.float32))
-print(LabelEncoder().fit_transform(y))

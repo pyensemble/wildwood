@@ -102,8 +102,8 @@ for data_name, (X, y) in datasets:
 
 
 results = pd.DataFrame(
-    {"dataset": dataset, "task": task, "classifier": classifier, "timings": timings}
+    {"datasets": dataset, "task": task, "classifier": classifier, "timings": timings}
 )
 
-print(results.pivot(index=["dataset", "task"], columns="classifier"))
+print(results.pivot(index=["datasets", "task"], columns="classifier"))
 

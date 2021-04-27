@@ -389,13 +389,10 @@ def find_best_split_classifier_along_feature(
         # TODO: Ordering using another strategy, such as CatBoost's target statistics)
         #  for multiclass classification ?
         # TODO: Something faster ?
-        # Sort bins according to the proportions of labels equal to 1 in
-        # each bin. This leads to the best split partitioning for regression and binary
+        # Sort bins according to y_sum_in_bins[non_empty_bins, 0]. This
+        # leads to the best split partitioning for regression and binary
         # classification
-        # TODO: use a placeholder for y_sum_positives in split ?
-        y_sum_positives = y_sum_in_bins[non_empty_bins, 1].copy()
-        y_sum_positives /= y_sum_in_bins[non_empty_bins, :].sum(axis=1)
-        idx_sort = np.argsort(y_sum_positives)
+        idx_sort = np.argsort(y_sum_in_bins[non_empty_bins, 0])
         bins[:] = non_empty_bins[idx_sort]
     else:
         # TODO: we can avoid allocating this array for all non-categorical features
@@ -728,12 +725,6 @@ def compute_bin_partition(best_split):
             bins[left_partition_size:bins_count]
         )
         best_split.bin_partition_size = right_partition_size
-        # In this case we need to swap impurity_left and impurity_right in the split,
-        # since bins in bin_partition go to the left child of the node.
-        best_split.impurity_left, best_split.impurity_right = (
-            best_split.impurity_right,
-            best_split.impurity_left,
-        )
 
 
 @jit(boolean(uint8, uint8[::1]), nopython=True, nogil=True)

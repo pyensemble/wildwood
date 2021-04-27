@@ -7,7 +7,7 @@ import os
 import pytest
 import pandas as pd
 
-from wildwood.dataset import describe_datasets
+from wildwood.datasets import describe_datasets
 
 
 def approx(v, abs=1e-15):

@@ -6,7 +6,7 @@ import numpy as np
 
 import pandas as pd
 
-from wildwood.dataset import get_signal, make_regression
+from wildwood.datasets import get_signal, make_regression
 from wildwood.forest import ForestRegressor
 
 from wildwood._binning import Binner

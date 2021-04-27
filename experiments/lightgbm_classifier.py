@@ -8,11 +8,11 @@ from sklearn.metrics import accuracy_score, roc_auc_score, log_loss, average_pre
 import lightgbm as lgb
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--dataset', type=str, default="Moons")
+parser.add_argument('--datasets', type=str, default="Moons")
 parser.add_argument('--normalize-intervals', action="store_true", default=False)
 parser.add_argument('--one-hot-categoricals', action="store_true", default=False)
-parser.add_argument('--dataset-path', type=str, default="data")
-parser.add_argument('--dataset-subsample', type=int, default=100000)
+parser.add_argument('--datasets-path', type=str, default="data")
+parser.add_argument('--datasets-subsample', type=int, default=100000)
 parser.add_argument('--n-estimators', type=int, default=100)
 parser.add_argument('--n-jobs', type=int, default=-1)
 parser.add_argument('--random-state', type=int, default=0)
@@ -43,11 +43,11 @@ cat_features = list(range(dataset.nb_continuous_features, dataset.n_features))
 #    return pd.DataFrame(data[:,:nb_continuous]).join(pd.DataFrame(data[:,nb_continuous:], columns=range(nb_continuous, data.shape[1])).astype('category'))
 
 #if len(cat_features) > 0 and use_cat_features:
-#    train_pool = preprocess_for_cat_features(dataset.data_train, dataset.nb_continuous_features)
-#    test_pool = preprocess_for_cat_features(dataset.data_test, dataset.nb_continuous_features)
+#    train_pool = preprocess_for_cat_features(datasets.data_train, datasets.nb_continuous_features)
+#    test_pool = preprocess_for_cat_features(datasets.data_test, datasets.nb_continuous_features)
 #else:
-#    train_pool = dataset.data_train
-#    test_pool = dataset.data_test
+#    train_pool = datasets.data_train
+#    test_pool = datasets.data_test
 
 sample_weight = dataset.get_train_sample_weights()
 tic = time()
