@@ -1093,8 +1093,8 @@ class ForestClassifier(ForestBase, ClassifierMixin):
             if n_classes_ <= 2:
                 if self.verbose:
                     warn(
-                        'Only two classes where detected: switching to '
-                        'multiclass="multiclass" instead of "ovr"'
+                        'Only two classes were detected: switching to '
+                        'multiclass="multinomial" instead of "ovr"'
                     )
                 # We switch back to "multinomial" encoding
                 self.multiclass = "multinomial"
