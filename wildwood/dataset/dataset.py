@@ -255,8 +255,8 @@ class Dataset:
             # the Dataset categorical features come last.
             categorical_features = np.zeros(self.n_features_, dtype=np.bool)
             #
-            categorical_features[-self.n_features_categorical_ :] = True
-            self.categorical_features_ = categorical_features
+            categorical_features[-self.n_features_categorical_:] = True
+            self.categorical_features_ = categorical_features.copy()
 
         stratify = None if self.task == "regression" else df[self.label_column]
 
