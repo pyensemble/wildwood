@@ -19,6 +19,11 @@ from numba.experimental import jitclass
 from ._utils import get_type
 
 
+NOPYTHON = True
+NOGIL = True
+BOUNDSCHECK = False
+
+
 # TODO: X is uint8[:, :] while it could be uint8[::1, :] namely forced F-major,
 #  but if X has shape (n_samples, 1) (only one feature) then it is both F and C and
 #  this raises a numba compilation error. But, it should not affect performance
@@ -136,7 +141,7 @@ class TreeClassifierContext:
             max_features,
             aggregation,
             step,
-            is_categorical
+            is_categorical,
         )
         self.n_classes = n_classes
         self.dirichlet = dirichlet
@@ -159,7 +164,7 @@ class TreeRegressorContext:
         max_features,
         aggregation,
         step,
-        is_categorical
+        is_categorical,
     ):
         init_tree_context(
             self,
@@ -172,7 +177,7 @@ class TreeRegressorContext:
             max_features,
             aggregation,
             step,
-            is_categorical
+            is_categorical,
         )
 
 
@@ -193,7 +198,7 @@ TreeRegressorContextType = get_type(TreeRegressorContext)
             intp,
             boolean,
             float32,
-            boolean[::1]
+            boolean[::1],
         ),
         void(
             TreeRegressorContextType,
@@ -206,11 +211,12 @@ TreeRegressorContextType = get_type(TreeRegressorContext)
             intp,
             boolean,
             float32,
-            boolean[::1]
+            boolean[::1],
         ),
     ],
-    nopython=True,
-    nogil=True,
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
 )
 def init_tree_context(
     tree_context,
@@ -223,7 +229,7 @@ def init_tree_context(
     max_features,
     aggregation,
     step,
-    is_categorical
+    is_categorical,
 ):
     tree_context.X = X
     tree_context.y = y

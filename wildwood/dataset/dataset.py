@@ -294,8 +294,7 @@ class Dataset:
                             categorical_column
                             # + "#"
                             # + modality
-                            + "#"
-                            + str(idx_modality)
+                            + "#" + str(idx_modality)
                             for idx_modality, modality in enumerate(modalities)
                         ]
                     )
@@ -396,10 +395,27 @@ def load_boston():
     from sklearn.datasets import load_boston
 
     data = load_boston()
-    df = pd.DataFrame(data["data"], columns=data["feature_names"])
+    # Load as a dataframe. We set some features as categorical so that we have a
+    # regression example with categorical features for tests...
+    df = pd.DataFrame(data["data"], columns=data["feature_names"]).astype(
+        {"CHAS": "category"}
+    )
     df["target"] = data["target"]
-    continuous_columns = [col for col in df.columns if col != "target"]
-    categorical_columns = None
+    continuous_columns = [
+        "ZN",
+        "RAD",
+        "CRIM",
+        "INDUS",
+        "NOX",
+        "RM",
+        "AGE",
+        "DIS",
+        "TAX",
+        "PTRATIO",
+        "B",
+        "LSTAT",
+    ]
+    categorical_columns = ["CHAS"]
     dataset = Dataset(
         name="boston",
         task="regression",

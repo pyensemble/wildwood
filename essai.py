@@ -1,18 +1,23 @@
 import sys
 import numpy as np
-import pandas as pd
+import pandas as p
+
+import pytest
 
 
-from sklearn.preprocessing import LabelEncoder, LabelBinarizer
+from numba import jit, uint8, boolean, intp, uintp
 
 
-y = ["one", "one", "three", "two", "one"]
 
-print(LabelBinarizer().fit_transform(y))
-print(LabelEncoder().fit_transform(y))
+@jit(nopython=True, nogil=True, boundscheck=True)
+def check_node(a, b):
+    assert a == b
 
 
-y = ["one", "one", "two", "two", "one"]
 
-print(LabelBinarizer().fit_transform(y).astype(np.float32))
-print(LabelEncoder().fit_transform(y))
+@pytest.mark.parametrize(
+    "a, b", [(1, 1), (2, 2), (1, 3)]
+)
+def test_stuff(a, b):
+    check_node(a, b)
+    

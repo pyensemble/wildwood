@@ -588,17 +588,16 @@ class TestForestClassifier(object):
         clf.categorical_features = [1, 3]
         assert clf.categorical_features == [1, 3]
 
-    def test_multiclass_vs_ovr_on_car(self):
+    def test_multiclass_and_ovr_on_car(self):
         dataset = load_car()
         dataset.one_hot_encode = False
         dataset.test_size = 1.0 / 5
         random_state = 42
         X_train, X_test, y_train, y_test = dataset.extract(random_state=random_state)
-
-        n_estimators = 100
+        n_estimators = 1
         aggregation = False
         class_weight = "balanced"
-        n_jobs = -1
+        n_jobs = 1
         max_features = None
         random_state = 42
         dirichlet = 0.0
@@ -617,8 +616,10 @@ class TestForestClassifier(object):
             dirichlet=dirichlet,
         )
         clf.fit(X_train, y_train)
-        y_scores = clf.predict_proba(X_test)
-        lloss1 = log_loss(y_test, y_scores)
+        y_scores_train = clf.predict_proba(X_train)
+        y_scores_test = clf.predict_proba(X_test)
+        lloss_train_multinomial = log_loss(y_train, y_scores_train)
+        lloss_test_multinomial = log_loss(y_test, y_scores_test)
 
         multiclass = "ovr"
         clf = ForestClassifier(
@@ -633,12 +634,15 @@ class TestForestClassifier(object):
             dirichlet=dirichlet,
         )
         clf.fit(X_train, y_train)
-        y_scores = clf.predict_proba(X_test)
-        lloss2 = log_loss(y_test, y_scores)
+        y_scores_train = clf.predict_proba(X_train)
+        y_scores_test = clf.predict_proba(X_test)
+        lloss_train_ovr = log_loss(y_train, y_scores_train)
+        lloss_test_ovr = log_loss(y_test, y_scores_test)
 
-        assert lloss1 > lloss2
+        assert lloss_train_ovr < lloss_train_multinomial
+        assert lloss_test_ovr < lloss_test_multinomial
 
-    def test_categorical_performances_on_adult(self):
+    def test_categorical_fit_on_adult(self):
         dataset = self.adult
         n_estimators = 10
         aggregation = False
@@ -668,13 +672,14 @@ class TestForestClassifier(object):
                 step=step,
             )
             clf.fit(X_train, y_train)
-            y_scores_test = clf.predict_proba(X_test)
-            return log_loss(y_test, y_scores_test)
+            # y_scores_test = clf.predict_proba(X_test)
+            y_scores_train = clf.predict_proba(X_train)
+            return log_loss(y_train, y_scores_train)
 
-        multiclass = "multinomial"
-        categorical_features = None
-        one_hot_encode = True
-        lloss1 = run(multiclass, categorical_features, one_hot_encode)
+        # multiclass = "multinomial"
+        # categorical_features = None
+        # one_hot_encode = True
+        # lloss1 = run(multiclass, categorical_features, one_hot_encode)
 
         multiclass = "multinomial"
         categorical_features = None
@@ -687,7 +692,7 @@ class TestForestClassifier(object):
         lloss3 = run(multiclass, categorical_features, one_hot_encode)
 
         assert lloss3 < lloss2
-        assert lloss3 < lloss1
+        # assert lloss3 < lloss1
 
     def test_ovr_with_two_classes(self):
         """Test on a binary classification problem that 'ovr' and 'multiclass' are
@@ -695,9 +700,7 @@ class TestForestClassifier(object):
         dataset = self.adult
         dataset.one_hot_encode = False
         random_state = 42
-        X_train, X_test, y_train, y_test = dataset.extract(
-            random_state=random_state
-        )
+        X_train, X_test, y_train, y_test = dataset.extract(random_state=random_state)
 
         n_estimators = 2
         aggregation = False
