@@ -8,4 +8,12 @@ for wildwood
 strategy used for splits computations in wildwood
 """
 
+"""
+This module contains the BinMapper class.
+
+BinMapper is used for mapping a real-valued dataset into integer-valued bins.
+Bin thresholds are computed with the quantiles so that each bin contains
+approximately the same number of samples.
+"""
+
 from sklearn.ensemble._hist_gradient_boosting.binning import _BinMapper as Binner
