@@ -7,7 +7,6 @@ a node.
 """
 
 import numpy as np
-from sklearn.preprocessing import normalize
 from numba import jit, boolean, uint8, uintp, float32, void
 from numba.types import Tuple
 from numba.experimental import jitclass
@@ -385,7 +384,7 @@ def try_feature_order_for_classifier_split(tree_context, node_context, feature, 
 
         # TODO: we shall pass the child impurity function as an argument to handle
         #  different impurities
-        # Get the impurities of the left and right childs
+        # Get the impurities of the left and right children
         impurity_left, impurity_right = gini_childs(
             n_classes,
             w_samples_train_left,

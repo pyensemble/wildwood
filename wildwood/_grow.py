@@ -337,7 +337,7 @@ def grow(
         )
 
         # TODO: add the max_depth option using something like
-        # is_leaf = is_leaf or (depth >= max_depth)
+        # is_leaf = (depth >= tree.max_depth)
         # This node is a terminal leaf, we won't try to split it
 
         # We don't split a node if it contains less than min_samples_split training
