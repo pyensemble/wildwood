@@ -25,6 +25,7 @@ from sklearn.utils.validation import check_is_fitted
 
 from ._binning import Binner
 
+eps = np.finfo("float32").eps
 
 __all__ = ["ForestClassifier", "ForestRegressor"]
 
@@ -1093,7 +1094,7 @@ class ForestClassifier(ForestBase, ClassifierMixin):
             if n_classes_ <= 2:
                 if self.verbose:
                     warn(
-                        'Only two classes where detected: switching to '
+                        "Only two classes where detected: switching to "
                         'multiclass="multiclass" instead of "ovr"'
                     )
                 # We switch back to "multinomial" encoding
@@ -1180,7 +1181,10 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         )
 
         if ovr:
-            all_proba /= all_proba.sum(axis=1, keepdims=True)
+            all_proba_sum = all_proba.sum(axis=1)
+            mask = all_proba_sum <= eps
+            all_proba[mask, :] = 1 / self.n_classes_
+            all_proba[~mask, :] /= np.expand_dims(all_proba_sum[~mask], axis=1)
         else:
             all_proba /= len(self.trees)
 
