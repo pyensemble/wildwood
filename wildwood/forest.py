@@ -671,6 +671,9 @@ class ForestBase(BaseEstimator):
             raise ValueError("step must be positive")
         else:
             self._step = val
+            if self._fitted:
+                for tree in self.trees:
+                    tree.step = val
 
     @property
     def aggregation(self):
