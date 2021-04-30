@@ -11,6 +11,10 @@ from sklearn.metrics import (
 )
 from sklearn.preprocessing import LabelBinarizer
 
+from sklearn.experimental import enable_hist_gradient_boosting
+#  This estimator is still experimental in sklearn 0.24
+from sklearn.ensemble import HistGradientBoostingClassifier
+
 from sklearn.ensemble import RandomForestClassifier
 import lightgbm as lgb
 import xgboost as xgb
@@ -113,14 +117,10 @@ class Experiment(object):
             self.n_estimators = n_estimators
         params = self.preprocess_params(params)
         start_time = time.time()
-
-        bst = self.fit(
-            params, X_train, y_train, sample_weight, seed=None
-        )
+        bst = self.fit(params, X_train, y_train, sample_weight, seed=None)
         fit_time = time.time() - start_time
         y_scores = self.predict(bst, X_val)
         evals_result = log_loss(y_val, y_scores)
-
         y_pred = np.argmax(y_scores, axis=1)
 
         cv_result = {
@@ -202,7 +202,6 @@ class Experiment(object):
 
 
 class RFExperiment(Experiment):
-
     def __init__(
         self,
         learning_task,
@@ -222,64 +221,109 @@ class RFExperiment(Experiment):
             output_folder_path,
         )
 
-        # hard-coded params search space here TODO
+        # hard-coded params search space here TODO: check for other parameters?
         self.space = {
-            "eta": hp.loguniform("eta", -7, 0),
-            "max_depth": hp.quniform("max_depth", 2, 10, 1),
-            "subsample": hp.uniform("subsample", 0.5, 1),
-            "colsample_bytree": hp.uniform("colsample_bytree", 0.5, 1),
-            "colsample_bylevel": hp.uniform("colsample_bylevel", 0.5, 1),
-            "min_child_weight": hp.loguniform("min_child_weight", -16, 5),
-            "alpha": hp.choice("alpha", [0, hp.loguniform("alpha_positive", -16, 2)]),
-            "lambda": hp.choice(
-                "lambda", [0, hp.loguniform("lambda_positive", -16, 2)]
+            "max_depth": hp.choice(
+                "max_depth", [None, hp.quniform("max_depth_finite", 2, 10, 1)]
             ),
-            "gamma": hp.choice("gamma", [0, hp.loguniform("gamma_positive", -16, 2)]),
+            "max_features": hp.choice("max_features", [None, "auto", "sqrt", "log2"]),
         }
-        # hard-coded default params here TODO
-        self.default_params = {
-            "eta": 0.3,
-            "max_depth": 6,
-            "subsample": 1.0,
-            "colsample_bytree": 1.0,
-            "colsample_bylevel": 1.0,
-            "min_child_weight": 1,
-            "alpha": 0,
-            "lambda": 1,
-            "gamma": 0,
-        }
+        # hard-coded default params here
+        self.default_params = {"max_depth": 6, "max_features": "auto"}
         self.default_params = self.preprocess_params(self.default_params)
         self.title = "sklearn-RandomForest"
 
     def preprocess_params(self, params):
-        if self.learning_task == "classification":
-            params.update(
-                {
-                    "objective": "binary:logistic",
-                    "eval_metric": "logloss",
-                    "seed": self.random_state,
-                    "verbosity": 1,
-                }
-            )
-        elif self.learning_task == "regression":
-            params.update(
-                {
-                    "objective": "reg:linear",
-                    "eval_metric": "rmse",
-                    "seed": self.random_state,
-                    "verbosity": 1,
-                }
-            )
-        params["max_depth"] = int(params["max_depth"])
-        return params
+        params_ = params.copy()
+        params_["max_depth"] = (
+            None if params_["max_depth"] is None else int(params_["max_depth"])
+        )
+        params_.update(
+            {"n_estimators": self.n_estimators, "random_state": self.random_state}
+        )
+        return params_
 
     def fit(self, params, X_train, y_train, sample_weight, seed=None):
         # no categorical_features, use one-hot encoding with RandomForestClassfier
         if seed is not None:
             params.update({"seed": seed})
-        clf = RandomForestClassifier(
-            n_estimators=n, class_weight="balanced", n_jobs=-1, random_state=random_state
-        ),
+        clf = RandomForestClassifier(**params, class_weight="balanced", n_jobs=-1)
+        clf.fit(X_train, y_train, sample_weight=sample_weight)
+        return clf
+
+    def predict(self, bst, X_test):
+        if self.learning_task == "classification":
+            preds = bst.predict_proba(X_test)
+        else:
+            preds = bst.predict(X_test)
+        return preds
+
+
+class HGBExperiment(Experiment):
+    def __init__(
+        self,
+        learning_task,
+        n_estimators=10,
+        max_hyperopt_evals=50,
+        categorical_features=None,
+        random_state=0,
+        output_folder_path="./",
+    ):
+        Experiment.__init__(
+            self,
+            learning_task,
+            "hgb",
+            n_estimators,
+            max_hyperopt_evals,
+            categorical_features,
+            random_state,
+            output_folder_path,
+        )
+
+        # hard-coded params search space here TODO: check for other parameters?
+        self.space = {
+            "learning_rate": hp.loguniform("learning_rate", -4, 1),
+            "max_depth": hp.choice(
+                "max_depth", [None, hp.quniform("max_depth_finite", 2, 10, 1)]
+            ),
+            "max_leaf_nodes": hp.qloguniform("num_leaves", 0, 7, 1),
+            "min_samples_leaf": hp.qloguniform("min_data_in_leaf", 0, 6, 1),
+            "l2_regularization": hp.choice(
+                "l2_regularization",
+                [0, hp.loguniform("l2_regularization_positive", -16, 2)],
+            ),
+        }
+        # hard-coded default params here
+        self.default_params = {
+            "learning_rate": 0.1,
+            "max_depth": None,
+            "max_leaf_nodes": 31,
+            "min_samples_leaf": 20,
+            "l2_regularization": 0,
+        }
+        self.default_params = self.preprocess_params(self.default_params)
+        self.title = "sklearn-HistGradientBoosting"
+
+    def preprocess_params(self, params):
+        params_ = params.copy()
+        if self.learning_task_ == "binary-classification":
+            params_.update({"loss": "binary_crossentropy"})
+        elif self.learning_task_ == "multiclass-classification":
+            params_.update({"loss": "categorical_crossentropy"})
+        elif self.learning_task_ == "regression":
+            pass  # TODO
+
+        params_["max_depth"] = (
+            None if params_["max_depth"] is None else int(params_["max_depth"])
+        )
+        params_["max_leaf_nodes"] = max(int(params_["max_leaf_nodes"]), 2)
+        params_.update({"max_iter": self.n_estimators, "random_state": self.random_state})
+        return params_
+
+    def fit(self, params, X_train, y_train, sample_weight, seed=None):
+        if seed is not None:
+            params.update({"random_state": seed})
+        clf = HistGradientBoostingClassifier(**params)
         clf.fit(X_train, y_train, sample_weight=sample_weight)
         return clf
 
@@ -333,8 +377,8 @@ class LGBExperiment(Experiment):
             "num_leaves": 127,
             "feature_fraction": 1.0,
             "bagging_fraction": 1.0,
-            "min_data_in_leaf": 100,
-            "min_sum_hessian_in_leaf": 10,
+            "min_data_in_leaf": 20,
+            "min_sum_hessian_in_leaf": 1e-3,
             "lambda_l1": 0,
             "lambda_l2": 0,
         }
@@ -343,11 +387,21 @@ class LGBExperiment(Experiment):
 
     def preprocess_params(self, params):
         params_ = params.copy()
-        if self.learning_task == "classification":
+        if self.learning_task_ == "binary-classification":
             params_.update(
                 {
                     "objective": "binary",
                     "metric": "binary_logloss",
+                    "bagging_freq": 1,
+                    "random_state": self.random_state,
+                    "verbose": -1,
+                }
+            )
+        elif self.learning_task_ == "multiclass-classification":
+            params_.update(
+                {
+                    "objective": "multiclass",
+                    "metric": "multi_logloss",
                     "bagging_freq": 1,
                     "random_state": self.random_state,
                     "verbose": -1,
@@ -441,26 +495,35 @@ class XGBExperiment(Experiment):
 
     def preprocess_params(self, params):
         params_ = params.copy()
-        if self.learning_task == "classification":
+        if self.learning_task_ == "binary-classification":
             params_.update(
                 {
                     "objective": "binary:logistic",
                     "eval_metric": "logloss",
-                    "seed": self.random_state,
-                    "verbosity": 1,
                 }
             )
-        elif self.learning_task == "regression":
+        elif self.learning_task_ == "multiclass-classification":
+            params_.update(
+                {
+                    "objective": "multi:softmax",
+                    "eval_metric": "mlogloss",
+                }
+            )
+        elif self.learning_task_ == "regression":
             params_.update(
                 {
                     "objective": "reg:linear",
                     "eval_metric": "rmse",
-                    "seed": self.random_state,
-                    "verbosity": 1,
                 }
             )
         params_["max_depth"] = int(params_["max_depth"])
-        params_.update({"n_estimators": self.n_estimators})
+        params_.update(
+            {
+                "n_estimators": self.n_estimators,
+                "random_state": self.random_state,
+                "verbosity": 1,
+            }
+        )
         return params_
 
     def fit(self, params, X_train, y_train, sample_weight, seed=None):
@@ -569,7 +632,12 @@ class CABExperiment(Experiment):
         if seed is not None:
             params.update({"random_seed": seed})
         bst = CatBoostClassifier(**params)
-        bst.fit(X_train, y=y_train, sample_weight=sample_weight, cat_features=self.categorical_features)
+        bst.fit(
+            X_train,
+            y=y_train,
+            sample_weight=sample_weight,
+            cat_features=self.categorical_features,
+        )
         return bst
 
     def predict(self, bst, X_test):
