@@ -8,9 +8,10 @@ from sklearn.metrics import (
 )
 
 # from wildwood.datasets._adult import load_adult
-from wildwood.dataset import load_adult
+from wildwood.dataset import load_adult, load_bank
 
 from experiments.experiment import (
+    LogRegExperiment,
     RFExperiment,
     HGBExperiment,
     LGBExperiment,
@@ -28,6 +29,12 @@ def get_train_sample_weights(labels, n_classes):
 
 
 data_extraction = {
+    "LogisticRegression": {
+        "one_hot_encode": True,
+        "standardize": False,
+        "drop": "first",
+        "pd_df_categories": False,
+    },
     "RandomForestClassifier": {
         "one_hot_encode": True,
         "standardize": False,
@@ -70,20 +77,21 @@ data_extraction = {
 It starts here
 """
 
-dataset = load_adult()  # TODO: make this as argument
-clf_name = "HistGradientBoostingClassifier"  # "LGBMClassifier", "XGBClassifier", "CatBoostClassifier", "RandomForestClassifier"
+dataset = load_bank()  # TODO: make this as argument
+clf_name = "LGBMClassifier"
+# "LGBMClassifier", "XGBClassifier", "CatBoostClassifier",
+#  "RandomForestClassifier", "HistGradientBoostingClassifier", "LogisticRegression"
 learning_task = "binary-classification"
 n_estimators = 100
 max_hyperopt_eval = 10
 random_state_seed = 42
+# TODO: check it is able to use all processes on GPU machine
 
 random_states = {
     "data_extract_random_state": random_state_seed,
     "train_val_split_random_state": 1 + random_state_seed,
     "expe_random_state": 2 + random_state_seed,
 }
-
-
 
 for key, val in data_extraction[clf_name].items():
     setattr(dataset, key, val)
@@ -102,6 +110,11 @@ X_tr, X_val, y_tr, y_val = train_test_split(
 
 
 experiment_setting = {
+    "LogisticRegression": LogRegExperiment(
+        learning_task,
+        max_hyperopt_evals=max_hyperopt_eval,
+        random_state=random_states["expe_random_state"],
+    ),
     "RandomForestClassifier": RFExperiment(
         learning_task,
         n_estimators=n_estimators,
@@ -140,35 +153,58 @@ experiment_setting = {
 exp = experiment_setting[clf_name]
 sample_weights = get_train_sample_weights(y_tr, dataset.n_classes_)
 
-print("Run default params exp...")
-default_params_result = exp.run(
-    X_tr, y_tr, X_val, y_val, sample_weight=sample_weights, verbose=True
-)
+if clf_name == "LogisticRegression":
+    print("Run default params exp...")
+    default_params_result = exp.run(
+        X_tr, y_tr, X_val, y_val, sample_weight=sample_weights, verbose=True
+    )
 
-print("Run train-val hyperopt exp...")
-tuned_cv_result = exp.optimize_params(
-    X_tr,
-    y_tr,
-    X_val,
-    y_val,
-    max_evals=max_hyperopt_eval,
-    sample_weight=sample_weights,
-    verbose=True,
-)
+    print("Run train-val hyperopt exp...")
+    tuned_clf = exp.optimize_params(
+        X_train,
+        y_train,
+        X_val,  # not used
+        y_val,  # not used
+        max_evals=max_hyperopt_eval,
+        sample_weight=get_train_sample_weights(y_train, dataset.n_classes_),
+        verbose=True,
+    )
+    y_scores = tuned_clf.predict_proba(X_test)
+    logloss = log_loss(y_test, y_scores)
+    y_pred = np.argmax(y_scores, axis=1)
+    print("logloss on test=", logloss)
+    print("Done.")
+else:
+    print("Run default params exp...")
+    default_params_result = exp.run(
+        X_tr, y_tr, X_val, y_val, sample_weight=sample_weights, verbose=True
+    )
 
-print("Run fitting with tuned params...")
-model = exp.fit(
-    tuned_cv_result["params"],
-    X_train,
-    y_train,
-    sample_weight=get_train_sample_weights(y_train, dataset.n_classes_),
-)
+    print("Run train-val hyperopt exp...")
+    tuned_cv_result = exp.optimize_params(
+        X_tr,
+        y_tr,
+        X_val,
+        y_val,
+        max_evals=max_hyperopt_eval,
+        sample_weight=sample_weights,
+        verbose=True,
+    )
 
-y_scores = exp.predict(model, X_test)
-logloss = log_loss(y_test, y_scores)
-y_pred = np.argmax(y_scores, axis=1)
-print("logloss on test", logloss)
-print("Done.")
+    print("Run fitting with tuned params...")
+    model = exp.fit(
+        tuned_cv_result["params"],
+        X_train,
+        y_train,
+        sample_weight=get_train_sample_weights(y_train, dataset.n_classes_),
+    )
 
+    y_scores = exp.predict(model, X_test)
+    logloss = log_loss(y_test, y_scores)
+    y_pred = np.argmax(y_scores, axis=1)
+    print("logloss on test=", logloss)
+    print("Done.")
+
+# TODO: add other metrics on test data, put them into dataframe
 # TODO: add fitting time
 # TODO: exhaustive search for the number of trees in the interval [1, 5000] (??)

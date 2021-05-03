@@ -12,15 +12,17 @@ from sklearn.metrics import (
 from sklearn.preprocessing import LabelBinarizer
 
 from sklearn.experimental import enable_hist_gradient_boosting
+
 #  This estimator is still experimental in sklearn 0.24
 from sklearn.ensemble import HistGradientBoostingClassifier
 
+from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 from sklearn.ensemble import RandomForestClassifier
 import lightgbm as lgb
 import xgboost as xgb
 from catboost import CatBoostClassifier
 
-# TODO: to add for regressors
+# TODO: to add regressors for every Experiment
 
 
 class Experiment(object):
@@ -33,7 +35,7 @@ class Experiment(object):
         self,
         learning_task="binary-classification",
         bst_name=None,
-        n_estimators=10,
+        n_estimators=100,
         hyperopt_evals=50,
         categorical_features=None,
         random_state=0,
@@ -123,7 +125,7 @@ class Experiment(object):
         evals_result = log_loss(y_val, y_scores)
         y_pred = np.argmax(y_scores, axis=1)
 
-        cv_result = {
+        results = {
             "loss": evals_result,
             "fit_time": fit_time,
             "status": STATUS_FAIL if np.isnan(evals_result) else STATUS_OK,
@@ -137,7 +139,7 @@ class Experiment(object):
             avg_precision_score_weighted = avg_precision_score
             log_loss_ = log_loss(y_val, y_scores)
             accuracy = accuracy_score(y_val, y_pred)
-            cv_result.update(
+            results.update(
                 {
                     "roc_auc": roc_auc,
                     "roc_auc_weighted": roc_auc_weighted,
@@ -159,7 +161,7 @@ class Experiment(object):
             )
             log_loss_ = log_loss(y_val, y_scores)
             accuracy = accuracy_score(y_val, y_pred)
-            cv_result.update(
+            results.update(
                 {
                     "roc_auc": roc_auc,
                     "roc_auc_weighted": roc_auc_weighted,
@@ -171,10 +173,10 @@ class Experiment(object):
             )
         # TODO: regression
 
-        self.best_loss = min(self.best_loss, cv_result["loss"])
+        self.best_loss = min(self.best_loss, results["loss"])
         self.hyperopt_eval_num += 1
         self.random_state += 1  # change random state after a run
-        cv_result.update(
+        results.update(
             {"hyperopt_eval_num": self.hyperopt_eval_num, "best_loss": self.best_loss}
         )
 
@@ -185,11 +187,11 @@ class Experiment(object):
                     self.hyperopt_evals,
                     fit_time,
                     self.metric,
-                    cv_result["loss"],
+                    results["loss"],
                     self.best_loss,
                 )
             )
-        return cv_result
+        return results
 
     def fit(self, params, X_train, y_train, sample_weight, seed=None):
         raise NotImplementedError("Method fit is not implemented.")
@@ -205,7 +207,7 @@ class RFExperiment(Experiment):
     def __init__(
         self,
         learning_task,
-        n_estimators=10,
+        n_estimators=100,
         max_hyperopt_evals=50,
         random_state=0,
         output_folder_path="./",
@@ -216,7 +218,7 @@ class RFExperiment(Experiment):
             "rf",
             n_estimators,
             max_hyperopt_evals,
-            None,  # no catergorical_feature since RF uses one-hot
+            None,  # no categorical_feature since RF uses one-hot
             random_state,
             output_folder_path,
         )
@@ -247,7 +249,7 @@ class RFExperiment(Experiment):
         # no categorical_features, use one-hot encoding with RandomForestClassfier
         if seed is not None:
             params.update({"seed": seed})
-        clf = RandomForestClassifier(**params, class_weight="balanced", n_jobs=-1)
+        clf = RandomForestClassifier(**params, n_jobs=-1)
         clf.fit(X_train, y_train, sample_weight=sample_weight)
         return clf
 
@@ -263,7 +265,7 @@ class HGBExperiment(Experiment):
     def __init__(
         self,
         learning_task,
-        n_estimators=10,
+        n_estimators=100,
         max_hyperopt_evals=50,
         categorical_features=None,
         random_state=0,
@@ -317,7 +319,9 @@ class HGBExperiment(Experiment):
             None if params_["max_depth"] is None else int(params_["max_depth"])
         )
         params_["max_leaf_nodes"] = max(int(params_["max_leaf_nodes"]), 2)
-        params_.update({"max_iter": self.n_estimators, "random_state": self.random_state})
+        params_.update(
+            {"max_iter": self.n_estimators, "random_state": self.random_state}
+        )
         return params_
 
     def fit(self, params, X_train, y_train, sample_weight, seed=None):
@@ -339,7 +343,7 @@ class LGBExperiment(Experiment):
     def __init__(
         self,
         learning_task,
-        n_estimators=10,
+        n_estimators=100,
         max_hyperopt_evals=50,
         categorical_features=None,
         random_state=0,
@@ -392,9 +396,6 @@ class LGBExperiment(Experiment):
                 {
                     "objective": "binary",
                     "metric": "binary_logloss",
-                    "bagging_freq": 1,
-                    "random_state": self.random_state,
-                    "verbose": -1,
                 }
             )
         elif self.learning_task_ == "multiclass-classification":
@@ -402,9 +403,6 @@ class LGBExperiment(Experiment):
                 {
                     "objective": "multiclass",
                     "metric": "multi_logloss",
-                    "bagging_freq": 1,
-                    "random_state": self.random_state,
-                    "verbose": -1,
                 }
             )
         elif self.learning_task == "regression":
@@ -412,15 +410,19 @@ class LGBExperiment(Experiment):
                 {
                     "objective": "mean_squared_error",
                     "metric": "l2",
-                    "bagging_freq": 1,
-                    "random_state": self.random_state,
-                    "verbose": -1,
                 }
             )
         params_["num_leaves"] = max(int(params_["num_leaves"]), 2)
         params_["min_data_in_leaf"] = int(params_["min_data_in_leaf"])
 
-        params_.update({"n_estimators": self.n_estimators})
+        params_.update(
+            {
+                "n_estimators": self.n_estimators,
+                "bagging_freq": 1,
+                "random_state": self.random_state,
+                "verbose": -1,
+            }
+        )
         return params_
 
     def fit(self, params, X_train, y_train, sample_weight, seed=None):
@@ -431,7 +433,7 @@ class LGBExperiment(Experiment):
         bst.fit(
             X_train,
             y=y_train,
-            categorical_feature=self.categorical_features,
+            categorical_feature="auto",  # We do not use `self.categorical_features` actually,
             sample_weight=sample_weight,
         )
         return bst
@@ -448,7 +450,7 @@ class XGBExperiment(Experiment):
     def __init__(
         self,
         learning_task,
-        n_estimators=10,
+        n_estimators=100,
         max_hyperopt_evals=50,
         random_state=0,
         output_folder_path="./",
@@ -459,7 +461,7 @@ class XGBExperiment(Experiment):
             "xgb",
             n_estimators,
             max_hyperopt_evals,
-            None,  # no catergorical_feature since XGB uses one-hot
+            None,  # no categorical_feature since XGB uses one-hot
             random_state,
             output_folder_path,
         )
@@ -546,7 +548,7 @@ class CABExperiment(Experiment):
     def __init__(
         self,
         learning_task,
-        n_estimators=10,
+        n_estimators=100,
         max_hyperopt_evals=50,
         categorical_features=None,
         random_state=0,
@@ -646,3 +648,94 @@ class CABExperiment(Experiment):
         else:
             preds = np.array(bst.predict(X_test))
         return preds
+
+
+class LogRegExperiment(Experiment):
+    def __init__(
+        self,
+        learning_task,
+        max_hyperopt_evals=50,
+        random_state=0,
+        output_folder_path="./",
+    ):
+        Experiment.__init__(
+            self,
+            learning_task,
+            "logreg",
+            max_hyperopt_evals,
+            1,  # n_estimators not useful in log reg
+            None,  # no categorical_feature since log reg uses one-hot
+            random_state,
+            output_folder_path,
+        )
+        self.title = "sklearn-LogisticRegression"
+
+    def run(
+        self,
+        X_train,
+        y_train,
+        X_val,
+        y_val,
+        sample_weight,
+        params=None,
+        n_estimators=None,
+        verbose=False,
+    ):
+        clf = LogisticRegression(
+            C=1.,
+            penalty='l2',
+            n_jobs=-1,
+            solver='saga',
+            verbose=0,
+            max_iter=100,
+        )
+        start_time = time.time()
+        clf.fit(X_train, y_train, sample_weight=sample_weight)
+        fit_time = time.time() - start_time
+        y_scores = clf.predict_proba(X_val)
+        evals_result = log_loss(y_val, y_scores)
+        y_pred = np.argmax(y_scores, axis=1)
+        results = {
+            "loss": evals_result,
+            "fit_time": fit_time,
+            # "params": params.copy(),  # TODO
+        }
+        roc_auc = roc_auc_score(y_val, y_scores[:, 1])
+        roc_auc_weighted = roc_auc
+        avg_precision_score = average_precision_score(y_val, y_scores[:, 1])
+        avg_precision_score_weighted = avg_precision_score
+        log_loss_ = log_loss(y_val, y_scores)
+        accuracy = accuracy_score(y_val, y_pred)
+        results.update(
+            {
+                "roc_auc": roc_auc,
+                "roc_auc_weighted": roc_auc_weighted,
+                "avg_precision_score": avg_precision_score,
+                "avg_precision_score_weighted": avg_precision_score_weighted,
+                "log_loss": log_loss_,
+                "accuracy": accuracy,
+            }
+        )
+        return results
+
+    def optimize_params(
+        self,
+        X_train,
+        y_train,
+        X_val,
+        y_val,
+        sample_weight,
+        max_evals=None,
+        verbose=True,
+    ):
+        clf = LogisticRegressionCV(
+            Cs=10,
+            penalty='l2',
+            n_jobs=-1,
+            solver='saga',
+            verbose=0,
+            max_iter=self.hyperopt_evals,
+        )
+        clf.fit(X_train, y_train, sample_weight=sample_weight)
+        return clf
+
