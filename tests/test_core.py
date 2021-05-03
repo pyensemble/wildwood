@@ -315,3 +315,118 @@ def test_nodes_on_boston(
         bin_partitions = tree._tree.bin_partitions
         assert tree._tree.nodes.size >= node_count
         check_nodes(nodes, bin_partitions)
+
+
+@pytest.mark.parametrize("max_features", [None, "auto"])
+@pytest.mark.parametrize("random_state", [0, 42])
+@pytest.mark.parametrize(
+    "one_hot_encode, use_categoricals", [(False, False), (False, True), (True, False)]
+)
+@pytest.mark.parametrize(
+    "min_samples_split, min_samples_leaf", [(2, 1), (13, 7), (3, 5)]
+)
+def test_min_samples_split_min_samples_leaf_on_adult(
+    max_features,
+    random_state,
+    one_hot_encode,
+    use_categoricals,
+    min_samples_split,
+    min_samples_leaf,
+):
+    dataset = load_adult()
+    dataset.test_size = 1.0 / 5
+    dataset.standardize = False
+    dataset.one_hot_encode = one_hot_encode
+
+    n_estimators = 3
+    n_jobs = -1
+    class_weight = "balanced"
+    multiclass = "multinomial"
+    aggregation = False
+    step = 1.0
+    dirichlet = 0.0
+
+    X_train, X_test, y_train, y_test = dataset.extract(random_state=random_state)
+    if use_categoricals:
+        categorical_features = dataset.categorical_features_
+    else:
+        categorical_features = None
+    clf = ForestClassifier(
+        n_estimators=n_estimators,
+        n_jobs=n_jobs,
+        multiclass=multiclass,
+        aggregation=aggregation,
+        max_features=max_features,
+        min_samples_split=min_samples_split,
+        min_samples_leaf=min_samples_leaf,
+        class_weight=class_weight,
+        categorical_features=categorical_features,
+        random_state=random_state,
+        dirichlet=dirichlet,
+        step=step,
+    )
+    clf.fit(X_train, y_train)
+    min_samples = min(min_samples_split, min_samples_leaf)
+    for tree in clf.trees:
+        node_count = tree._tree.node_count
+        nodes = tree._tree.nodes[:node_count]
+        for node_id, node in enumerate(nodes):
+            # Check that nodes respect the min_samples_split and
+            # min_samples_leaf constraints
+            assert node["n_samples_train"] >= min_samples
+            assert node["n_samples_valid"] >= min_samples
+
+
+@pytest.mark.parametrize("max_features", [None, "auto"])
+@pytest.mark.parametrize("random_state", [0, 42])
+@pytest.mark.parametrize(
+    "one_hot_encode, use_categoricals", [(False, False), (False, True), (True, False)]
+)
+@pytest.mark.parametrize(
+    "min_samples_split, min_samples_leaf", [(2, 1), (13, 7), (3, 5)]
+)
+def test_min_samples_split_min_samples_leaf_on_boston(
+    max_features,
+    random_state,
+    one_hot_encode,
+    use_categoricals,
+    min_samples_split,
+    min_samples_leaf,
+):
+    dataset = load_boston()
+    dataset.test_size = 1.0 / 5
+    dataset.standardize = False
+    dataset.one_hot_encode = one_hot_encode
+
+    n_estimators = 3
+    n_jobs = -1
+    aggregation = False
+    step = 1.0
+    dirichlet = 0.0
+
+    X_train, X_test, y_train, y_test = dataset.extract(random_state=random_state)
+    if use_categoricals:
+        categorical_features = dataset.categorical_features_
+    else:
+        categorical_features = None
+    clf = ForestRegressor(
+        n_estimators=n_estimators,
+        n_jobs=n_jobs,
+        aggregation=aggregation,
+        max_features=max_features,
+        min_samples_split=min_samples_split,
+        min_samples_leaf=min_samples_leaf,
+        categorical_features=categorical_features,
+        random_state=random_state,
+        step=step,
+    )
+    clf.fit(X_train, y_train)
+    min_samples = min(min_samples_split, min_samples_leaf)
+    for tree in clf.trees:
+        node_count = tree._tree.node_count
+        nodes = tree._tree.nodes[:node_count]
+        for node_id, node in enumerate(nodes):
+            # Check that nodes respect the min_samples_split and
+            # min_samples_leaf constraints
+            assert node["n_samples_train"] >= min_samples
+            assert node["n_samples_valid"] >= min_samples

@@ -387,6 +387,7 @@ def find_best_split_classifier_along_feature(
         The best_split found so far
     """
     n_classes = tree_context.n_classes
+    min_samples_leaf = tree_context.min_samples_leaf
     n_samples_train = node_context.n_samples_train
     w_samples_train = node_context.w_samples_train
     n_samples_valid = node_context.n_samples_valid
@@ -495,17 +496,21 @@ def find_best_split_classifier_along_feature(
             n_samples_valid_left = cumsum_samples_valid_left[bin_threshold]
             n_samples_valid_right = n_samples_valid - n_samples_valid_left
 
-        # TODO: use min_samples_split here
-        # If the split would lead to 0 training or 0 validation samples in the left
-        # child then we don't consider the split
-        if (n_samples_train_left == 0) or (n_samples_valid_left == 0):
+        # If the split would lead to less than min_samples_leaf training or less than
+        #  min_samples_leaf validation samples in the left child then we don't
+        #  consider the split
+        if (n_samples_train_left < min_samples_leaf) or (
+            n_samples_valid_left < min_samples_leaf
+        ):
             continue
 
-        # TODO: use min_samples_split here
-        # If the split would lead to 0 training or 0 validation samples in the right
-        # child, and since we go from left to right, no other future bin on the right
-        # would lead to an acceptable split, so we break the for loop over bins.
-        if (n_samples_train_right == 0) or (n_samples_valid_right == 0):
+        # If the split would lead to less than min_samples_leaf training or less than
+        #  min_samples_leaf validation samples in the right child, and since we go from
+        #  left to right, no other future bin on the right would lead to an
+        #  acceptable split, so we break the for loop over bins.
+        if (n_samples_train_right < min_samples_leaf) or (
+            n_samples_valid_right < min_samples_leaf
+        ):
             break
 
         # TODO: we shall pass the child impurity function as an argument to handle
@@ -624,6 +629,7 @@ def find_best_split_regressor_along_feature(
     best_split : SplitRegressor
         Data about the best split found for the feature
     """
+    min_samples_leaf = tree_context.min_samples_leaf
     n_samples_train = node_context.n_samples_train
     w_samples_train = node_context.w_samples_train
     n_samples_valid = node_context.n_samples_valid
@@ -698,18 +704,23 @@ def find_best_split_regressor_along_feature(
             n_samples_valid_left = cumsum_samples_valid_left[bin_threshold]
             n_samples_valid_right = n_samples_valid - n_samples_valid_left
 
-        # TODO: use min_samples_split here
-        # If the split would lead to 0 training or 0 validation samples in the left
-        # child then we don't consider the split
-        if (n_samples_train_left == 0) or (n_samples_valid_left == 0):
+        # If the split would lead to less than min_samples_leaf training or less than
+        #  min_samples_leaf validation samples in the left child then we don't
+        #  consider the split
+        if (n_samples_train_left < min_samples_leaf) or (
+            n_samples_valid_left < min_samples_leaf
+        ):
             continue
 
-        # TODO: use min_samples_split here
-        # If the split would lead to 0 training or 0 validation samples in the right
-        # child, and since we go from left to right, no other future bin on the right
-        # would lead to an acceptable split, so we break the for loop over bins.
-        if (n_samples_train_right == 0) or (n_samples_valid_right == 0):
+        # If the split would lead to less than min_samples_leaf training or less than
+        #  min_samples_leaf validation samples in the right child, and since we go from
+        #  left to right, no other future bin on the right would lead to an
+        #  acceptable split, so we break the for loop over bins.
+        if (n_samples_train_right < min_samples_leaf) or (
+            n_samples_valid_right < min_samples_leaf
+        ):
             break
+
 
         impurity_left, impurity_right = mse_childs(
             w_samples_train_left,

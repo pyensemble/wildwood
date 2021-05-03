@@ -64,6 +64,13 @@ tree_context_type = [
     # Maximum number of features to try for splitting
     ("max_features", uintp),
     #
+    # The minimum number of train samples and valid samples required to split a node
+    ("min_samples_split", uintp),
+    #
+    # A split is considered only if it would lead to left and right childs with at
+    # least this number of train and this number of valid samples
+    ("min_samples_leaf", uintp),
+    #
     # Is aggregation used ?
     ("aggregation", boolean),
     #
@@ -125,6 +132,8 @@ class TreeClassifierContext:
         max_bins,
         n_bins_per_feature,
         max_features,
+        min_samples_split,
+        min_samples_leaf,
         aggregation,
         dirichlet,
         step,
@@ -139,6 +148,8 @@ class TreeClassifierContext:
             valid_indices,
             max_bins,
             max_features,
+            min_samples_split,
+            min_samples_leaf,
             aggregation,
             step,
             is_categorical,
@@ -162,6 +173,8 @@ class TreeRegressorContext:
         valid_indices,
         max_bins,
         max_features,
+        min_samples_split,
+        min_samples_leaf,
         aggregation,
         step,
         is_categorical,
@@ -175,6 +188,8 @@ class TreeRegressorContext:
             valid_indices,
             max_bins,
             max_features,
+            min_samples_split,
+            min_samples_leaf,
             aggregation,
             step,
             is_categorical,
@@ -196,6 +211,8 @@ TreeRegressorContextType = get_type(TreeRegressorContext)
             uintp[::1],
             intp,
             intp,
+            uintp,
+            uintp,
             boolean,
             float32,
             boolean[::1],
@@ -209,6 +226,8 @@ TreeRegressorContextType = get_type(TreeRegressorContext)
             uintp[::1],
             intp,
             intp,
+            uintp,
+            uintp,
             boolean,
             float32,
             boolean[::1],
@@ -227,6 +246,8 @@ def init_tree_context(
     valid_indices,
     max_bins,
     max_features,
+    min_samples_split,
+    min_samples_leaf,
     aggregation,
     step,
     is_categorical,
@@ -236,6 +257,8 @@ def init_tree_context(
     tree_context.sample_weights = sample_weights
     tree_context.max_bins = max_bins
     tree_context.max_features = max_features
+    tree_context.min_samples_split = min_samples_split
+    tree_context.min_samples_leaf = min_samples_leaf
     tree_context.train_indices = train_indices
     tree_context.valid_indices = valid_indices
     tree_context.aggregation = aggregation
