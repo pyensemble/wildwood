@@ -8,7 +8,8 @@ from sklearn.metrics import (
 )
 
 # from wildwood.datasets._adult import load_adult
-from wildwood.dataset import load_adult, load_bank
+from wildwood.dataset import load_adult, load_bank, load_car, load_breastcancer, load_churn
+from wildwood.dataset._amazon import load_amazon
 
 from experiments.experiment import (
     LogRegExperiment,
@@ -31,8 +32,8 @@ def get_train_sample_weights(labels, n_classes):
 data_extraction = {
     "LogisticRegression": {
         "one_hot_encode": True,
-        "standardize": False,
-        "drop": "first",
+        "standardize": True,
+        "drop": 'first',
         "pd_df_categories": False,
     },
     "RandomForestClassifier": {
@@ -77,16 +78,18 @@ data_extraction = {
 It starts here
 """
 
-dataset = load_bank()  # TODO: make this as argument
-clf_name = "LGBMClassifier"
+dataset = load_car()  # TODO: make this as argument
+clf_name = "CatBoostClassifier"
 # "LGBMClassifier", "XGBClassifier", "CatBoostClassifier",
-#  "RandomForestClassifier", "HistGradientBoostingClassifier", "LogisticRegression"
-learning_task = "binary-classification"
+# "RandomForestClassifier", "HistGradientBoostingClassifier", "LogisticRegression"
 n_estimators = 100
 max_hyperopt_eval = 10
+do_class_weights = False
 random_state_seed = 42
 # TODO: check it is able to use all processes on GPU machine
 
+
+learning_task = dataset.task
 random_states = {
     "data_extract_random_state": random_state_seed,
     "train_val_split_random_state": 1 + random_state_seed,
@@ -151,12 +154,14 @@ experiment_setting = {
 }
 
 exp = experiment_setting[clf_name]
-sample_weights = get_train_sample_weights(y_tr, dataset.n_classes_)
+sample_weights_tr = get_train_sample_weights(y_tr, dataset.n_classes_)
 
 if clf_name == "LogisticRegression":
     print("Run default params exp...")
     default_params_result = exp.run(
-        X_tr, y_tr, X_val, y_val, sample_weight=sample_weights, verbose=True
+        X_tr, y_tr, X_val, y_val,
+        sample_weight=sample_weights_tr if do_class_weights else None,
+        verbose=True
     )
 
     print("Run train-val hyperopt exp...")
@@ -166,7 +171,7 @@ if clf_name == "LogisticRegression":
         X_val,  # not used
         y_val,  # not used
         max_evals=max_hyperopt_eval,
-        sample_weight=get_train_sample_weights(y_train, dataset.n_classes_),
+        sample_weight=get_train_sample_weights(y_train, dataset.n_classes_) if do_class_weights else None,
         verbose=True,
     )
     y_scores = tuned_clf.predict_proba(X_test)
@@ -177,7 +182,9 @@ if clf_name == "LogisticRegression":
 else:
     print("Run default params exp...")
     default_params_result = exp.run(
-        X_tr, y_tr, X_val, y_val, sample_weight=sample_weights, verbose=True
+        X_tr, y_tr, X_val, y_val,
+        sample_weight=sample_weights_tr if do_class_weights else None,
+        verbose=True
     )
 
     print("Run train-val hyperopt exp...")
@@ -187,7 +194,7 @@ else:
         X_val,
         y_val,
         max_evals=max_hyperopt_eval,
-        sample_weight=sample_weights,
+        sample_weight=sample_weights_tr if do_class_weights else None,
         verbose=True,
     )
 
@@ -196,7 +203,7 @@ else:
         tuned_cv_result["params"],
         X_train,
         y_train,
-        sample_weight=get_train_sample_weights(y_train, dataset.n_classes_),
+        sample_weight=get_train_sample_weights(y_train, dataset.n_classes_) if do_class_weights else None,
     )
 
     y_scores = exp.predict(model, X_test)
@@ -207,4 +214,5 @@ else:
 
 # TODO: add other metrics on test data, put them into dataframe
 # TODO: add fitting time
-# TODO: exhaustive search for the number of trees in the interval [1, 5000] (??)
+
+

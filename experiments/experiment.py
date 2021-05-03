@@ -402,7 +402,7 @@ class LGBExperiment(Experiment):
             params_.update(
                 {
                     "objective": "multiclass",
-                    "metric": "multi_logloss",
+                    "metric": "multiclass",
                 }
             )
         elif self.learning_task == "regression":
@@ -607,27 +607,21 @@ class CABExperiment(Experiment):
 
     def preprocess_params(self, params):
         params_ = params.copy()
-        if self.learning_task == "classification":
-            params_.update(
-                {
-                    "loss_function": "Logloss",
-                    "logging_level": "Silent",
-                    "allow_writing_files": False,
-                    "thread_count": 16,
-                    "random_seed": self.random_state,
-                }
-            )
-        elif self.learning_task == "regression":
-            params_.update(
-                {
-                    "loss_function": "RMSE",
-                    "logging_level": "Silent",
-                    "allow_writing_files": False,
-                    "thread_count": 16,
-                    "random_seed": self.random_state,
-                }
-            )
-        params_.update({"n_estimators": self.n_estimators})
+        if self.learning_task_ == "binary-classification":
+            params_.update({"loss_function": "Logloss"})
+        elif self.learning_task_ == "multiclass-classification":
+            params_.update({"loss_function": "MultiClass"})
+        elif self.learning_task_ == "regression":
+            params_.update({"loss_function": "RMSE"})
+        params_.update(
+            {
+                "n_estimators": self.n_estimators,
+                "logging_level": "Silent",
+                "allow_writing_files": False,
+                "thread_count": 16,
+                "random_seed": self.random_state,
+            }
+        )
         return params_
 
     def fit(self, params, X_train, y_train, sample_weight, seed=None):
@@ -682,10 +676,10 @@ class LogRegExperiment(Experiment):
         verbose=False,
     ):
         clf = LogisticRegression(
-            C=1.,
-            penalty='l2',
+            C=1.0,
+            penalty="l2",
             n_jobs=-1,
-            solver='saga',
+            solver="saga",
             verbose=0,
             max_iter=100,
         )
@@ -729,13 +723,13 @@ class LogRegExperiment(Experiment):
         verbose=True,
     ):
         clf = LogisticRegressionCV(
-            Cs=10,
-            penalty='l2',
+            Cs=self.hyperopt_evals,
+            penalty="l2",
             n_jobs=-1,
-            solver='saga',
-            verbose=0,
-            max_iter=self.hyperopt_evals,
+            solver="lbfgs",  # saga
+            verbose=1,
+            max_iter=500,
+            class_weight="balanced",
         )
-        clf.fit(X_train, y_train, sample_weight=sample_weight)
+        clf.fit(X_train, y_train)  # sample_weight=sample_weight
         return clf
-

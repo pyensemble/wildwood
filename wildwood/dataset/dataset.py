@@ -195,7 +195,7 @@ class Dataset:
                     [
                         (
                             "categorical_transformer",
-                            OneHotEncoder(drop=self.drop, sparse=self.sparse),
+                            OneHotEncoder(drop=self.drop, sparse=self.sparse),  # TODO drop vs handle_unknwon
                             self.categorical_columns,
                         )
                     ]
@@ -207,7 +207,7 @@ class Dataset:
                     [
                         (
                             "categorical_transformer",
-                            OrdinalEncoder(),
+                            OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1),
                             self.categorical_columns,
                         )
                     ]
