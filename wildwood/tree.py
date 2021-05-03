@@ -194,6 +194,8 @@ class TreeClassifier(ClassifierMixin, TreeBase):
             self.n_bins - 1,
             n_bins_per_feature,
             self.max_features,
+            self.min_samples_split,
+            self.min_samples_leaf,
             self.aggregation,
             self.dirichlet,
             self._step,
@@ -301,9 +303,11 @@ class TreeRegressor(TreeBase, RegressorMixin):
             train_indices,
             valid_indices,
             self.n_bins - 1,
-            uintp(self.max_features),
+            self.max_features,
+            self.min_samples_split,
+            self.min_samples_leaf,
             self.aggregation,
-            float32(self._step),
+            self._step,
             self.is_categorical,
         )
 

@@ -315,8 +315,7 @@ def grow(
         end_valid,
     )
 
-    # TODO: this option will come for the forest later
-    min_samples_split = 2
+    min_samples_split = tree_context.min_samples_split
 
     while has_records(records):
         # Get information about the current node
