@@ -106,6 +106,9 @@ tree_classifier_context_type = [
     # The number of classes
     ("n_classes", uintp),
     #
+    # categorical split strategy
+    ("cat_split_strategy", uint8),
+    #
     # Dirichlet parameter
     ("dirichlet", float32),
 ]
@@ -138,6 +141,7 @@ class TreeClassifierContext:
         dirichlet,
         step,
         is_categorical,
+        cat_split_strategy,
     ):
         init_tree_context(
             self,
@@ -156,6 +160,7 @@ class TreeClassifierContext:
         )
         self.n_classes = n_classes
         self.dirichlet = dirichlet
+        self.cat_split_strategy = cat_split_strategy
 
 
 @jitclass(tree_regressor_context_type)

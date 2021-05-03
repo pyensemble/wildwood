@@ -9,11 +9,7 @@ import pytest
 import numpy as np
 
 from wildwood import ForestClassifier, ForestRegressor
-from wildwood.datasets import (
-    load_adult,
-    load_boston,
-    load_car
-)
+from wildwood.datasets import load_adult, load_boston, load_car
 
 from wildwood._split import is_bin_in_partition
 
@@ -105,6 +101,7 @@ def check_nodes(nodes, bin_partitions):
 @pytest.mark.parametrize("random_state", [0, 42])
 @pytest.mark.parametrize("step", [1.0])
 @pytest.mark.parametrize("multiclass", ["multinomial"])
+@pytest.mark.parametrize("cat_split_strategy", ["binary", "all", "random"])
 @pytest.mark.parametrize(
     "one_hot_encode, use_categoricals", [(False, False), (False, True), (True, False)]
 )
@@ -118,6 +115,7 @@ def test_nodes_on_adult(
     dirichlet,
     step,
     multiclass,
+    cat_split_strategy,
     one_hot_encode,
     use_categoricals,
 ):
@@ -134,6 +132,7 @@ def test_nodes_on_adult(
         n_estimators=n_estimators,
         n_jobs=n_jobs,
         multiclass=multiclass,
+        cat_split_strategy=cat_split_strategy,
         aggregation=aggregation,
         max_features=max_features,
         class_weight=class_weight,
@@ -160,6 +159,7 @@ def test_nodes_on_adult(
 @pytest.mark.parametrize("random_state", [0, 42])
 @pytest.mark.parametrize("step", [1.0])
 @pytest.mark.parametrize("multiclass", ["multinomial", "ovr"])
+@pytest.mark.parametrize("cat_split_strategy", ["binary", "all", "random"])
 @pytest.mark.parametrize(
     "one_hot_encode, use_categoricals", [(False, False), (False, True), (True, False)]
 )
@@ -173,6 +173,7 @@ def test_nodes_on_car(
     dirichlet,
     step,
     multiclass,
+    cat_split_strategy,
     one_hot_encode,
     use_categoricals,
 ):
@@ -189,6 +190,7 @@ def test_nodes_on_car(
         n_estimators=n_estimators,
         n_jobs=n_jobs,
         multiclass=multiclass,
+        cat_split_strategy=cat_split_strategy,
         aggregation=aggregation,
         max_features=max_features,
         class_weight=class_weight,
@@ -215,6 +217,7 @@ def test_nodes_on_car(
 @pytest.mark.parametrize("random_state", [0, 42])
 @pytest.mark.parametrize("step", [1.0])
 @pytest.mark.parametrize("multiclass", ["multinomial"])
+@pytest.mark.parametrize("cat_split_strategy", ["binary", "all", "random"])
 @pytest.mark.parametrize(
     "one_hot_encode, use_categoricals", [(False, False), (False, True), (True, False)]
 )
@@ -228,6 +231,7 @@ def test_nodes_on_churn(
     dirichlet,
     step,
     multiclass,
+    cat_split_strategy,
     one_hot_encode,
     use_categoricals,
 ):
@@ -244,6 +248,7 @@ def test_nodes_on_churn(
         n_estimators=n_estimators,
         n_jobs=n_jobs,
         multiclass=multiclass,
+        cat_split_strategy=cat_split_strategy,
         aggregation=aggregation,
         max_features=max_features,
         class_weight=class_weight,

@@ -109,10 +109,7 @@ def plot_tree(clf, tree_idx=0, max_depth=None, width=800, height=500, attributes
 
     tooltips = [(attribute, "@" + attribute) for attribute in attributes]
 
-    tree_hover = HoverTool(
-        renderers=[circles],
-        tooltips=tooltips
-    )
+    tree_hover = HoverTool(renderers=[circles], tooltips=tooltips)
     fig.add_tools(tree_hover)
     fig.text(x="x", y="y", text="node_id", source=source_tree)
     return fig

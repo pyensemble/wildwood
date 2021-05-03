@@ -8,6 +8,15 @@ NOPYTHON = True
 NOGIL = True
 BOUNDSCHECK = False
 
+SPLIT_STRATEGY_BINARY = 0
+SPLIT_STRATEGY_ALL = 1
+SPLIT_STRATEGY_RANDOM = 2
+split_strategy_mapping = {
+    "binary": SPLIT_STRATEGY_BINARY,
+    "all": SPLIT_STRATEGY_ALL,
+    "random": SPLIT_STRATEGY_RANDOM,
+}
+
 
 def get_numba_type(class_):
     """Gives the numba type of an object is numba.jit decorators are enabled and None

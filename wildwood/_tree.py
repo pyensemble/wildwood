@@ -76,6 +76,9 @@ tree_classifier_type = [
     # Number of classes
     ("n_classes", uintp),
     #
+    # categorical split strategy
+    ("cat_split_strategy", uint8),
+    #
     # The predictions of each node in the tree with shape (n_nodes, n_classes)
     ("y_pred", float32[:, ::1]),
 ]
@@ -155,6 +158,7 @@ class _TreeClassifier(object):
         self.bin_partitions = np.empty(0, dtype=np.uint8)
         self.bin_partitions_capacity = 0
         self.bin_partitions_end = 0
+        self.cat_split_strategy = 0
 
 
 @jitclass(tree_regressor_type)
