@@ -233,12 +233,13 @@ class ForestBase(BaseEstimator):
         _random_states = random_instance.randint(
             np.iinfo(np.uint32).max, size=n_estimators
         )
-        if self.multiclass == "ovr":
-            # TODO: an option random_state_ovr
-            # In the "ovr" case, we want the random_state to be the same across the
-            # trees used in the one-versus all strategy
-            # np.repeat(np.array([2, 1, 17, 3]), repeats=3)
-            _random_states = np.repeat(_random_states, repeats=self._n_classes_)
+        if hasattr(self, "multiclass"):
+            if self.multiclass == "ovr":
+                # TODO: an option random_state_ovr
+                # In the "ovr" case, we want the random_state to be the same across the
+                # trees used in the one-versus all strategy
+                # np.repeat(np.array([2, 1, 17, 3]), repeats=3)
+                _random_states = np.repeat(_random_states, repeats=self._n_classes_)
 
         self._random_states_bootstrap = _random_states
         self._random_states_trees = _random_states

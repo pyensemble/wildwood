@@ -347,7 +347,7 @@ def grow(
         )
 
         # TODO: check that it's indeed the case
-        # We don't split a node if it's pure: whenever it's impurity computed on
+        # We don't split a node if it's pure: whenever its impurity computed on
         # training samples is less than min_impurity split
         min_impurity_split = 0.0
         is_leaf = is_leaf or (impurity <= min_impurity_split)
@@ -379,7 +379,6 @@ def grow(
         #  bin_threshold
         threshold = 0.42
 
-        # print("add_node_tree")
         node_id = add_node_tree(
             # The tree
             tree,
