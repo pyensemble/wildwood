@@ -1,4 +1,4 @@
-import sys  # sys.path.extend([".", ".."])
+import sys
 import subprocess
 from time import time
 from datetime import datetime
@@ -18,7 +18,8 @@ from sklearn.metrics import (
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.ensemble import RandomForestClassifier
 
-from wildwood.dataset import (
+sys.path.extend([".", ".."])
+from wildwood.dataset import (  # noqa: E402
     load_adult,
     load_bank,
     load_breastcancer,
@@ -31,9 +32,9 @@ from wildwood.dataset import (
     load_sensorless,
     load_spambase,
 )
-from wildwood.dataset._amazon import load_amazon
+from wildwood.dataset._amazon import load_amazon  # noqa: E402
 
-from experiments.experiment import (
+from experiments.experiment import (  # noqa: E402
     LogRegExperiment,
     RFExperiment,
     HGBExperiment,
@@ -60,7 +61,7 @@ data_extraction = {
     "LogisticRegression": {
         "one_hot_encode": True,
         "standardize": True,
-        "drop": 'first',
+        "drop": "first",
         "pd_df_categories": False,
     },
     "RandomForestClassifier": {
@@ -102,7 +103,14 @@ data_extraction = {
 }
 
 
-def set_experiment(clf_name, learning_task, n_estimators, max_hyperopt_eval, categorical_columns, expe_random_states):
+def set_experiment(
+    clf_name,
+    learning_task,
+    n_estimators,
+    max_hyperopt_eval,
+    categorical_columns,
+    expe_random_states,
+):
     experiment_setting = {
         "LogisticRegression": LogRegExperiment(
             learning_task,
@@ -119,8 +127,8 @@ def set_experiment(clf_name, learning_task, n_estimators, max_hyperopt_eval, cat
             learning_task,
             n_estimators=n_estimators,
             max_hyperopt_evals=max_hyperopt_eval,
-            categorical_features=categorical_columns,  # dataset.categorical_columns,
-            random_state=expe_random_states # random_states["expe_random_state"],
+            categorical_features=categorical_columns,
+            random_state=expe_random_states,
         ),
         "XGBClassifier": XGBExperiment(
             learning_task,
@@ -156,19 +164,17 @@ loaders = [
     load_bank,
     load_breastcancer,
     load_car,
-    # load_cardio,  # TODO: ValueError: Shape of passed values is (1488, 34), indices imply (1488, 35)
+    load_cardio,
     load_churn,
     load_default_cb,
     load_letter,
-    # load_satimage,  # TODO: ValueError: Shape of passed values is (3572, 36), indices imply (3572, 37)
+    load_satimage,
     load_sensorless,
     load_spambase,
 ]
 
 col_data = []
 col_classifier = []
-col_classifier_title = []
-col_repeat = []
 col_fit_time = []
 col_predict_time = []
 col_roc_auc = []
@@ -188,11 +194,16 @@ col_accuracy_train = []
 """
 SET UP HERE
 """
-clf_names = ["LGBMClassifier", "XGBClassifier", "CatBoostClassifier",
-             "RandomForestClassifier", "HistGradientBoostingClassifier"]
+clf_names = [
+    "LGBMClassifier",
+    "XGBClassifier",
+    "CatBoostClassifier",
+    "RandomForestClassifier",
+    "HistGradientBoostingClassifier",
+]
 # TODO: LogisticRegression
-n_estimators = 100
-max_hyperopt_eval = 10
+n_estimators = 5000
+max_hyperopt_eval = 100
 do_class_weights = False
 
 # random_states = [42, 43, 44, 46, 47, 49, 50, 52, 53, 55]
@@ -209,14 +220,16 @@ random_states = {
     "expe_random_state": 2 + random_state_seed,
 }
 
-for clf_name in clf_names[:2]:
+for clf_name in clf_names:  # for clf_name in clf_names[:2]:
 
     logging.info("=" * 128)
     logging.info("Launching experiments for %s" % clf_name)
 
-    for loader in loaders[::-1]:
+    for loader in loaders:  # for loader in loaders[:2]:
         dataset = loader()
         learning_task = dataset.task
+        col_data.append(dataset.name)
+        col_classifier.append(clf_name)
 
         for key, val in data_extraction[clf_name].items():
             setattr(dataset, key, val)
@@ -235,7 +248,14 @@ for clf_name in clf_names[:2]:
         )
         sample_weights_tr = get_train_sample_weights(y_tr, dataset.n_classes_)
 
-        exp = set_experiment(clf_name, learning_task, n_estimators, max_hyperopt_eval, dataset.categorical_columns, random_states["expe_random_state"],)
+        exp = set_experiment(
+            clf_name,
+            learning_task,
+            n_estimators,
+            max_hyperopt_eval,
+            dataset.categorical_columns,
+            random_states["expe_random_state"],
+        )
 
         print("Run train-val hyperopt exp...")
         tuned_cv_result = exp.optimize_params(
@@ -254,7 +274,9 @@ for clf_name in clf_names[:2]:
             tuned_cv_result["params"],
             X_train,
             y_train,
-            sample_weight=get_train_sample_weights(y_train, dataset.n_classes_) if do_class_weights else None,
+            sample_weight=get_train_sample_weights(y_train, dataset.n_classes_)
+            if do_class_weights
+            else None,
         )
         toc = time()
         fit_time = toc - tic
@@ -317,7 +339,9 @@ for clf_name in clf_names[:2]:
             accuracy = accuracy_score(y_test, y_pred)
             accuracy_train = accuracy_score(y_train, y_pred_train)
         else:
-            raise ValueError("Task %s not understood" % learning_task)  # TODO: regression
+            raise ValueError(
+                "Task %s not understood" % learning_task
+            )  # TODO: regression
 
         col_roc_auc.append(roc_auc)
         col_roc_auc_train.append(roc_auc_train)
@@ -350,8 +374,6 @@ results = pd.DataFrame(
     {
         "dataset": col_data,
         "classifier": col_classifier,
-        "classifier_title": col_classifier_title,
-        "repeat": col_repeat,
         "fit_time": col_fit_time,
         "predict_time": col_predict_time,
         "roc_auc": col_roc_auc,
@@ -379,8 +401,16 @@ commit = commit.decode("utf-8").strip()
 
 filename = "exp_hyperopt_" + now + ".pickle"
 with open(filename, "wb") as f:
-    pkl.dump({"datetime": now, "commit": commit, "results": results}, f)
-
+    pkl.dump(
+        {
+            "datetime": now,
+            "commit": commit,
+            "n_estimators": n_estimators,
+            "max_hyperopt_eval": max_hyperopt_eval,
+            "do_class_weights": do_class_weights,
+            "results": results,
+        },
+        f,
+    )
 
 logging.info("Saved results in file %s" % filename)
-

@@ -520,6 +520,7 @@ def load_cardio():
         "DE": np.int,
         "LD": np.int,
         "FS": np.int,
+        "SUSP": np.int,
     }
     dataset = Dataset.from_dtype(
         name="cardio",
@@ -716,7 +717,7 @@ def load_satimage():
         "X35": np.float,
     }
     dataset = Dataset.from_dtype(
-        name="satimage", task="multiclass-classification", label_column="y", dtype=dtype
+        name="satimage", task="multiclass-classification", label_column="y", drop_columns=["Unnamed: 0"], dtype=dtype
     )
     return dataset.load_from_csv("satimage.csv.gz", dtype=dtype)
 
