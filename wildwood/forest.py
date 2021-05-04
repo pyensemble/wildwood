@@ -1068,7 +1068,6 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         self.n_trees_ = None
         self.n_classes_per_tree_ = None
         self._multiclass = None
-
         self.dirichlet = dirichlet
         self.class_weight = class_weight
         self.multiclass = multiclass

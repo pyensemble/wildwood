@@ -1,5 +1,5 @@
 """
-This module trains wildwood on the iris dataset, just to check that things work for
+This module trains wildwood on the iris datasets, just to check that things work for
 more than 2 features, to check random sampling of columns and performance on 3-class
 classification
 

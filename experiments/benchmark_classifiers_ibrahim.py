@@ -252,7 +252,7 @@ for dataset_name in dataset_names:
     args.dataset = dataset_name
     args.one_hot_categoricals = False
     print("")
-    print("Loading dataset {} with preserved categories".format(dataset_name))
+    print("Loading datasets {} with preserved categories".format(dataset_name))
     print("")
     dataset = datasets.load_dataset(args, as_pandas=True)
     dataset.info()
@@ -261,7 +261,7 @@ for dataset_name in dataset_names:
 
         print("")
         print(
-            "Benchmarking {} classifier on dataset {}".format(
+            "Benchmarking {} classifier on datasets {}".format(
                 clf.__name__, dataset_name
             )
         )
@@ -272,7 +272,7 @@ for dataset_name in dataset_names:
 
     args.one_hot_categoricals = True
     print("")
-    print("Loading dataset {} with one-hot categories".format(dataset_name))
+    print("Loading datasets {} with one-hot categories".format(dataset_name))
     print("")
     dataset = datasets.load_dataset(args, as_pandas=True)
     dataset.info()
@@ -280,15 +280,15 @@ for dataset_name in dataset_names:
     for clf in classifiers_one_hot:
         clf_name = clf.__name__
         print("")
-        print("Benchmarking {} classifier on dataset {}".format(clf_name, dataset_name))
+        print("Benchmarking {} classifier on datasets {}".format(clf_name, dataset_name))
         print("")
         record = clf(dataset)
         for i in range(len(record)):
             stats.append([clf.__name__ + "_oh", dataset_name, order[i], record[i]])
 
-df = pd.DataFrame(stats, columns=["algorithm", "dataset", "metric", "value"])
+df = pd.DataFrame(stats, columns=["algorithm", "datasets", "metric", "value"])
 
-bench = df.pivot(index=["dataset", "metric"], columns="algorithm")
+bench = df.pivot(index=["datasets", "metric"], columns="algorithm")
 
 # def extract_field(df, field):
 #    indexes = list(df.index)

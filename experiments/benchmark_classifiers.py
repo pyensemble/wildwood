@@ -19,11 +19,11 @@ from sklearn.ensemble import RandomForestClassifier
 
 sys.path.extend([".", ".."])
 
-from wildwood.dataset import loaders_small_classification, load_churn
+from wildwood.datasets import loaders_small_classification, load_churn
 from wildwood.forest import ForestClassifier
 
 
-from wildwood.dataset import (
+from wildwood.datasets import (
     load_adult,
     load_bank,
     load_breastcancer,
@@ -216,7 +216,7 @@ for Clf, data_extraction in zip(classifiers, data_extractions):
                 random_state=data_random_state
             )
             logging.info(
-                "dataset: %s random_state: %d repeat: %d n_samples_train: %d "
+                "datasets: %s random_state: %d repeat: %d n_samples_train: %d "
                 "n_samples_test: %d n_features: %d n_features_continuous: %d "
                 "n_features_categorical: %d n_columns: %d"
                 % (
@@ -334,7 +334,7 @@ for Clf, data_extraction in zip(classifiers, data_extractions):
 
 results = pd.DataFrame(
     {
-        "dataset": col_data,
+        "datasets": col_data,
         "classifier": col_classifier,
         "classifier_title": col_classifier_title,
         "repeat": col_repeat,

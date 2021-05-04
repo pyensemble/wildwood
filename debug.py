@@ -29,6 +29,7 @@ categorical_features = dataset.categorical_features_
 
 multiclass = "multinomial"
 clf = ForestClassifier(
+
     n_estimators=n_estimators,
     n_jobs=n_jobs,
     multiclass=multiclass,
