@@ -25,6 +25,7 @@ from sklearn.utils.validation import check_is_fitted
 
 from ._binning import Binner
 
+eps = np.finfo("float32").eps
 
 __all__ = ["ForestClassifier", "ForestRegressor"]
 
@@ -232,17 +233,18 @@ class ForestBase(BaseEstimator):
         _random_states = random_instance.randint(
             np.iinfo(np.uint32).max, size=n_estimators
         )
-        if self.multiclass == "ovr":
-            # TODO: an option random_state_ovr
-            # In the "ovr" case, we want the random_state to be the same across the
-            # trees used in the one-versus all strategy
-            # np.repeat(np.array([2, 1, 17, 3]), repeats=3)
-            _random_states = np.repeat(_random_states, repeats=self._n_classes_)
+        if hasattr(self, "multiclass"):
+            if self.multiclass == "ovr":
+                # TODO: an option random_state_ovr
+                # In the "ovr" case, we want the random_state to be the same across the
+                # trees used in the one-versus all strategy
+                # np.repeat(np.array([2, 1, 17, 3]), repeats=3)
+                _random_states = np.repeat(_random_states, repeats=self._n_classes_)
 
         self._random_states_bootstrap = _random_states
         self._random_states_trees = _random_states
 
-    def fit(self, X, y, sample_weight=None):
+    def fit(self, X, y, sample_weight=None, categorical_features=None):
         """
         Trains WildWood's forest predictor from the training set (X, y).
 
@@ -268,6 +270,9 @@ class ForestBase(BaseEstimator):
         -------
         self : object
         """
+
+        if categorical_features is not None:
+            self.categorical_features = categorical_features
 
         # TODO: Why only float64 ? What if the data is already binned ?
         X, y = self._validate_data(
@@ -669,6 +674,9 @@ class ForestBase(BaseEstimator):
             raise ValueError("step must be positive")
         else:
             self._step = val
+            if self._fitted:
+                for tree in self.trees:
+                    tree.step = val
 
     @property
     def aggregation(self):
@@ -1093,7 +1101,7 @@ class ForestClassifier(ForestBase, ClassifierMixin):
             if n_classes_ <= 2:
                 if self.verbose:
                     warn(
-                        'Only two classes where detected: switching to '
+                        "Only two classes where detected: switching to "
                         'multiclass="multiclass" instead of "ovr"'
                     )
                 # We switch back to "multinomial" encoding
@@ -1180,7 +1188,10 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         )
 
         if ovr:
-            all_proba /= all_proba.sum(axis=1, keepdims=True)
+            all_proba_sum = all_proba.sum(axis=1)
+            mask = all_proba_sum <= eps
+            all_proba[mask, :] = 1 / self.n_classes_
+            all_proba[~mask, :] /= np.expand_dims(all_proba_sum[~mask], axis=1)
         else:
             all_proba /= len(self.trees)
 

@@ -33,6 +33,9 @@ IS_NOT_LEFT = 0
 TREE_LEAF = intp(-1)
 TREE_UNDEFINED = intp(-2)
 
+NOPYTHON = True
+NOGIL = True
+BOUNDSCHECK = False
 
 tree_type = [
     # Number of features
@@ -297,8 +300,9 @@ def get_nodes_classifier(tree):
 
 @jit(
     [void(TreeClassifierType, uintp), void(TreeRegressorType, uintp)],
-    nopython=True,
-    nogil=True,
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
 )
 def resize_tree_(tree, capacity):
     """Resizes and updates the tree to have the required capacity. This functions
@@ -322,8 +326,9 @@ def resize_tree_(tree, capacity):
         void(TreeClassifierType, optional(uintp)),
         void(TreeRegressorType, optional(uintp)),
     ],
-    nopython=True,
-    nogil=True,
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
 )
 def resize_tree(tree, capacity=None):
     """Resizes and updates the tree to have the required capacity if necessary. By
@@ -358,8 +363,9 @@ def resize_tree(tree, capacity=None):
 
 @jit(
     [void(TreeClassifierType, uintp), void(TreeRegressorType, uintp)],
-    nopython=True,
-    nogil=True,
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
 )
 def resize_tree_bin_partitions_(tree, capacity):
     """Resizes and updates `bin_partitions` ndarray of tree attribute
@@ -381,8 +387,9 @@ def resize_tree_bin_partitions_(tree, capacity):
         void(TreeClassifierType, optional(uintp)),
         void(TreeRegressorType, optional(uintp)),
     ],
-    nopython=True,
-    nogil=True,
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
 )
 def resize_tree_bin_partitions(tree, capacity=None):
     """Resizes and updates the tree's bin_partitions
@@ -462,8 +469,9 @@ def resize_tree_bin_partitions(tree, capacity=None):
             uint8,
         ),
     ],
-    nopython=True,
-    nogil=True,
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
     locals={
         "node_idx": uintp,
         "nodes": node_type[::1],
@@ -571,6 +579,7 @@ def add_node_tree(
         bin_partition[:bin_partition_size] go to the left child while the others
         go to the right child. For a leaf, `bin_partition_size=0`
     """
+
     # New node index is given by the current number of nodes in the tree
     node_idx = tree.node_count
     if node_idx >= tree.capacity:
@@ -635,8 +644,9 @@ def add_node_tree(
 
 @jit(
     [uintp(TreeClassifierType, uint8[:]), uintp(TreeRegressorType, uint8[:])],
-    nopython=True,
-    nogil=True,
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
     locals={
         "nodes": node_type[::1],
         "idx_leaf": uintp,
@@ -766,8 +776,9 @@ def sample_path_leaf(tree, xi):
         uintp[::1](TreeClassifierType, uint8[:, :]),
         uintp[::1](TreeRegressorType, uint8[:, :]),
     ],
-    nopython=True,
-    nogil=True,
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
     locals={"n_samples": uintp, "out": uintp[::1], "i": uintp, "idx_leaf": uintp},
 )
 def tree_apply(tree, X):
@@ -799,8 +810,9 @@ def tree_apply(tree, X):
 
 @jit(
     float32[:, ::1](TreeClassifierType, uint8[:, :], boolean, float32),
-    nopython=True,
-    nogil=True,
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
     locals={
         "n_samples": uintp,
         "n_classes": uintp,
@@ -859,7 +871,7 @@ def tree_classifier_predict_proba(tree, X, aggregation, step):
             while idx_current != 0:
                 # Get the parent node
                 idx_current = nodes[idx_current]["parent"]
-                # TODO is there a bug when node[0] has no child
+                # TODO: is there a bug when node[0] has no child ?
                 node = nodes[idx_current]
                 # Prediction of this node
                 node_pred = y_pred[idx_current]
@@ -875,8 +887,9 @@ def tree_classifier_predict_proba(tree, X, aggregation, step):
 
 @jit(
     float32[:](TreeRegressorType, uint8[:, :], boolean, float32),
-    nopython=True,
-    nogil=True,
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
     locals={
         "n_samples": uintp,
         "nodes": node_type[::1],
@@ -953,8 +966,9 @@ def tree_regressor_predict(tree, X, aggregation, step):
 
 @jit(
     float32[:](TreeRegressorType, uint8[:, :], float32),
-    nopython=True,
-    nogil=True,
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
     locals={
         "n_samples": uintp,
         "nodes": node_type[::1],

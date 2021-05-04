@@ -15,6 +15,12 @@ from ._utils import get_type, sample_without_replacement
 from ._tree_context import TreeClassifierContextType, TreeRegressorContextType
 
 
+# Global jit decorator options
+NOPYTHON = True
+NOGIL = True
+BOUNDSCHECK = False
+
+
 # This data type describes all the information saved about a node. It is used in
 #  _tree.py where the TreeClassifier and TreeRegressor dataclasses contain
 #  an attribute called nodes that uses this data type.
@@ -156,19 +162,29 @@ node_context_type = [
     # Validation loss of the node, computed on validation (out-of-the-bag) samples
     ("loss_valid", float32),
     #
+    # Number of training samples for each (feature, bin) in the node
+    ("n_samples_train_in_bins", uintp[:, ::1]),
+    #
     # Weighted number of training samples for each (feature, bin) in the node
     ("w_samples_train_in_bins", float32[:, ::1]),
+    #
+    # Number of validation samples for each (feature, bin) in the node
+    ("n_samples_valid_in_bins", uintp[:, ::1]),
     #
     # Weighted number of validation samples for each (feature, bin) in the node
     ("w_samples_valid_in_bins", float32[:, ::1]),
     #
-    # A vector that counts the number of non-empty bins for each feature. Only for
-    #   training samples, since it's useful for split finding only.
-    ("non_empty_bins_count", uint8[::1]),
+    # A vector that counts the number of non-empty bins for each feature on train data.
+    ("non_empty_bins_train_count", uint8[::1]),
     #
-    # An array that saves the indices of non-empty bins for each feature. Only for
-    #   training samples, since it's useful for split finding only.
-    ("non_empty_bins", uint8[:, ::1]),
+    # A vector that counts the number of non-empty bins for each feature on valid data.
+    ("non_empty_bins_valid_count", uint8[::1]),
+    #
+    # An array that saves the indices of non-empty bins for each feature on train data.
+    ("non_empty_bins_train", uint8[:, ::1]),
+    #
+    # An array that saves the indices of non-empty bins for each feature on valid data.
+    ("non_empty_bins_valid", uint8[:, ::1]),
 ]
 
 
@@ -257,11 +273,33 @@ class NodeClassifierContext:
     loss_valid : float
         Validation loss of the node, computed on validation (out-of-the-bag) samples
 
+    n_samples_train_in_bins : ndarray
+        Number of training samples for each (feature, bin) in the node
+
     w_samples_train_in_bins : ndarray
         Weighted number of training samples for each (feature, bin) in the node
 
+    n_samples_valid_in_bins : ndarray
+        Number of validation samples for each (feature, bin) in the node
+
     w_samples_valid_in_bins : ndarray
         Weighted number of validation samples for each (feature, bin) in the node
+
+    non_empty_bins_train_count : ndarray
+        A vector that counts the number of non-empty bins for each feature on train
+         data.
+
+    non_empty_bins_valid_count : ndarray
+        A vector that counts the number of non-empty bins for each feature on valid
+         data.
+
+    non_empty_bins_train : ndarray
+        An array that saves the indices of non-empty bins for each feature on train
+        data.
+
+    non_empty_bins_valid : ndarray
+        An array that saves the indices of non-empty bins for each feature on valid
+        data.
 
     y_sum : ndarray
         Weighted number of training samples for each (feature, bin, label) in the node
@@ -269,7 +307,6 @@ class NodeClassifierContext:
     y_pred : ndarray
         Prediction produced by the node using the training data it contains
     """
-
     def __init__(self, tree_context):
         init_node_context(tree_context, self)
         max_features = tree_context.max_features
@@ -339,11 +376,33 @@ class NodeRegressorContext:
     loss_valid : float
         Validation loss of the node, computed on validation (out-of-the-bag) samples
 
+    n_samples_train_in_bins : ndarray
+        Number of training samples for each (feature, bin) in the node
+
     w_samples_train_in_bins : ndarray
         Weighted number of training samples for each (feature, bin) in the node
 
+    n_samples_valid_in_bins : ndarray
+        Number of validation samples for each (feature, bin) in the node
+
     w_samples_valid_in_bins : ndarray
         Weighted number of validation samples for each (feature, bin) in the node
+
+    non_empty_bins_train_count : ndarray
+        A vector that counts the number of non-empty bins for each feature on train
+         data.
+
+    non_empty_bins_valid_count : ndarray
+        A vector that counts the number of non-empty bins for each feature on valid
+         data.
+
+    non_empty_bins_train : ndarray
+        An array that saves the indices of non-empty bins for each feature on train
+        data.
+
+    non_empty_bins_valid : ndarray
+        An array that saves the indices of non-empty bins for each feature on valid
+        data.
 
     y_sum : ndarray
         Weighted sum of the labels for each (feature, bin) in the node
@@ -373,8 +432,9 @@ NodeRegressorContextType = get_type(NodeRegressorContext)
         void(TreeClassifierContextType, NodeClassifierContextType),
         void(TreeRegressorContextType, NodeRegressorContextType),
     ],
-    nopython=True,
-    nogil=True,
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
 )
 def init_node_context(tree_context, node_context):
     """A common initializer for NodeContextClassifier and NodeContextRegressor.
@@ -400,28 +460,40 @@ def init_node_context(tree_context, node_context):
     # This array will contain the features sampled uniformly at random (without
     # replacement) to be considered for splits
     node_context.features_sampled = np.arange(0, max_features, dtype=np.uintp)
+    node_context.n_samples_train_in_bins = np.empty(
+        (max_features, max_bins), dtype=np.uintp
+    )
     node_context.w_samples_train_in_bins = np.empty(
         (max_features, max_bins), dtype=np.float32
+    )
+    node_context.n_samples_valid_in_bins = np.empty(
+        (max_features, max_bins), dtype=np.uintp
     )
     node_context.w_samples_valid_in_bins = np.empty(
         (max_features, max_bins), dtype=np.float32
     )
-    node_context.non_empty_bins = np.empty((max_features, max_bins), dtype=uint8)
-    node_context.non_empty_bins_count = np.empty((max_features,), dtype=uint8)
+    node_context.non_empty_bins_train = np.empty((max_features, max_bins), dtype=uint8)
+    node_context.non_empty_bins_train_count = np.empty((max_features,), dtype=uint8)
+    node_context.non_empty_bins_valid = np.empty((max_features, max_bins), dtype=uint8)
+    node_context.non_empty_bins_valid_count = np.empty((max_features,), dtype=uint8)
 
 
 @jit(
     void(
         TreeClassifierContextType, NodeClassifierContextType, uintp, uintp, uintp, uintp
     ),
-    nopython=True,
-    nogil=True,
-    boundscheck=False,
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
     locals={
+        "n_samples_train_in_bins": uintp[:, ::1],
+        "n_samples_valid_in_bins": uintp[:, ::1],
         "w_samples_train_in_bins": float32[:, ::1],
         "w_samples_valid_in_bins": float32[:, ::1],
-        "non_empty_bins": uint8[:, ::1],
-        "non_empty_bins_count": uint8[::1],
+        "non_empty_bins_train": uint8[:, ::1],
+        "non_empty_bins_valid": uint8[:, ::1],
+        "non_empty_bins_train_count": uint8[::1],
+        "non_empty_bins_valid_count": uint8[::1],
         "y_sum": float32[:, :, ::1],
         "y_pred": float32[::1],
         "features": uintp[::1],
@@ -476,10 +548,14 @@ def compute_node_classifier_context(
     end_valid : int
         End-index of the slice containing the node's validation samples indexes
     """
+    n_samples_train_in_bins = node_context.n_samples_train_in_bins
+    n_samples_valid_in_bins = node_context.n_samples_valid_in_bins
     w_samples_train_in_bins = node_context.w_samples_train_in_bins
     w_samples_valid_in_bins = node_context.w_samples_valid_in_bins
-    non_empty_bins = node_context.non_empty_bins
-    non_empty_bins_count = node_context.non_empty_bins_count
+    non_empty_bins_train = node_context.non_empty_bins_train
+    non_empty_bins_train_count = node_context.non_empty_bins_train_count
+    non_empty_bins_valid = node_context.non_empty_bins_valid
+    non_empty_bins_valid_count = node_context.non_empty_bins_valid_count
     y_sum = node_context.y_sum
     y_pred = node_context.y_pred
 
@@ -490,10 +566,14 @@ def compute_node_classifier_context(
         )
 
     features = node_context.features_sampled
+    n_samples_train_in_bins.fill(0)
+    n_samples_valid_in_bins.fill(0)
     w_samples_train_in_bins.fill(0.0)
     w_samples_valid_in_bins.fill(0.0)
-    non_empty_bins.fill(0)
-    non_empty_bins_count.fill(0)
+    non_empty_bins_train.fill(0)
+    non_empty_bins_train_count.fill(0)
+    non_empty_bins_valid.fill(0)
+    non_empty_bins_valid_count.fill(0)
     y_sum.fill(0.0)
     y_pred.fill(0.0)
 
@@ -531,16 +611,15 @@ def compute_node_classifier_context(
                 w_samples_train += sample_weight
                 y_pred[label] += sample_weight
 
-            # TODO: because of this test, we should test somewhere that the
-            #  sample weights only has > 0 coordinates
-            if w_samples_train_in_bins[f, bin] == 0.0:
-                # It's the first time we find a sample for this (feature, bin)
-                # We save the bin number at index non_empty_bins_count[f]
-                non_empty_bins[f, non_empty_bins_count[f]] = bin
+            if n_samples_train_in_bins[f, bin] == 0:
+                # It's the first time we find a train sample for this (feature, bin)
+                # We save the bin number at index non_empty_bins_train_count[f]
+                non_empty_bins_train[f, non_empty_bins_train_count[f]] = bin
                 # We increase the count of non-empty bins for this feature
-                non_empty_bins_count[f] += 1
+                non_empty_bins_train_count[f] += 1
 
             # One more sample in this bin for the current feature
+            n_samples_train_in_bins[f, bin] += 1
             w_samples_train_in_bins[f, bin] += sample_weight
             # One more sample in this bin for the current feature with this label
             y_sum[f, bin, label] += sample_weight
@@ -567,6 +646,14 @@ def compute_node_classifier_context(
                 #  when implementing other losses
                 loss_valid -= sample_weight * log(y_pred[label])
 
+            if n_samples_valid_in_bins[f, bin] == 0.0:
+                # It's the first time we find a valid sample for this (feature, bin)
+                # We save the bin number at index non_empty_bins_valid_count[f]
+                non_empty_bins_valid[f, non_empty_bins_valid_count[f]] = bin
+                # We increase the count of non-empty bins for this feature
+                non_empty_bins_valid_count[f] += 1
+
+            n_samples_valid_in_bins[f, bin] += 1
             w_samples_valid_in_bins[f, bin] += sample_weight
 
         f += 1
@@ -583,14 +670,18 @@ def compute_node_classifier_context(
     void(
         TreeRegressorContextType, NodeRegressorContextType, uintp, uintp, uintp, uintp
     ),
-    nopython=True,
-    nogil=True,
-    boundscheck=False,
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
     locals={
+        "n_samples_train_in_bins": uintp[:, ::1],
+        "n_samples_valid_in_bins": uintp[:, ::1],
         "w_samples_train_in_bins": float32[:, ::1],
         "w_samples_valid_in_bins": float32[:, ::1],
-        "non_empty_bins": uint8[:, ::1],
-        "non_empty_bins_count": uint8[::1],
+        "non_empty_bins_train": uint8[:, ::1],
+        "non_empty_bins_valid": uint8[:, ::1],
+        "non_empty_bins_train_count": uint8[::1],
+        "non_empty_bins_valid_count": uint8[::1],
         "y_sum": float32[:, ::1],
         "y_sq_sum": float32[:, ::1],
         "y_pred": float32,
@@ -646,10 +737,14 @@ def compute_node_regressor_context(
         End-index of the slice containing the node's validation samples indexes
     """
     # Initialize the things from the node context
+    n_samples_train_in_bins = node_context.n_samples_train_in_bins
+    n_samples_valid_in_bins = node_context.n_samples_valid_in_bins
     w_samples_train_in_bins = node_context.w_samples_train_in_bins
     w_samples_valid_in_bins = node_context.w_samples_valid_in_bins
-    non_empty_bins = node_context.non_empty_bins
-    non_empty_bins_count = node_context.non_empty_bins_count
+    non_empty_bins_train = node_context.non_empty_bins_train
+    non_empty_bins_train_count = node_context.non_empty_bins_train_count
+    non_empty_bins_valid = node_context.non_empty_bins_valid
+    non_empty_bins_valid_count = node_context.non_empty_bins_valid_count
     y_sum = node_context.y_sum
     y_sq_sum = node_context.y_sq_sum
 
@@ -660,10 +755,14 @@ def compute_node_regressor_context(
         )
 
     features = node_context.features_sampled
+    n_samples_train_in_bins.fill(0)
+    n_samples_valid_in_bins.fill(0)
     w_samples_train_in_bins.fill(0.0)
     w_samples_valid_in_bins.fill(0.0)
-    non_empty_bins.fill(0)
-    non_empty_bins_count.fill(0)
+    non_empty_bins_train.fill(0)
+    non_empty_bins_train_count.fill(0)
+    non_empty_bins_valid.fill(0)
+    non_empty_bins_valid_count.fill(0)
     y_sum.fill(0.0)
     y_sq_sum.fill(0.0)
     y_pred = 0.0
@@ -701,16 +800,15 @@ def compute_node_regressor_context(
                 w_samples_train += sample_weight
                 y_pred += w_y
 
-            # TODO: because of this test, we should test somewhere that the
-            #  sample weights only has > 0 coordinates
-            if w_samples_train_in_bins[f, bin] == 0.0:
-                # It's the first time we find a sample for this (feature, bin)
-                # We save the bin number at index non_empty_bins_count[f]
-                non_empty_bins[f, non_empty_bins_count[f]] = bin
+            if n_samples_train_in_bins[f, bin] == 0:
+                # It's the first time we find a train sample for this (feature, bin)
+                # We save the bin number at index non_empty_bins_train_count[f]
+                non_empty_bins_train[f, non_empty_bins_train_count[f]] = bin
                 # We increase the count of non-empty bins for this feature
-                non_empty_bins_count[f] += 1
+                non_empty_bins_train_count[f] += 1
 
             # One more sample in this bin for the current feature
+            n_samples_train_in_bins[f, bin] += 1
             w_samples_train_in_bins[f, bin] += sample_weight
             # One more sample in this bin for the current feature with this label
 
@@ -732,6 +830,14 @@ def compute_node_regressor_context(
                 #  when implementing other losses
                 loss_valid += sample_weight * (label - y_pred) * (label - y_pred)
 
+            if n_samples_valid_in_bins[f, bin] == 0:
+                # It's the first time we find a valid sample for this (feature, bin)
+                # We save the bin number at index non_empty_bins_valid_count[f]
+                non_empty_bins_valid[f, non_empty_bins_valid_count[f]] = bin
+                # We increase the count of non-empty bins for this feature
+                non_empty_bins_valid_count[f] += 1
+
+            n_samples_valid_in_bins[f, bin] += 1
             w_samples_valid_in_bins[f, bin] += sample_weight
 
         f += 1

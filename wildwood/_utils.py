@@ -1,28 +1,12 @@
 from math import log, exp
 import numpy as np
 from numpy.random import randint
-from numba import (
-    jit,
-    void,
-    boolean,
-    float32,
-    float64,
-    uint8,
-    uintp,
-    intp,
-    int32,
-    uint8,
-    uint32,
-    from_dtype,
-)
-from numba import njit as njit_
-from numba.experimental import jitclass as jitclass_
-from math import log2
+from numba import jit, void, float32, uintp
 
-# Lazy to change everywhere when numba people decide that jitclass is not
-# experimental anymore
-# jitclass = jitclass_
-# njit = njit_(fastmath=False, nogil=True, cache=False, boundscheck=False)
+
+NOPYTHON = True
+NOGIL = True
+BOUNDSCHECK = False
 
 
 def get_numba_type(class_):
@@ -51,8 +35,9 @@ def get_numba_type(class_):
 
 
 @jit(
-    nopython=True,
-    nogil=True,
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
     locals={"new_size": uintp, "d0": uintp, "d1": uintp, "d2": uintp},
 )
 def resize(a, new_size, zeros=False):
@@ -85,7 +70,7 @@ def resize(a, new_size, zeros=False):
         raise ValueError("ndim can only be 1, 2 or 3")
 
 
-@jit(float32(float32, float32), nogil=True, nopython=True, fastmath=True)
+@jit(float32(float32, float32), nogil=NOGIL, nopython=NOPYTHON, fastmath=True)
 def log_sum_2_exp(a, b):
     """Computation of log( (e^a + e^b) / 2) in an overflow-proof way
 
@@ -132,8 +117,9 @@ def get_type(class_):
 
 @jit(
     void(uintp[:], uintp[:]),
-    nopython=True,
-    nogil=True,
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
     locals={"n_samples": uintp, "population_size": uintp, "i": uintp, "j": uintp},
 )
 def sample_without_replacement(pool, out):
@@ -147,8 +133,6 @@ def sample_without_replacement(pool, out):
     out : ndarray of size n_samples
         The sampled subsets of integer
     """
-    # TODO: faudra verifier que les arbres n'utilisent pas tous les meme
-    #  permutations... faudra peut etre avoir a gerer le random_state ici ?
     # We sample n_samples elements from the pool
     n_samples = out.shape[0]
     population_size = pool.shape[0]

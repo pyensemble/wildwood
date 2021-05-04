@@ -24,7 +24,7 @@ from ._split import (
     find_best_split_classifier_along_feature,
     find_best_split_regressor_along_feature,
 )
-from ._grow import grow, recompute_node_predictions
+from ._grow import grow, recompute_node_predictions, compute_tree_weights
 from ._node import (
     NodeClassifierContext,
     NodeRegressorContext,
@@ -44,7 +44,6 @@ from ._tree import (
     tree_apply,
 )
 from ._tree import path_leaf as _path_leaf
-
 
 class TreeBase(BaseEstimator, metaclass=ABCMeta):
     @abstractmethod
@@ -73,7 +72,7 @@ class TreeBase(BaseEstimator, metaclass=ABCMeta):
         self.n_bins = n_bins
         self.criterion = criterion
         self.loss = loss
-        self.step = step
+        self._step = step
         self.aggregation = aggregation
         self.max_depth = max_depth
         self.min_samples_split = min_samples_split
@@ -115,6 +114,20 @@ class TreeBase(BaseEstimator, metaclass=ABCMeta):
     def apply(self, X):
         return tree_apply(self._tree, X)
 
+    @property
+    def step(self):
+        return self._step
+
+    @step.setter
+    def step(self, val):
+        # We skip the checks and assume they are done by the forest
+        if self._step != val:
+            self._step = val
+            if hasattr(self, "_tree_context"):
+                self._tree_context.step = val
+                if self._tree_context.aggregation:
+                    compute_tree_weights(self._tree.nodes, self._tree.node_count, val)
+
 
 class TreeClassifier(ClassifierMixin, TreeBase):
     def __init__(
@@ -154,6 +167,7 @@ class TreeClassifier(ClassifierMixin, TreeBase):
         self.n_classes = n_classes
         # We set dirichlet like this at init to avoid launching what the property does
         self._dirichlet = dirichlet
+        self._step = step
 
     def fit(self, X, y, train_indices, valid_indices, sample_weights):
         n_classes = self.n_classes
@@ -180,9 +194,11 @@ class TreeClassifier(ClassifierMixin, TreeBase):
             self.n_bins - 1,
             n_bins_per_feature,
             self.max_features,
+            self.min_samples_split,
+            self.min_samples_leaf,
             self.aggregation,
             self.dirichlet,
-            self.step,
+            self._step,
             self.is_categorical,
         )
 
@@ -229,6 +245,7 @@ class TreeClassifier(ClassifierMixin, TreeBase):
             if hasattr(self, "_tree_context"):
                 self._tree_context.dirichlet = val
                 recompute_node_predictions(self._tree, self._tree_context, val)
+
 
 
 class TreeRegressor(TreeBase, RegressorMixin):
@@ -286,9 +303,11 @@ class TreeRegressor(TreeBase, RegressorMixin):
             train_indices,
             valid_indices,
             self.n_bins - 1,
-            uintp(self.max_features),
+            self.max_features,
+            self.min_samples_split,
+            self.min_samples_leaf,
             self.aggregation,
-            float32(self.step),
+            self._step,
             self.is_categorical,
         )
 
