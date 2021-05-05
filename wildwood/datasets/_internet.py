@@ -51,7 +51,7 @@ def load_internet(download_if_missing=True):
 
     df = pd.read_csv(data_path)
 
-    dtype = {field: "category" for field in list(df.columns)[:-1]}
+    dtype = {field: "category" for field in list(df.columns)[1:-1]}
 
     dataset = Dataset.from_dtype(
         name="internet",
