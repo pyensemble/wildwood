@@ -80,4 +80,4 @@ def load_default_cb(download_if_missing=True):
         dtype=dtype,
         drop_columns=["ID"],
     )
-    return dataset.load_from_csv("default_cb.csv.gz", dtype=dtype)
+    return dataset.load_from_csv(data_path, dtype=dtype)
