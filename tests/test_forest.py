@@ -512,6 +512,21 @@ class TestForestClassifier(object):
         y_score = clf.predict_proba(X_test)
         assert roc_auc_score(y_test, y_score, multi_class="ovo") >= 0.985
 
+    def test_performance_cat_split_strategy_iris(self):
+        iris = self.iris
+        X, y = iris["data"], iris["target"]
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, shuffle=True, stratify=y, random_state=42, test_size=0.3
+        )
+        clf = ForestClassifier(cat_split_strategy="all", random_state=42)
+        clf.fit(X_train, y_train)
+        y_score = clf.predict_proba(X_test)
+        assert roc_auc_score(y_test, y_score, multi_class="ovo") >= 0.985
+        clf = ForestClassifier(cat_split_strategy="random", random_state=42)
+        clf.fit(X_train, y_train)
+        y_score = clf.predict_proba(X_test)
+        assert roc_auc_score(y_test, y_score, multi_class="ovo") >= 0.985
+
     def test_performance_breast_cancer(self):
         breast_cancer = self.breast_cancer
         X, y = breast_cancer["data"], breast_cancer["target"]
@@ -527,11 +542,27 @@ class TestForestClassifier(object):
         y_score = clf.predict_proba(X_test)
         assert roc_auc_score(y_test, y_score[:, 1]) >= 0.98
 
+    def test_performance_cat_split_strategy_breast_cancer(self):
+        breast_cancer = self.breast_cancer
+        X, y = breast_cancer["data"], breast_cancer["target"]
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, shuffle=True, stratify=y, random_state=42, test_size=0.3
+        )
+
+        clf = ForestClassifier(cat_split_strategy="all", random_state=42)
+        clf.fit(X_train, y_train)
+        y_score = clf.predict_proba(X_test)
+        assert roc_auc_score(y_test, y_score[:, 1]) >= 0.98  # all#
+        clf = ForestClassifier(cat_split_strategy="random", random_state=42)
+        clf.fit(X_train, y_train)
+        y_score = clf.predict_proba(X_test)
+        assert roc_auc_score(y_test, y_score[:, 1]) >= 0.98  # random#
+
     def test_performance_moons(self):
         pass
 
     def test_parallel_fit(self):
-        n_samples = 100_000
+        n_samples = 100000
         X, y = make_moons(n_samples=n_samples, noise=0.2, random_state=42)
 
         # Precompile
@@ -641,6 +672,118 @@ class TestForestClassifier(object):
 
         assert lloss_train_ovr < lloss_train_multinomial
         assert lloss_test_ovr < lloss_test_multinomial
+
+    def test_cat_split_strategy_on_car(self):
+        dataset = load_car()
+        dataset.one_hot_encode = False
+        dataset.test_size = 1.0 / 5
+        random_state = 42
+        X_train, X_test, y_train, y_test = dataset.extract(random_state=random_state)
+        n_estimators = 1
+        aggregation = False
+        class_weight = "balanced"
+        n_jobs = 1
+        max_features = None
+        random_state = 42
+        dirichlet = 0.0
+        categorical_features = dataset.categorical_features_
+
+        multiclass = "multinomial"
+        cat_split_strategy = "binary"
+        clf = ForestClassifier(
+            n_estimators=n_estimators,
+            n_jobs=n_jobs,
+            multiclass=multiclass,
+            aggregation=aggregation,
+            max_features=max_features,
+            class_weight=class_weight,
+            categorical_features=categorical_features,
+            cat_split_strategy=cat_split_strategy,
+            random_state=random_state,
+            dirichlet=dirichlet,
+        )
+        clf.fit(X_train, y_train)
+        y_scores_train = clf.predict_proba(X_train)
+        y_scores_test = clf.predict_proba(X_test)
+        lloss_train_binary = log_loss(y_train, y_scores_train)
+        lloss_test_binary = log_loss(y_test, y_scores_test)
+
+        multiclass = "multinomial"
+        cat_split_strategy = "all"
+        clf = ForestClassifier(
+            n_estimators=n_estimators,
+            n_jobs=n_jobs,
+            multiclass=multiclass,
+            aggregation=aggregation,
+            max_features=max_features,
+            class_weight=class_weight,
+            categorical_features=categorical_features,
+            cat_split_strategy=cat_split_strategy,
+            random_state=random_state,
+            dirichlet=dirichlet,
+        )
+        clf.fit(X_train, y_train)
+        y_scores_train = clf.predict_proba(X_train)
+        y_scores_test = clf.predict_proba(X_test)
+        lloss_train_all = log_loss(y_train, y_scores_train)
+        lloss_test_all = log_loss(y_test, y_scores_test)
+
+        assert lloss_train_all < lloss_train_binary
+        assert lloss_test_all < lloss_test_binary
+
+    def test_cat_split_strategy_on_adult(self):
+        dataset = load_adult()
+        dataset.one_hot_encode = False
+        dataset.test_size = 1.0 / 5
+        random_state = 42
+        X_train, X_test, y_train, y_test = dataset.extract(random_state=random_state)
+        n_estimators = 10
+        aggregation = False
+        class_weight = "balanced"
+        n_jobs = -1
+        max_features = None
+        random_state = 42
+        dirichlet = 0.0
+        categorical_features = dataset.categorical_features_
+
+        multiclass = "multinomial"
+        cat_split_strategy = "binary"
+        clf = ForestClassifier(
+            n_estimators=n_estimators,
+            n_jobs=n_jobs,
+            multiclass=multiclass,
+            aggregation=aggregation,
+            max_features=max_features,
+            class_weight=class_weight,
+            categorical_features=categorical_features,
+            cat_split_strategy=cat_split_strategy,
+            random_state=random_state,
+            dirichlet=dirichlet,
+        )
+        clf.fit(X_train, y_train)
+        y_scores_train = clf.predict_proba(X_train)
+        y_scores_test = clf.predict_proba(X_test)
+        lloss_train_binary = log_loss(y_train, y_scores_train)
+        lloss_test_binary = log_loss(y_test, y_scores_test)
+
+        multiclass = "multinomial"
+        cat_split_strategy = "all"
+        clf = ForestClassifier(
+            n_estimators=n_estimators,
+            n_jobs=n_jobs,
+            multiclass=multiclass,
+            aggregation=aggregation,
+            max_features=max_features,
+            class_weight=class_weight,
+            categorical_features=categorical_features,
+            cat_split_strategy=cat_split_strategy,
+            random_state=random_state,
+            dirichlet=dirichlet,
+        )
+        clf.fit(X_train, y_train)
+        y_scores_train = clf.predict_proba(X_train)
+        lloss_train_all = log_loss(y_train, y_scores_train)
+        assert lloss_train_all < lloss_train_binary
 
     def test_categorical_fit_on_adult(self):
         dataset = self.adult
