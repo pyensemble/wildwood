@@ -158,7 +158,7 @@ def _compute_weighted_depth(weighted_depth, X, out, lock, tree_idx):
 
 
 def _get_tree_prediction(predict, X, out, lock, tree_idx):
-    prediction = predict(X, check_input=False)
+    prediction = predict(X)#, check_input=False)
     with lock:
         out[tree_idx] = prediction
 
@@ -492,7 +492,7 @@ class ForestBase(BaseEstimator):
         # Default implementation
         return y, None
 
-    def _validate_X_predict(self, X, check_input):
+    def _validate_X_predict(self, X, check_input=True):
         """Validate the training data on predict (probabilities)."""
         if check_input:
 
