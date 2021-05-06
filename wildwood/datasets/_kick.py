@@ -18,46 +18,46 @@ ARCHIVE = RemoteFileMetadata(
 
 logger = logging.getLogger(__name__)
 
+dtype = {
+    "PurchDate": np.int,
+    "Auction": "category",
+    "VehYear": np.int,
+    "VehicleAge": np.int,
+    "Make": "category",
+    "Model": "category",
+    "Trim": "category",
+    "SubModel": "category",
+    "Color": "category",
+    "Transmission": "category",
+    "WheelTypeID": "category",
+    "WheelType": "category",
+    "VehOdo": np.int,
+    "Nationality": "category",
+    "Size": "category",
+    "TopThreeAmericanName": "category",
+    "MMRAcquisitionAuctionAveragePrice": np.float,
+    "MMRAcquisitionAuctionCleanPrice": np.float,
+    "MMRAcquisitionRetailAveragePrice": np.float,
+    "MMRAcquisitonRetailCleanPrice": np.float,
+    "MMRCurrentAuctionAveragePrice": np.float,
+    "MMRCurrentAuctionCleanPrice": np.float,
+    "MMRCurrentRetailAveragePrice": np.float,
+    "MMRCurrentRetailCleanPrice": np.float,
+    "PRIMEUNIT": "category",
+    "AUCGUART": "category",
+    "BYRNO": "category",
+    "VNZIP1": "category",
+    "VNST": "category",
+    "VehBCost": np.float,
+    "IsOnlineSale": "category",
+    "WarrantyCost": np.int,
+}
+
 
 def _fetch_kick(download_if_missing=True):
     data_home = get_data_home()
     data_dir = join(data_home, "kick")
     data_path = join(data_dir, "kick.csv.gz")
-
-    dtype = {
-        "PurchDate": np.int,
-        "Auction": "category",
-        "VehYear": np.int,
-        "VehicleAge": np.int,
-        "Make": "category",
-        "Model": "category",
-        "Trim": "category",
-        "SubModel": "category",
-        "Color": "category",
-        "Transmission": "category",
-        "WheelTypeID": "category",
-        "WheelType": "category",
-        "VehOdo": np.int,
-        "Nationality": "category",
-        "Size": "category",
-        "TopThreeAmericanName": "category",
-        "MMRAcquisitionAuctionAveragePrice": np.int,
-        "MMRAcquisitionAuctionCleanPrice": np.int,
-        "MMRAcquisitionRetailAveragePrice": np.int,
-        "MMRAcquisitonRetailCleanPrice": np.int,
-        "MMRCurrentAuctionAveragePrice": np.int,
-        "MMRCurrentAuctionCleanPrice": np.int,
-        "MMRCurrentRetailAveragePrice": np.int,
-        "MMRCurrentRetailCleanPrice": np.int,
-        "PRIMEUNIT": "category",
-        "AUCGUART": "category",
-        "BYRNO": "category",
-        "VNZIP1": "category",
-        "VNST": "category",
-        "VehBCost": np.int,
-        "IsOnlineSale": "category",
-        "WarrantyCost": np.int,
-    }
 
     if download_if_missing and not exists(data_path):
         _mkdirp(data_dir)
@@ -69,12 +69,10 @@ def _fetch_kick(download_if_missing=True):
         numerical_columns = [a for a, b in dtype.items() if b != "category"]
 
         df = pd.read_csv(filepath)
-        logger.warn("Dropping rows with missing numerical values")
+        for nc in numerical_columns:
+            df[nc] = df[nc].replace("?", np.nan)
 
-        # for nc in numerical_columns:
-        #     df[df[nc] == "?"] = np.nan
-
-        df.to_csv(data_path, compression="gzip", index=False, na_values=["?"])
+        df.to_csv(data_path, compression="gzip", index=False)
         # Remove temporary files
         os.remove(filepath)
 
@@ -87,41 +85,6 @@ def load_kick(download_if_missing=True):
     data_dir = join(data_home, "kick")
     data_path = join(data_dir, "kick.csv.gz")
 
-    dtype = {
-        "PurchDate": np.int,
-        "Auction": "category",
-        "VehYear": np.int,
-        "VehicleAge": np.int,
-        "Make": "category",
-        "Model": "category",
-        "Trim": "category",
-        "SubModel": "category",
-        "Color": "category",
-        "Transmission": "category",
-        "WheelTypeID": "category",
-        "WheelType": "category",
-        "VehOdo": np.int,
-        "Nationality": "category",
-        "Size": "category",
-        "TopThreeAmericanName": "category",
-        "MMRAcquisitionAuctionAveragePrice": np.int,
-        "MMRAcquisitionAuctionCleanPrice": np.int,
-        "MMRAcquisitionRetailAveragePrice": np.int,
-        "MMRAcquisitonRetailCleanPrice": np.int,
-        "MMRCurrentAuctionAveragePrice": np.int,
-        "MMRCurrentAuctionCleanPrice": np.int,
-        "MMRCurrentRetailAveragePrice": np.int,
-        "MMRCurrentRetailCleanPrice": np.int,
-        "PRIMEUNIT": "category",
-        "AUCGUART": "category",
-        "BYRNO": "category",
-        "VNZIP1": "category",
-        "VNST": "category",
-        "VehBCost": np.int,
-        "IsOnlineSale": "category",
-        "WarrantyCost": np.int,
-    }
-
     dataset = Dataset.from_dtype(
         name="kick",
         drop_columns=None,  # ["PRIMEUNIT" ,"AUCGUART"],
@@ -129,4 +92,4 @@ def load_kick(download_if_missing=True):
         label_column="IsBadBuy",
         dtype=dtype,
     )
-    return dataset.load_from_csv(data_path, dtype=dtype)  # , na_values = ["?"])
+    return dataset.load_from_csv(data_path, dtype=dtype)

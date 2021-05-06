@@ -10,52 +10,7 @@ from ._bank import load_bank
 from ._car import load_car
 from ._default_cb import load_default_cb
 
-# def load_adult():
-#     dtype = {
-#         "age": np.int,
-#         "workclass": "category",
-#         "fnlwgt": np.int,
-#         "education": "category",
-#         "education-num": np.int,
-#         "marital-status": "category",
-#         "occupation": "category",
-#         "relationship": "category",
-#         "race": "category",
-#         "sex": "category",
-#         "capital-gain": np.int,
-#         "capital-loss": np.int,
-#         "hours-per-week": np.int,
-#         "native-country": "category",
-#     }
-#     dataset = Dataset.from_dtype(
-#         name="adult", task="binary-classification", label_column=">50K?", dtype=dtype
-#     )
-#     return dataset.load_from_csv("adult.csv.gz", dtype=dtype)
-
-
-# def load_bank():
-#     dtype = {
-#         "age": np.int,
-#         "job": "category",
-#         "marital": "category",
-#         "education": "category",
-#         "default": "category",
-#         "balance": np.int,
-#         "housing": "category",
-#         "loan": "category",
-#         "contact": "category",
-#         "day": "category",
-#         "month": "category",
-#         "duration": np.int,
-#         "campaign": np.int,
-#         "pdays": np.int,
-#         "previous": np.int,
-#         "poutcome": "category",
-#     }
-#     dataset = Dataset.from_dtype(
-#         name="bank", task="binary-classification", label_column="y", dtype=dtype
-#     )
-#     return dataset.load_from_csv("bank.csv.gz", dtype=dtype)
+# TODO: kdd98 https://www.openml.org/d/23513, Il y a plein de features numeriques avec un grand nombre de "missing" values
 
 
 def load_breastcancer():
@@ -129,36 +84,6 @@ def load_californiahousing():
     )
     dataset.df_raw = df
     return dataset
-
-
-#
-# def load_car():
-#     """Load the car datasets
-#
-#     Parameters
-#     ----------
-#     path
-#     filename
-#
-#     Returns
-#     -------
-#
-#     """
-#     dtype = {
-#         "Buying": "category",
-#         "Maint": "category",
-#         "Doors": "category",
-#         "Persons": "category",
-#         "LugBoot": "category",
-#         "Safety": "category",
-#     }
-#     dataset = Dataset.from_dtype(
-#         name="car",
-#         task="multiclass-classification",
-#         label_column="Evaluation",
-#         dtype=dtype,
-#     )
-#     return dataset.load_from_csv("car.csv.gz", dtype=dtype)
 
 
 def load_letor():
@@ -297,45 +222,6 @@ def load_covtype():
     )
     dataset.df_raw = df
     return dataset
-
-
-#
-# def load_default_cb():
-#     dtype = {
-#         "LIMIT_BAL": np.int,
-#         "SEX": "category",
-#         "EDUCATION": "category",
-#         "MARRIAGE": "category",
-#         "AGE": np.int,
-#         # We consider the PAY_* features as continuous, otherwise some modalities are
-#         # very rare and lead to problems in train/test splitting
-#         "PAY_0": np.int,
-#         "PAY_2": np.int,
-#         "PAY_3": np.int,
-#         "PAY_4": np.int,
-#         "PAY_5": np.int,
-#         "PAY_6": np.int,
-#         "BILL_AMT1": np.int,
-#         "BILL_AMT2": np.int,
-#         "BILL_AMT3": np.int,
-#         "BILL_AMT4": np.int,
-#         "BILL_AMT5": np.int,
-#         "BILL_AMT6": np.int,
-#         "PAY_AMT1": np.int,
-#         "PAY_AMT2": np.int,
-#         "PAY_AMT3": np.int,
-#         "PAY_AMT4": np.int,
-#         "PAY_AMT5": np.int,
-#         "PAY_AMT6": np.int,
-#     }
-#     dataset = Dataset.from_dtype(
-#         name="default-cb",
-#         task="binary-classification",
-#         label_column="default payment next month",
-#         dtype=dtype,
-#         drop_columns=["ID"],
-#     )
-#     return dataset.load_from_csv("default_cb.csv.gz", dtype=dtype)
 
 
 def load_diabetes():
@@ -486,7 +372,11 @@ def load_satimage():
         "X35": np.float,
     }
     dataset = Dataset.from_dtype(
-        name="satimage", task="multiclass-classification", label_column="y", drop_columns=["Unnamed: 0"], dtype=dtype
+        name="satimage",
+        task="multiclass-classification",
+        label_column="y",
+        drop_columns=["Unnamed: 0"],
+        dtype=dtype,
     )
     return dataset.load_from_csv("satimage.csv.gz", dtype=dtype)
 
