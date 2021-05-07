@@ -13,17 +13,14 @@ from sklearn.metrics import (
     accuracy_score,
 )
 from sklearn.preprocessing import LabelBinarizer
-from sklearn.ensemble import RandomForestClassifier
-
-import lightgbm as lgb
-import xgboost as xgb
-from catboost import CatBoostClassifier
-
+from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
 
 sys.path.extend([".", ".."])
 
-from wildwood.dataset import loaders_small_classification
+from wildwood.datasets import load_adult, load_bank, load_spambase, load_default_cb
 from wildwood.forest import ForestClassifier
+
+loaders_small_classification = [load_adult, load_bank, load_spambase, load_default_cb]
 
 
 def get_train_sample_weights(y_train, n_classes):
@@ -38,7 +35,7 @@ classifiers = [
         "RFW",
         RandomForestClassifier(
             n_estimators=n,
-            class_weight="balanced",
+            # class_weight="balanced",
             n_jobs=-1,
             random_state=random_state,
         ),
@@ -47,26 +44,19 @@ classifiers = [
         "WildWood",
         ForestClassifier(
             n_estimators=n,
-            class_weight="balanced",
+            # class_weight="balanced",
+            multiclass="ovr",
             n_jobs=-1,
             random_state=random_state,
         ),
     ),
     lambda n: (
-        "CatBoost",
-        CatBoostClassifier(n_estimators=n, thread_count=-1, random_state=random_state),
-    ),
-    lambda n: (
-        "LightGBM",
-        lgb.LGBMClassifier(n_estimators=n, random_state=random_state, n_jobs=-1),
-    ),
-    lambda n: (
-        "XGBoost",
-        xgb.XGBClassifier(
+        "ET",
+        ExtraTreesClassifier(
             n_estimators=n,
-            use_label_encoder=False,
-            random_state=random_state,
             n_jobs=-1,
+            # class_weight="balanced",
+            random_state=random_state,
         ),
     ),
 ]
@@ -97,23 +87,11 @@ data_extraction = {
         "drop": None,
         "pd_df_categories": False,
     },
-    "CatBoostClassifier": {
-        "one_hot_encode": False,
-        "standardize": False,
-        "drop": None,
-        "pd_df_categories": True,
-    },
-    "XGBClassifier": {
+    "ExtraTreesClassifier": {
         "one_hot_encode": True,
         "standardize": False,
         "drop": None,
         "pd_df_categories": False,
-    },
-    "LGBMClassifier": {
-        "one_hot_encode": False,
-        "standardize": False,
-        "drop": None,
-        "pd_df_categories": True,
     },
 }
 
@@ -123,18 +101,8 @@ def fit_kwargs_generator(clf_name, y_train, dataset):
         return {}
     elif clf_name == "ForestClassifier":
         return {"categorical_features": dataset.categorical_features_}
-    elif clf_name == "CatBoostClassifier":
-        return {
-            "sample_weight": get_train_sample_weights(y_train, dataset.n_classes_),
-            "cat_features": dataset.categorical_columns,
-        }
-    elif clf_name == "LGBMClassifier":
-        return {
-            "sample_weight": get_train_sample_weights(y_train, dataset.n_classes_),
-            "categorical_feature": dataset.categorical_columns,
-        }
-    elif clf_name == "XGBClassifier":
-        return {"sample_weight": get_train_sample_weights(y_train, dataset.n_classes_)}
+    elif clf_name == "ExtraTreesClassifier":
+        return {}
     else:
         print("ERROR : NOT Found : ", clf_name)
 
@@ -156,7 +124,7 @@ col_avg_precision_score_weighted = []
 col_log_loss = []
 col_accuracy = []
 
-n_datasets = 3  # set to None to use all
+n_datasets = None  # 3  # set to None to use all
 n_treess = [1, 2, 5, 10, 20, 50]
 
 for n in n_treess:
@@ -258,5 +226,5 @@ now = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
 commit = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])
 commit = commit.decode("utf-8").strip()
 
-with open("ntrees_experiment_" + now + ".pickle", "wb") as f:
+with open("experiments/ntrees_experiment_" + now + ".pickle", "wb") as f:
     pkl.dump({"datetime": now, "commit": commit, "results": results}, f)

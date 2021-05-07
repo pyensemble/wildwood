@@ -318,8 +318,12 @@ class Dataset:
             X_train = pd.DataFrame(X_train, columns=columns)
             X_test = pd.DataFrame(X_test, columns=columns)
             if self.categorical_columns is not None:
-                X_train[self.categorical_columns] = X_train[self.categorical_columns].astype(int).astype('category')
-                X_test[self.categorical_columns] = X_test[self.categorical_columns].astype(int).astype('category')
+                X_train[self.categorical_columns] = (
+                    X_train[self.categorical_columns].astype(int).astype("category")
+                )
+                X_test[self.categorical_columns] = (
+                    X_test[self.categorical_columns].astype(int).astype("category")
+                )
 
         n_samples_train, n_columns = X_train.shape
         n_samples_test, _ = X_test.shape

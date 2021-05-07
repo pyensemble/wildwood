@@ -13,7 +13,8 @@ from sklearn.datasets._base import (
     RemoteFileMetadata,
     _sha256,
 )
-#from sklearn.datasets import get_data_home
+
+# from sklearn.datasets import get_data_home
 from .dataset import Dataset
 from ._utils import _mkdirp, RemoteFileMetadata, get_data_home
 
@@ -57,11 +58,12 @@ def load_higgs(download_if_missing=True):
     data_dir = join(data_home, "higgs")
     data_path = join(data_dir, "HIGGS.csv.gz")
 
-    dtype = {i+1 : np.float32 for i in range(28)}
+    dtype = {i + 1: np.float32 for i in range(28)}
     dataset = Dataset.from_dtype(
         name="higgs", task="binary-classification", label_column=0, dtype=dtype
     )
     return dataset.load_from_csv(data_path, dtype=dtype, header=None)
+
 
 # def _fetch_higgs(download_if_missing=True):
 #     data_home = get_data_home()

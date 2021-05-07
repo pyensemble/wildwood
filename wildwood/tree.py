@@ -45,6 +45,7 @@ from ._tree import (
 )
 from ._tree import path_leaf as _path_leaf
 
+
 class TreeBase(BaseEstimator, metaclass=ABCMeta):
     @abstractmethod
     def __init__(
@@ -147,6 +148,7 @@ class TreeClassifier(ClassifierMixin, TreeBase):
         is_categorical,
         max_features,
         random_state,
+        cat_split_strategy,
         verbose=0,
     ):
         super().__init__(
@@ -168,6 +170,7 @@ class TreeClassifier(ClassifierMixin, TreeBase):
         # We set dirichlet like this at init to avoid launching what the property does
         self._dirichlet = dirichlet
         self._step = step
+        self.cat_split_strategy = cat_split_strategy
 
     def fit(self, X, y, train_indices, valid_indices, sample_weights):
         n_classes = self.n_classes
@@ -200,6 +203,7 @@ class TreeClassifier(ClassifierMixin, TreeBase):
             self.dirichlet,
             self._step,
             self.is_categorical,
+            self.cat_split_strategy,
         )
 
         node_context = NodeClassifierContext(tree_context)
@@ -245,7 +249,6 @@ class TreeClassifier(ClassifierMixin, TreeBase):
             if hasattr(self, "_tree_context"):
                 self._tree_context.dirichlet = val
                 recompute_node_predictions(self._tree, self._tree_context, val)
-
 
 
 class TreeRegressor(TreeBase, RegressorMixin):

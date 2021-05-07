@@ -14,7 +14,12 @@ from numba.experimental import jitclass
 from ._node import NodeClassifierContextType, NodeRegressorContextType
 from ._tree_context import TreeClassifierContextType, TreeRegressorContextType
 from ._impurity import gini_childs, mse_childs, information_gain_proxy
-from ._utils import get_type
+from ._utils import (
+    get_type,
+    SPLIT_STRATEGY_BINARY,
+    SPLIT_STRATEGY_ALL,
+    SPLIT_STRATEGY_RANDOM,
+)
 
 
 NOPYTHON = True
@@ -317,6 +322,8 @@ def init_split(split):
         uintp,
         uintp,
         SplitClassifierType,
+        uint8[::1],
+        uintp[::1],
     ),
     nopython=NOPYTHON,
     nogil=NOGIL,
@@ -330,9 +337,6 @@ def init_split(split):
         "w_samples_train_in_bins": float32[::1],
         "n_samples_valid_in_bins": uintp[::1],
         "non_empty_bins_train_count": uint8,
-        "non_empty_bins_valid_count": uint8,
-        "non_empty_bins_train": uint8[::1],
-        "non_empty_bins_valid": uint8[::1],
         "y_sum_in_bins": float32[:, :],
         "n_samples_train_left": uintp,
         "w_samples_train_left": float32,
@@ -343,49 +347,21 @@ def init_split(split):
         "y_sum_left": float32[::1],
         "y_sum_right": float32[::1],
         "is_feature_categorical": boolean,
-        "bins_train": uint8[::1],
-        "bins_valid": uint8[::1],
-        "cumsum_samples_valid_left": uintp[::1],
-        "y_sum_positives": float32[::1],
-        # TODO: add "idx_sort"
-        "idx_valid": uintp,
-        "bin_test": uint8,
-        "cum_valid_left": uintp,
-        "bin_train": uint8,
         "bin_threshold": uint8,
         "gain_proxy": float32,
         "impurity_left": float32,
         "impurity_right": float32,
     },
 )
-def find_best_split_classifier_along_feature(
-    tree_context, node_context, feature, f, best_split
+def try_feature_order_for_classifier_split(
+    tree_context,
+    node_context,
+    feature,
+    f,
+    best_split,
+    ordered_bins_train,
+    cumsum_samples_valid_left,
 ):
-    """Finds the best split for classification (best bin_threshold) for a feature.
-    If no split can be found (this happens when we can't find a split with a large
-    enough weighted number of training and validation samples in the left and right
-    childs) we simply set best_split.found_split to False).
-
-    Parameters
-    ----------
-    tree_context : TreeClassifierContext
-        The tree context which contains all the data about the tree that is useful to
-        find a split
-
-    node_context : NodeClassifierContext
-        The node context which contains all the data about the node required to find
-        a best split for it
-
-    feature : uint
-        The index of the feature for which we want to find a split
-
-    f : uint
-        The index in [0, ..., max_feature-1] corresponding to the position in the
-        node_context of the feature we are considering for a split
-
-    best_split : SplitClassifier
-        The best_split found so far
-    """
     n_classes = tree_context.n_classes
     min_samples_leaf = tree_context.min_samples_leaf
     n_samples_train = node_context.n_samples_train
@@ -399,17 +375,10 @@ def find_best_split_classifier_along_feature(
     n_samples_valid_in_bins = node_context.n_samples_valid_in_bins[f]
     # The number of non-empty bins for train samples for this feature
     non_empty_bins_train_count = node_context.non_empty_bins_train_count[f]
-    # The number of non-empty bins for valid samples for this feature
-    non_empty_bins_valid_count = node_context.non_empty_bins_valid_count[f]
+
     # The indices of the non-empty bins for train samples for this feature. Note that
     # this array is not sorted in any fashion for now (bin indices appear in the
     # order seen in the data)
-    non_empty_bins_train = node_context.non_empty_bins_train[
-        f, :non_empty_bins_train_count
-    ]
-    non_empty_bins_valid = node_context.non_empty_bins_valid[
-        f, :non_empty_bins_valid_count
-    ]
 
     # TODO(*): get only non-zero bins for y_sum_in_bins as well ?
     # Get the sum (counts) for each (bin, label) of the feature
@@ -433,52 +402,11 @@ def find_best_split_classifier_along_feature(
 
     is_feature_categorical = tree_context.is_categorical[feature]
 
-    # TODO: We don't need to instantiate it here
-    bins_train = np.empty(non_empty_bins_train_count, dtype=np.uint8)
-    bins_valid = np.empty(non_empty_bins_valid_count, dtype=np.uint8)
-
-    cumsum_samples_valid_left = np.zeros(n_samples_train_in_bins.size, dtype=np.uintp)
-
-    if is_feature_categorical:
-        # TODO: Something faster ? Use a placeholder for y_sum_positives in split ?
-        # Sort bins according to the proportions of labels equal to 1 in
-        # each bin. This leads to the best split partitioning for regression and binary
-        # classification
-        y_sum_positives = y_sum_in_bins[non_empty_bins_train, 1].copy()
-        y_sum_positives /= y_sum_in_bins[non_empty_bins_train, :].sum(axis=1)
-        idx_sort = np.argsort(y_sum_positives)
-        bins_train[:] = non_empty_bins_train[idx_sort]
-    else:
-        # When the feature is continuous, we simply sort the bins in ascending order
-        bins_train[:] = np.sort(non_empty_bins_train)
-        bins_valid[:] = np.sort(non_empty_bins_valid)
-        # We need to compute carefully the number of valid samples along the
-        # bins_train array (since bins_train and bins_valid might not share the same
-        # support). Let us give an example : let's say that max_bins=10 and that
-        #   n_samples_train_in_bins = [0. 3. 0. 0. 2. 1. 5. 0. 1. 0.]
-        # and that
-        #   n_samples_valid_in_bins = [2. 0. 0. 1. 1. 0. 2. 1. 1. 1.].
-        # Then we'll have
-        #    cum_samples_valid_left = [0. 2. 0. 0. 4. 4. 6. 0. 0. 0.].
-        # For any bin_train in bins_train, we want cum_samples_valid_left[bin_train] to
-        # contain the number of valid samples on the left of bin_train (including it).
-        idx_valid = 0
-        bin_test = bins_valid[idx_valid]
-        cum_valid_left = 0
-        for bin_train in bins_train:
-            while bin_test <= bin_train and idx_valid < bins_valid.size:
-                cum_valid_left += n_samples_valid_in_bins[bin_test]
-                idx_valid += 1
-                if idx_valid == bins_valid.size:
-                    break
-                bin_test = bins_valid[idx_valid]
-            cumsum_samples_valid_left[bin_train] = cum_valid_left
-
     # We go from left to right and compute the information gain proxy of all possible
     #  splits in order to find the best one. Since bin_threshold is included in the
     #  left child, we must stop before the last bin, hence the bins[:-1]
     #  (otherwise n_samples_train_right == 0 for bin_threshold=bins[-1])
-    for bin_threshold in bins_train[:-1]:
+    for bin_threshold in ordered_bins_train[:-1]:
         # On the left we accumulate the counts
         n_samples_train_left += n_samples_train_in_bins[bin_threshold]
         w_samples_train_left += w_samples_train_in_bins[bin_threshold]
@@ -546,10 +474,183 @@ def find_best_split_classifier_along_feature(
             best_split.y_sum_right[:] = y_sum_right
             best_split.is_split_categorical = is_feature_categorical
             best_split.bins_count = non_empty_bins_train_count
-            best_split.bins[:non_empty_bins_train_count] = bins_train
+            best_split.bins[:non_empty_bins_train_count] = ordered_bins_train
 
 
-# TODO: apply the same modifications for regression as we did for classification
+@jit(
+    void(
+        TreeClassifierContextType,
+        NodeClassifierContextType,
+        uintp,
+        uintp,
+        SplitClassifierType,
+    ),
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
+    locals={
+        "n_classes": uintp,
+        "n_samples_train_in_bins": uintp[::1],
+        "n_samples_valid_in_bins": uintp[::1],
+        "non_empty_bins_train_count": uint8,
+        "non_empty_bins_valid_count": uint8,
+        "non_empty_bins_train": uint8[::1],
+        "non_empty_bins_valid": uint8[::1],
+        "y_sum_in_bins": float32[:, :],
+        "is_feature_categorical": boolean,
+        "bins_train": uint8[::1],
+        "bins_valid": uint8[::1],
+        "cumsum_samples_valid_left": uintp[::1],
+        "y_sum_positives": float32[:, :],
+        # TODO: add "idx_sort"
+        "idx_valid": uintp,
+        "bin_test": uint8,
+        "cum_valid_left": uintp,
+        "bin_train": uint8,
+        "cat_split_strategy": uint8,
+    },
+)
+def find_best_split_classifier_along_feature(
+    tree_context, node_context, feature, f, best_split
+):
+    """Finds the best split for classification (best bin_threshold) for a feature.
+    If no split can be found (this happens when we can't find a split with a large
+    enough weighted number of training and validation samples in the left and right
+    childs) we simply set best_split.found_split to False).
+
+    Parameters
+    ----------
+    tree_context : TreeClassifierContext
+        The tree context which contains all the data about the tree that is useful to
+        find a split
+
+    node_context : NodeClassifierContext
+        The node context which contains all the data about the node required to find
+        a best split for it
+
+    feature : uint
+        The index of the feature for which we want to find a split
+
+    f : uint
+        The index in [0, ..., max_feature-1] corresponding to the position in the
+        node_context of the feature we are considering for a split
+
+    best_split : SplitClassifier
+        The best_split found so far
+    """
+    n_classes = tree_context.n_classes
+    # Number of training samples in each bin for the feature
+    n_samples_train_in_bins = node_context.n_samples_train_in_bins[f]
+    # Number of validation samples in each bin for the feature
+    n_samples_valid_in_bins = node_context.n_samples_valid_in_bins[f]
+    # The number of non-empty bins for train samples for this feature
+    non_empty_bins_train_count = node_context.non_empty_bins_train_count[f]
+    # The number of non-empty bins for valid samples for this feature
+    non_empty_bins_valid_count = node_context.non_empty_bins_valid_count[f]
+    # The indices of the non-empty bins for train samples for this feature. Note that
+    # this array is not sorted in any fashion for now (bin indices appear in the
+    # order seen in the data)
+    non_empty_bins_train = node_context.non_empty_bins_train[
+        f, :non_empty_bins_train_count
+    ]
+    non_empty_bins_valid = node_context.non_empty_bins_valid[
+        f, :non_empty_bins_valid_count
+    ]
+    # TODO(*): get only non-zero bins for y_sum_in_bins as well ?
+    # Get the sum (counts) for each (bin, label) of the feature
+    y_sum_in_bins = node_context.y_sum[f]
+
+    is_feature_categorical = tree_context.is_categorical[feature]
+
+    # TODO: We don't need to instantiate it here
+    bins_train = np.empty(non_empty_bins_train_count, dtype=np.uint8)
+    bins_valid = np.empty(non_empty_bins_valid_count, dtype=np.uint8)
+
+    cumsum_samples_valid_left = np.zeros(n_samples_train_in_bins.size, dtype=np.uintp)
+
+    cat_split_strategy = tree_context.cat_split_strategy
+
+    if is_feature_categorical:
+        # TODO: Something faster ? Use a placeholder for y_sum_positives in split ?
+        # Sort bins according to the proportions of labels equal to 1 in
+        # each bin. This leads to the best split partitioning for regression and binary
+        # classification
+        y_sum_positives = y_sum_in_bins[non_empty_bins_train, :].copy()
+        y_sum_positives /= np.expand_dims(y_sum_positives.sum(axis=1), axis=1)
+
+        if cat_split_strategy == SPLIT_STRATEGY_ALL:
+            for mod in range(n_classes):
+                idx_sort = np.argsort(y_sum_positives[:, mod])
+                bins_train[:] = non_empty_bins_train[idx_sort]
+                try_feature_order_for_classifier_split(
+                    tree_context,
+                    node_context,
+                    feature,
+                    f,
+                    best_split,
+                    bins_train,
+                    cumsum_samples_valid_left,
+                )
+        elif cat_split_strategy == SPLIT_STRATEGY_BINARY:
+            idx_sort = np.argsort(y_sum_positives[:, 1])
+            bins_train[:] = non_empty_bins_train[idx_sort]
+            try_feature_order_for_classifier_split(
+                tree_context,
+                node_context,
+                feature,
+                f,
+                best_split,
+                bins_train,
+                cumsum_samples_valid_left,
+            )
+        else:
+            # we have cat_split_strategy == SPLIT_STRATEGY_RANDOM
+            idx_sort = np.argsort(y_sum_positives[:, np.random.randint(n_classes)])
+            bins_train[:] = non_empty_bins_train[idx_sort]
+            try_feature_order_for_classifier_split(
+                tree_context,
+                node_context,
+                feature,
+                f,
+                best_split,
+                bins_train,
+                cumsum_samples_valid_left,
+            )
+    else:
+        # When the feature is continuous, we simply sort the bins in ascending order
+        bins_train[:] = np.sort(non_empty_bins_train)
+        bins_valid[:] = np.sort(non_empty_bins_valid)
+        # We need to compute carefully the number of valid samples along the
+        # bins_train array (since bins_train and bins_valid might not share the same
+        # support). Let us give an example : let's say that max_bins=10 and that
+        #   n_samples_train_in_bins = [0. 3. 0. 0. 2. 1. 5. 0. 1. 0.]
+        # and that
+        #   n_samples_valid_in_bins = [2. 0. 0. 1. 1. 0. 2. 1. 1. 1.].
+        # Then we'll have
+        #    cum_samples_valid_left = [0. 2. 0. 0. 4. 4. 6. 0. 0. 0.].
+        # For any bin_train in bins_train, we want cum_samples_valid_left[bin_train] to
+        # contain the number of valid samples on the left of bin_train (including it).
+        idx_valid = 0
+        bin_test = bins_valid[idx_valid]
+        cum_valid_left = 0
+        for bin_train in bins_train:
+            while bin_test <= bin_train and idx_valid < bins_valid.size:
+                cum_valid_left += n_samples_valid_in_bins[bin_test]
+                idx_valid += 1
+                if idx_valid == bins_valid.size:
+                    break
+                bin_test = bins_valid[idx_valid]
+            cumsum_samples_valid_left[bin_train] = cum_valid_left
+
+        try_feature_order_for_classifier_split(
+            tree_context,
+            node_context,
+            feature,
+            f,
+            best_split,
+            bins_train,
+            cumsum_samples_valid_left,
+        )
 
 
 @jit(
@@ -720,7 +821,6 @@ def find_best_split_regressor_along_feature(
             n_samples_valid_right < min_samples_leaf
         ):
             break
-
 
         impurity_left, impurity_right = mse_childs(
             w_samples_train_left,

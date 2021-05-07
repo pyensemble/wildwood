@@ -24,6 +24,7 @@ from sklearn.utils.multiclass import check_classification_targets
 from sklearn.utils.validation import check_is_fitted
 
 from ._binning import Binner
+from ._utils import split_strategy_mapping
 
 eps = np.finfo("float32").eps
 
@@ -158,7 +159,7 @@ def _compute_weighted_depth(weighted_depth, X, out, lock, tree_idx):
 
 
 def _get_tree_prediction(predict, X, out, lock, tree_idx):
-    prediction = predict(X, check_input=False)
+    prediction = predict(X)  # , check_input=False)
     with lock:
         out[tree_idx] = prediction
 
@@ -389,6 +390,7 @@ class ForestBase(BaseEstimator):
                     is_categorical=self.is_categorical_,
                     max_features=max_features_,
                     random_state=random_state,
+                    cat_split_strategy=split_strategy_mapping[self.cat_split_strategy],
                     verbose=self.verbose,
                 )
                 for random_state in self._random_states_trees
@@ -492,7 +494,7 @@ class ForestBase(BaseEstimator):
         # Default implementation
         return y, None
 
-    def _validate_X_predict(self, X, check_input):
+    def _validate_X_predict(self, X, check_input=True):
         """Validate the training data on predict (probabilities)."""
         if check_input:
 
@@ -1046,6 +1048,7 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         verbose: bool = False,
         class_weight=None,
         multiclass="multinomial",
+        cat_split_strategy="binary",
     ):
         super(ForestClassifier, self).__init__(
             n_estimators=n_estimators,
@@ -1071,6 +1074,7 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         self.dirichlet = dirichlet
         self.class_weight = class_weight
         self.multiclass = multiclass
+        self.cat_split_strategy = cat_split_strategy
 
     def _encode_y(self, y):
         """Encodes the label. When multiclass == "multinomial" this encodes the
@@ -1100,8 +1104,8 @@ class ForestClassifier(ForestBase, ClassifierMixin):
             if n_classes_ <= 2:
                 if self.verbose:
                     warn(
-                        "Only two classes where detected: switching to "
-                        'multiclass="multiclass" instead of "ovr"'
+                        "Only two classes were detected: switching to "
+                        'multiclass="multinomial" instead of "ovr"'
                     )
                 # We switch back to "multinomial" encoding
                 self.multiclass = "multinomial"
@@ -1328,6 +1332,26 @@ class ForestClassifier(ForestBase, ClassifierMixin):
                 raise ValueError('multiclass must be either "multinomial" or "ovr"')
             else:
                 self._multiclass = val
+
+    @property
+    def cat_split_strategy(self):
+        return self._cat_split_strategy
+
+    @cat_split_strategy.setter
+    def cat_split_strategy(self, val):
+        if self._fitted:
+            raise AttributeError(
+                "You cannot change the cat_split_strategy option after calling fit"
+            )
+        if not isinstance(val, str):
+            raise ValueError("cat_split_strategy must be a str")
+        else:
+            if val not in {"binary", "all", "random"}:
+                raise ValueError(
+                    'cat_split_strategy must be either "binary", "all" or "random"'
+                )
+            else:
+                self._cat_split_strategy = val
 
 
 class ForestRegressor(ForestBase, RegressorMixin):
