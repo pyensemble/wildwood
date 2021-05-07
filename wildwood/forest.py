@@ -494,7 +494,7 @@ class ForestBase(BaseEstimator):
         # Default implementation
         return y, None
 
-    def _validate_X_predict(self, X, check_input=True):
+    def _validate_X_predict(self, X, check_input=False):
         """Validate the training data on predict (probabilities)."""
         if check_input:
 
@@ -632,7 +632,7 @@ class ForestBase(BaseEstimator):
         # Is the forest fitted ?
         check_is_fitted(self)
         # Check data
-        X = self._validate_X_predict(X, check_input=True)
+        X = self._validate_X_predict(X, check_input=False)
         # TODO: we can also avoid data binning for predictions...
         X_binned = self._bin_data(X, is_training_data=False)
         n_jobs, _, _ = _partition_estimators(len(self.trees), self.n_jobs)
