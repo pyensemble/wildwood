@@ -621,7 +621,7 @@ class XGBExperiment(Experiment):
             params.update({"seed": seed})
         if n_estimators is not None:
             params.update({"n_estimators": n_estimators})
-        bst = xgb.XGBClassifier(**params, use_label_encoder=False, n_jobs=-1)
+        bst = xgb.XGBClassifier(**params, use_label_encoder=False, n_jobs=-1, tree_method='hist')
         bst.fit(
             X_train,
             y_train,
