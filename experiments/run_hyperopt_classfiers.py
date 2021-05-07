@@ -1,4 +1,5 @@
 import sys
+import os
 import subprocess
 from time import time
 from datetime import datetime
@@ -111,18 +112,21 @@ def set_experiment(
     max_hyperopt_eval,
     categorical_columns,
     expe_random_states,
+    output_folder_path,
 ):
     experiment_setting = {
         "LogisticRegression": LogRegExperiment(
             learning_task,
             max_hyperopt_evals=max_hyperopt_eval,
             random_state=expe_random_states,
+            output_folder_path=output_folder_path,
         ),
         "RandomForestClassifier": RFExperiment(
             learning_task,
             n_estimators=n_estimators,
-            max_hyperopt_evals=max_hyperopt_eval,
+            max_hyperopt_evals=10,
             random_state=expe_random_states,
+            output_folder_path=output_folder_path,
         ),
         "HistGradientBoostingClassifier": HGBExperiment(
             learning_task,
@@ -130,12 +134,14 @@ def set_experiment(
             max_hyperopt_evals=max_hyperopt_eval,
             categorical_features=categorical_columns,
             random_state=expe_random_states,
+            output_folder_path=output_folder_path,
         ),
         "XGBClassifier": XGBExperiment(
             learning_task,
             n_estimators=n_estimators,
             max_hyperopt_evals=max_hyperopt_eval,
             random_state=expe_random_states,
+            output_folder_path=output_folder_path,
         ),
         "LGBMClassifier": LGBExperiment(
             learning_task,
@@ -143,6 +149,7 @@ def set_experiment(
             max_hyperopt_evals=max_hyperopt_eval,
             categorical_features=categorical_columns,
             random_state=expe_random_states,
+            output_folder_path=output_folder_path,
         ),
         "CatBoostClassifier": CABExperiment(
             learning_task,
@@ -150,6 +157,7 @@ def set_experiment(
             max_hyperopt_evals=max_hyperopt_eval,
             categorical_features=categorical_columns,
             random_state=expe_random_states,
+            output_folder_path=output_folder_path,
         ),
     }
     return experiment_setting[clf_name]
@@ -174,29 +182,11 @@ loaders = [
     load_spambase,
 ]
 
-col_data = []
-col_classifier = []
-col_fit_time = []
-col_predict_time = []
-col_roc_auc = []
-col_roc_auc_weighted = []
-col_avg_precision_score = []
-col_avg_precision_score_weighted = []
-col_log_loss = []
-col_accuracy = []
-col_roc_auc_std = []
-col_log_loss_std = []
-
-col_roc_auc_train = []
-col_roc_auc_weighted_train = []
-col_avg_precision_score_train = []
-col_avg_precision_score_weighted_train = []
-col_log_loss_train = []
-col_accuracy_train = []
 
 """
 SET UP HERE
 """
+
 clf_names = [
     "LGBMClassifier",
     "XGBClassifier",
@@ -212,9 +202,15 @@ do_class_weights = False
 random_state_seed = 42
 fit_seeds = [0, 1, 2, 3, 4]
 
+#TODO: output path
+
 """
 SET UP HERE
 """
+
+if not os.path.exists("results"):
+    os.mkdir("results")
+results_home_path = "results/"
 
 random_states = {
     "data_extract_random_state": random_state_seed,
@@ -222,14 +218,38 @@ random_states = {
     "expe_random_state": 2 + random_state_seed,
 }
 
-for clf_name in clf_names:  # for clf_name in clf_names[:2]:
+for loader in loaders[:1]:
 
     logging.info("=" * 128)
-    logging.info("Launching experiments for %s" % clf_name)
+    dataset = loader()
+    learning_task = dataset.task
+    logging.info("Launching experiments for %s" % dataset.name)
 
-    for loader in loaders:  # for loader in loaders[:2]:
-        dataset = loader()
-        learning_task = dataset.task
+    if not os.path.exists(results_home_path + dataset.name):
+        os.mkdir(results_home_path + dataset.name)
+    results_dataset_path = results_home_path + dataset.name + "/"
+
+    col_data = []
+    col_classifier = []
+    col_fit_time = []
+    col_predict_time = []
+    col_roc_auc = []
+    col_roc_auc_weighted = []
+    col_avg_precision_score = []
+    col_avg_precision_score_weighted = []
+    col_log_loss = []
+    col_accuracy = []
+    col_roc_auc_std = []
+    col_log_loss_std = []
+
+    col_roc_auc_train = []
+    col_roc_auc_weighted_train = []
+    col_avg_precision_score_train = []
+    col_avg_precision_score_weighted_train = []
+    col_log_loss_train = []
+    col_accuracy_train = []
+
+    for clf_name in clf_names:
         col_data.append(dataset.name)
         col_classifier.append(clf_name)
 
@@ -257,6 +277,7 @@ for clf_name in clf_names:  # for clf_name in clf_names[:2]:
             max_hyperopt_eval,
             dataset.categorical_columns,
             random_states["expe_random_state"],
+            results_dataset_path
         )
 
         print("Run train-val hyperopt exp...")
@@ -279,10 +300,12 @@ for clf_name in clf_names:  # for clf_name in clf_names[:2]:
 
         for fit_seed in fit_seeds:
             tic = time()
-            model = exp.fit(
+            model, _ = exp.fit(
                 tuned_cv_result["params"],
                 X_train,
                 y_train,
+                None,
+                n_estimators=tuned_cv_result["best_n_estimators"],
                 sample_weight=get_train_sample_weights(y_train, dataset.n_classes_) if do_class_weights else None,
                 seed=fit_seed
             )
@@ -298,7 +321,7 @@ for clf_name in clf_names:  # for clf_name in clf_names[:2]:
             predict_time = toc - tic
             predict_time_list.append(predict_time)
             # col_predict_time.append(predict_time)
-            logging.info("Predict %s in %.2f seconds" % (clf_name, fit_time))
+            logging.info("Predict %s in %.2f seconds" % (clf_name, predict_time))
             y_pred = np.argmax(y_scores, axis=1)
             y_pred_train = np.argmax(y_scores_train, axis=1)
             y_train_binary = LabelBinarizer().fit_transform(y_train)
@@ -406,52 +429,51 @@ for clf_name in clf_names:  # for clf_name in clf_names[:2]:
             )
         )
 
-results = pd.DataFrame(
-    {
-        "dataset": col_data,
-        "classifier": col_classifier,
-        "fit_time": col_fit_time,
-        "predict_time": col_predict_time,
-        "roc_auc": col_roc_auc,
-        "roc_auc_w": col_roc_auc_weighted,
-        "avg_prec": col_avg_precision_score,
-        "avg_prec_w": col_avg_precision_score_weighted,
-        "log_loss": col_log_loss,
-        "accuracy": col_accuracy,
-        "roc_auc_train": col_roc_auc_train,
-        "roc_auc_w_train": col_roc_auc_weighted_train,
-        "avg_prec_train": col_avg_precision_score_train,
-        "avg_prec_w_train": col_avg_precision_score_weighted_train,
-        "log_loss_train": col_log_loss_train,
-        "accuracy_train": col_accuracy_train,
-        "log_loss_std": col_log_loss_std,
-        "roc_auc_std": col_roc_auc_std,
-    }
-)
-
-print(results)
-
-now = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-
-# Get the commit number as a string
-commit = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])
-commit = commit.decode("utf-8").strip()
-
-filename = "exp_hyperopt_" + str(n_estimators) + "_" + str(max_hyperopt_eval) + "_" \
-           + ("W" if do_class_weights else "N") + "_" + now + ".pickle"
-
-with open(filename, "wb") as f:
-    pkl.dump(
+    results = pd.DataFrame(
         {
-            "datetime": now,
-            "commit": commit,
-            "n_estimators": n_estimators,
-            "max_hyperopt_eval": max_hyperopt_eval,
-            "do_class_weights": do_class_weights,
-            "results": results,
-        },
-        f,
+            "dataset": col_data,
+            "classifier": col_classifier,
+            "fit_time": col_fit_time,
+            "predict_time": col_predict_time,
+            "roc_auc": col_roc_auc,
+            "roc_auc_w": col_roc_auc_weighted,
+            "avg_prec": col_avg_precision_score,
+            "avg_prec_w": col_avg_precision_score_weighted,
+            "log_loss": col_log_loss,
+            "accuracy": col_accuracy,
+            "roc_auc_train": col_roc_auc_train,
+            "roc_auc_w_train": col_roc_auc_weighted_train,
+            "avg_prec_train": col_avg_precision_score_train,
+            "avg_prec_w_train": col_avg_precision_score_weighted_train,
+            "log_loss_train": col_log_loss_train,
+            "accuracy_train": col_accuracy_train,
+            "log_loss_std": col_log_loss_std,
+            "roc_auc_std": col_roc_auc_std,
+        }
     )
 
+    print(results)
 
-logging.info("Saved results in file %s" % filename)
+    now = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+
+    # Get the commit number as a string
+    commit = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])
+    commit = commit.decode("utf-8").strip()
+
+    filename = "exp_hyperopt_" + str(n_estimators) + "_" + str(max_hyperopt_eval) + "_" \
+               + ("W" if do_class_weights else "N") + "_" + now + ".pickle"
+
+    with open(results_dataset_path + filename, "wb") as f:
+        pkl.dump(
+            {
+                "datetime": now,
+                "commit": commit,
+                "n_estimators": n_estimators,
+                "max_hyperopt_eval": max_hyperopt_eval,
+                "do_class_weights": do_class_weights,
+                "results": results,
+            },
+            f,
+        )
+
+    logging.info("Saved results in file %s" % results_dataset_path + filename)

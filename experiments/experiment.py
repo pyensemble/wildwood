@@ -2,6 +2,8 @@ from hyperopt import hp, fmin, tpe, Trials, STATUS_OK, STATUS_FAIL
 import numpy as np
 import os
 import time
+from datetime import datetime
+import pickle as pkl
 
 from sklearn.metrics import (
     roc_auc_score,
@@ -38,8 +40,10 @@ class Experiment(object):
         n_estimators=100,
         hyperopt_evals=50,
         categorical_features=None,
+        early_stopping_round=5,
         random_state=0,
         output_folder_path="./",
+        verbose=True,
     ):
         self.learning_task_, self.bst_name = learning_task, bst_name
         if learning_task in ["binary-classification", "multiclass-classification"]:
@@ -49,13 +53,15 @@ class Experiment(object):
 
         self.n_estimators, self.best_loss = n_estimators, np.inf
         self.categorical_features = categorical_features
+        self.early_stopping_round = early_stopping_round
         self.hyperopt_evals, self.hyperopt_eval_num = hyperopt_evals, 0
         self.output_folder_path = os.path.join(
-            output_folder_path, ""
+            output_folder_path, ""  # TODO: put dataset name
         )  # TODO: write output
-        # TODO: save params to be able to reuse
         self.default_params, self.best_params = None, None
         self.random_state = random_state
+        self.verbose = verbose
+        self.best_n_estimators = None
 
         # to specify definitions in particular experiments
         self.title = None
@@ -101,6 +107,30 @@ class Experiment(object):
         )
 
         self.best_params = self.trials.best_trial["result"]["params"]
+        self.best_n_estimators = self.trials.best_trial["result"]["best_n_estimators"]
+        # TODO: recupere best_n_estimators ici
+        if self.verbose:
+            now = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+            filename = (
+                "best_params_results_"
+                + str(self.bst_name)
+                + "_"
+                + str(self.hyperopt_evals)
+                + "_"
+                + now
+                + ".pickle"
+            )
+
+            with open(self.output_folder_path + filename, "wb") as f:
+                pkl.dump(
+                    {
+                        "datetime": now,
+                        "max_hyperopt_eval": self.hyperopt_evals,
+                        "best_n_estimators": self.best_n_estimators,
+                        "result": self.trials.best_trial["result"],
+                    },
+                    f,
+                )
         return self.trials.best_trial["result"]
 
     def run(
@@ -119,7 +149,9 @@ class Experiment(object):
             self.n_estimators = n_estimators
         params = self.preprocess_params(params)
         start_time = time.time()
-        bst = self.fit(params, X_train, y_train, sample_weight, seed=None)
+        bst, n_best_iteration = self.fit(
+            params, X_train, y_train, (X_val, y_val), sample_weight, seed=None
+        )
         fit_time = time.time() - start_time
         y_scores = self.predict(bst, X_val)
         evals_result = log_loss(y_val, y_scores)
@@ -128,6 +160,7 @@ class Experiment(object):
         results = {
             "loss": evals_result,
             "fit_time": fit_time,
+            "best_n_estimators": n_best_iteration,
             "status": STATUS_FAIL if np.isnan(evals_result) else STATUS_OK,
             "params": params.copy(),
         }
@@ -193,7 +226,16 @@ class Experiment(object):
             )
         return results
 
-    def fit(self, params, X_train, y_train, sample_weight, seed=None):
+    def fit(
+        self,
+        params,
+        X_train,
+        y_train,
+        Xy_val,
+        sample_weight,
+        n_estimators=None,
+        seed=None,
+    ):
         raise NotImplementedError("Method fit is not implemented.")
 
     def predict(self, bst, X_test):
@@ -219,39 +261,50 @@ class RFExperiment(Experiment):
             n_estimators,
             max_hyperopt_evals,
             None,  # no categorical_feature since RF uses one-hot
+            0,  # no early-stopping for RF
             random_state,
             output_folder_path,
         )
 
         # hard-coded params search space here TODO: check for other parameters?
         self.space = {
-            "max_depth": hp.choice(
-                "max_depth", [None, hp.quniform("max_depth_finite", 2, 10, 1)]
-            ),
-            "max_features": hp.choice("max_features", [None, "auto", "sqrt", "log2"]),
-        }
+            "max_features": hp.choice("max_features", [None, "sqrt"]),
+            "min_samples_split": hp.choice("min_samples_split", [2, 5, 10])
+         }
         # hard-coded default params here
-        self.default_params = {"max_depth": 6, "max_features": "auto"}
+        self.default_params = {"max_features": "sqrt", "min_samples_split": 2}
         self.default_params = self.preprocess_params(self.default_params)
         self.title = "sklearn-RandomForest"
 
     def preprocess_params(self, params):
         params_ = params.copy()
-        params_["max_depth"] = (
-            None if params_["max_depth"] is None else int(params_["max_depth"])
-        )
         params_.update(
-            {"n_estimators": self.n_estimators, "random_state": self.random_state}
+            {"n_estimators": self.n_estimators,
+             "random_state": self.random_state,
+             "max_depth": None,
+             "min_samples_leaf": params["min_samples_split"]}
         )
         return params_
 
-    def fit(self, params, X_train, y_train, sample_weight, seed=None):
+    def fit(
+        self,
+        params,
+        X_train,
+        y_train,
+        Xy_val,
+        sample_weight,
+        n_estimators=None,
+        seed=None,
+    ):
         # no categorical_features, use one-hot encoding with RandomForestClassfier
+        #  X_val, y_val not used since no early stopping
         if seed is not None:
             params.update({"random_state": seed})
+        if n_estimators is not None:
+            params.update({"n_estimators": n_estimators})
         clf = RandomForestClassifier(**params, n_jobs=-1)
         clf.fit(X_train, y_train, sample_weight=sample_weight)
-        return clf
+        return clf, None
 
     def predict(self, bst, X_test):
         if self.learning_task == "classification":
@@ -278,18 +331,16 @@ class HGBExperiment(Experiment):
             n_estimators,
             max_hyperopt_evals,
             categorical_features,
+            0,  # no early stopping round for HGB
             random_state,
             output_folder_path,
         )
 
-        # hard-coded params search space here TODO: check for other parameters?
+        # hard-coded params search space here
         self.space = {
             "learning_rate": hp.loguniform("learning_rate", -4, 1),
-            "max_depth": hp.choice(
-                "max_depth", [None, hp.quniform("max_depth_finite", 2, 10, 1)]
-            ),
             "max_leaf_nodes": hp.qloguniform("num_leaves", 0, 7, 1),
-            "min_samples_leaf": hp.qloguniform("min_data_in_leaf", 0, 6, 1),
+            "min_samples_leaf": hp.qloguniform("min_samples_leaf", 0, 6, 1),
             "l2_regularization": hp.choice(
                 "l2_regularization",
                 [0, hp.loguniform("l2_regularization_positive", -16, 2)],
@@ -298,7 +349,6 @@ class HGBExperiment(Experiment):
         # hard-coded default params here
         self.default_params = {
             "learning_rate": 0.1,
-            "max_depth": None,
             "max_leaf_nodes": 31,
             "min_samples_leaf": 20,
             "l2_regularization": 0,
@@ -315,21 +365,30 @@ class HGBExperiment(Experiment):
         elif self.learning_task_ == "regression":
             pass  # TODO
 
-        params_["max_depth"] = (
-            None if params_["max_depth"] is None else int(params_["max_depth"])
-        )
         params_["max_leaf_nodes"] = max(int(params_["max_leaf_nodes"]), 2)
         params_.update(
-            {"max_iter": self.n_estimators, "random_state": self.random_state}
+            {"max_iter": self.n_estimators, "random_state": self.random_state, "max_depth": None}
         )
         return params_
 
-    def fit(self, params, X_train, y_train, sample_weight, seed=None):
+    def fit(
+        self,
+        params,
+        X_train,
+        y_train,
+        Xy_val,
+        sample_weight,
+        n_estimators=None,
+        seed=None,
+    ):
+        # Xy_val not used
         if seed is not None:
             params.update({"random_state": seed})
-        clf = HistGradientBoostingClassifier(**params)
+        if n_estimators is not None:
+            params.update({"max_iter": n_estimators})
+        clf = HistGradientBoostingClassifier(**params, early_stopping="auto")
         clf.fit(X_train, y_train, sample_weight=sample_weight)
-        return clf
+        return clf, None
 
     def predict(self, bst, X_test):
         if self.learning_task == "classification":
@@ -346,6 +405,7 @@ class LGBExperiment(Experiment):
         n_estimators=100,
         max_hyperopt_evals=50,
         categorical_features=None,
+        early_stopping_round=5,
         random_state=0,
         output_folder_path="./",
     ):
@@ -356,6 +416,7 @@ class LGBExperiment(Experiment):
             n_estimators,
             max_hyperopt_evals,
             categorical_features,
+            early_stopping_round,
             random_state,
             output_folder_path,
         )
@@ -425,9 +486,20 @@ class LGBExperiment(Experiment):
         )
         return params_
 
-    def fit(self, params, X_train, y_train, sample_weight, seed=None):
+    def fit(
+        self,
+        params,
+        X_train,
+        y_train,
+        Xy_val,
+        sample_weight,
+        n_estimators=None,
+        seed=None,
+    ):
         if seed is not None:
             params.update({"random_state": seed})
+        if n_estimators is not None:
+            params.update({"n_estimators": n_estimators})
 
         bst = lgb.LGBMClassifier(**params)
         bst.fit(
@@ -435,8 +507,12 @@ class LGBExperiment(Experiment):
             y=y_train,
             categorical_feature="auto",  # We do not use `self.categorical_features` actually,
             sample_weight=sample_weight,
+            eval_set=[Xy_val] if Xy_val is not None else None,
+            early_stopping_rounds=self.early_stopping_round
+            if Xy_val is not None
+            else None,
         )
-        return bst
+        return bst, bst.best_iteration_
 
     def predict(self, bst, X_test):
         if self.learning_task == "classification":
@@ -452,6 +528,7 @@ class XGBExperiment(Experiment):
         learning_task,
         n_estimators=100,
         max_hyperopt_evals=50,
+        early_stopping_round=5,
         random_state=0,
         output_folder_path="./",
     ):
@@ -462,6 +539,7 @@ class XGBExperiment(Experiment):
             n_estimators,
             max_hyperopt_evals,
             None,  # no categorical_feature since XGB uses one-hot
+            early_stopping_round,
             random_state,
             output_folder_path,
         )
@@ -528,13 +606,33 @@ class XGBExperiment(Experiment):
         )
         return params_
 
-    def fit(self, params, X_train, y_train, sample_weight, seed=None):
+    def fit(
+        self,
+        params,
+        X_train,
+        y_train,
+        Xy_val,
+        sample_weight,
+        n_estimators=None,
+        seed=None,
+    ):
         # no categorical_features, use one-hot encoding with XGBoost
         if seed is not None:
             params.update({"seed": seed})
+        if n_estimators is not None:
+            params.update({"n_estimators": n_estimators})
         bst = xgb.XGBClassifier(**params, use_label_encoder=False, n_jobs=-1)
-        bst.fit(X_train, y_train, sample_weight=sample_weight)
-        return bst
+        bst.fit(
+            X_train,
+            y_train,
+            sample_weight=sample_weight,
+            eval_set=[Xy_val] if Xy_val is not None else None,
+            early_stopping_rounds=self.early_stopping_round
+            if Xy_val is not None
+            else None,
+            verbose=True,
+        )
+        return bst, bst.best_iteration
 
     def predict(self, bst, X_test):
         if self.learning_task == "classification":
@@ -551,6 +649,7 @@ class CABExperiment(Experiment):
         n_estimators=100,
         max_hyperopt_evals=50,
         categorical_features=None,
+        early_stopping_round=5,
         random_state=0,
         output_folder_path="./",
     ):
@@ -561,6 +660,7 @@ class CABExperiment(Experiment):
             n_estimators,
             max_hyperopt_evals,
             categorical_features,
+            early_stopping_round,
             random_state,
             output_folder_path,
         )
@@ -618,23 +718,38 @@ class CABExperiment(Experiment):
                 "n_estimators": self.n_estimators,
                 "logging_level": "Silent",
                 "allow_writing_files": False,
-                "thread_count": 16,
+                "thread_count": -1,
                 "random_seed": self.random_state,
             }
         )
         return params_
 
-    def fit(self, params, X_train, y_train, sample_weight, seed=None):
+    def fit(
+        self,
+        params,
+        X_train,
+        y_train,
+        Xy_val,
+        sample_weight,
+        n_estimators=None,
+        seed=None,
+    ):
         if seed is not None:
             params.update({"random_seed": seed})
+        if n_estimators is not None:
+            params.update({"n_estimators": n_estimators})
         bst = CatBoostClassifier(**params)
         bst.fit(
             X_train,
             y=y_train,
             sample_weight=sample_weight,
             cat_features=self.categorical_features,
+            eval_set=[Xy_val] if Xy_val is not None else None,
+            early_stopping_rounds=self.early_stopping_round
+            if Xy_val is not None
+            else None,
         )
-        return bst
+        return bst, bst.best_iteration_
 
     def predict(self, bst, X_test):
         if self.learning_task == "classification":
@@ -659,9 +774,11 @@ class LogRegExperiment(Experiment):
             max_hyperopt_evals,
             1,  # n_estimators not useful in log reg
             None,  # no categorical_feature since log reg uses one-hot
+            0,  # no early stopping
             random_state,
             output_folder_path,
         )
+        # TODO but this subclass seems not useful
         self.title = "sklearn-LogisticRegression"
 
     def run(
