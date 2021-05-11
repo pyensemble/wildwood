@@ -677,8 +677,15 @@ class ForestBase(BaseEstimator):
         else:
             self._step = val
             if self._fitted:
-                for tree in self.trees:
+                def set_step_tree(tree, val):
                     tree.step = val
+
+                Parallel(
+                    n_jobs=self.n_jobs, **_joblib_parallel_args(prefer="threads"),
+                )(
+                    delayed(set_step_tree)(tree, val)
+                    for tree in self.trees
+                )
 
     @property
     def aggregation(self):
@@ -1274,8 +1281,15 @@ class ForestClassifier(ForestBase, ClassifierMixin):
                 recompute = hasattr(self, "_dirichlet") and self._dirichlet != val
                 self._dirichlet = val
                 if self._fitted and recompute:
-                    for tree in self.trees:
+                    def set_dirichlet_tree(tree, val):
                         tree.dirichlet = val
+
+                    Parallel(
+                        n_jobs=self.n_jobs, **_joblib_parallel_args(prefer="threads"),
+                    )(
+                        delayed(set_dirichlet_tree)(tree, val)
+                        for tree in self.trees
+                    )
 
     @property
     def classes_(self):
