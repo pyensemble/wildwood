@@ -681,14 +681,14 @@ class CABExperiment(Experiment):
             # 'ctr_border_count': hp.choice('ctr_border_count', [16]),
             "border_count": hp.choice("border_count", [128]),  # max_bin
             # ctr_description
-            "simple_ctr": hp.choice("simple_ctr", [["Borders", "Counter"]]),
-            "combinations_ctr": hp.choice("combinations_ctr", [["Borders", "Counter"]]),
+            "simple_ctr": hp.choice("simple_ctr", [["Borders", "Buckets"]]),
+            "combinations_ctr": hp.choice("combinations_ctr", [["Borders", "Buckets"]]),
             "learning_rate": hp.loguniform("learning_rate", -5, 0),
             "random_strength": hp.choice("random_strength", [1, 20]),
             "one_hot_max_size": hp.choice("one_hot_max_size", [0, 25]),
             "l2_leaf_reg": hp.loguniform("l2_leaf_reg", 0, np.log(10)),
             "bagging_temperature": hp.uniform("bagging_temperature", 0, 1),
-            "used_ram_limit": hp.choice("used_ram_limit", [100000000000]),
+            # "used_ram_limit": hp.choice("used_ram_limit", [100000000000]),
         }
 
         # if learning_task == 'classification':
@@ -707,9 +707,9 @@ class CABExperiment(Experiment):
             "l2_leaf_reg": 3,
             "leaf_estimation_method": "Newton",
             # 'gradient_iterations': 10,
-            "simple_ctr": ["Borders", "Counter"],
-            "combinations_ctr": ["Borders", "Counter"],
-            "used_ram_limit": 100000000000,
+            "simple_ctr": ["Borders", "Buckets"],
+            "combinations_ctr": ["Borders", "Buckets"],
+            # "used_ram_limit": 100000000000,
         }
         self.default_params = self.preprocess_params(self.default_params)
         self.title = "CatBoost"
