@@ -41,6 +41,7 @@ from experiments.experiment import (  # noqa: E402
     LGBExperiment,
     XGBExperiment,
     CABExperiment,
+    WWExperiment
 )
 
 # from sklearn.linear_model import LogisticRegression
@@ -96,12 +97,12 @@ data_extraction = {
         "drop": None,
         "pd_df_categories": True,
     },
-    # "WildWood": {
-    #     "one_hot_encode": False,
-    #     "standardize": False,
-    #     "drop": None,
-    #     "pd_df_categories": False,
-    # },
+    "WildWood": {
+        "one_hot_encode": False,
+        "standardize": False,
+        "drop": None,
+        "pd_df_categories": True,
+    },
 }
 
 
@@ -167,6 +168,14 @@ def set_experiment(
             use_gpu=use_gpu,
             output_folder_path=output_folder_path,
         ),
+        "WildWood": WWExperiment(
+            learning_task,
+            n_estimators=n_estimators,
+            max_hyperopt_evals=max_hyperopt_eval,
+            random_state=expe_random_states,
+            output_folder_path=output_folder_path,
+        ),
+
     }
     return experiment_setting[clf_name]
 
@@ -196,15 +205,16 @@ SET UP HERE
 """
 
 clf_names = [
-    "LGBMClassifier",
-    "XGBClassifier",
-    "CatBoostClassifier",
-    "RandomForestClassifier",
-    "HistGradientBoostingClassifier",
+    # "LGBMClassifier",
+    # "XGBClassifier",
+    # "CatBoostClassifier",
+    # "RandomForestClassifier",
+    # "HistGradientBoostingClassifier",
+    "WildWood"
 ]
 # TODO: LogisticRegression
 n_estimators = 100
-max_hyperopt_eval = 10
+max_hyperopt_eval = 50
 do_class_weights = False
 early_stopping_round = 5
 use_gpu = False
