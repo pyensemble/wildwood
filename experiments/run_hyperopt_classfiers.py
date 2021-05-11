@@ -110,8 +110,10 @@ def set_experiment(
     learning_task,
     n_estimators,
     max_hyperopt_eval,
+    early_stopping_round,
     categorical_columns,
     expe_random_states,
+    use_gpu,
     output_folder_path,
 ):
     experiment_setting = {
@@ -140,23 +142,29 @@ def set_experiment(
             learning_task,
             n_estimators=n_estimators,
             max_hyperopt_evals=max_hyperopt_eval,
+            early_stopping_round=early_stopping_round,
             random_state=expe_random_states,
+            use_gpu=use_gpu,
             output_folder_path=output_folder_path,
         ),
         "LGBMClassifier": LGBExperiment(
             learning_task,
             n_estimators=n_estimators,
             max_hyperopt_evals=max_hyperopt_eval,
+            early_stopping_round=early_stopping_round,
             categorical_features=categorical_columns,
             random_state=expe_random_states,
+            use_gpu=use_gpu,
             output_folder_path=output_folder_path,
         ),
         "CatBoostClassifier": CABExperiment(
             learning_task,
             n_estimators=n_estimators,
             max_hyperopt_evals=max_hyperopt_eval,
+            early_stopping_round=early_stopping_round,
             categorical_features=categorical_columns,
             random_state=expe_random_states,
+            use_gpu=use_gpu,
             output_folder_path=output_folder_path,
         ),
     }
@@ -198,11 +206,12 @@ clf_names = [
 n_estimators = 100
 max_hyperopt_eval = 10
 do_class_weights = False
+early_stopping_round = 5
+use_gpu = False
 
 random_state_seed = 42
 fit_seeds = [0, 1, 2, 3, 4]
 
-#TODO: output path
 
 """
 SET UP HERE
@@ -275,8 +284,10 @@ for loader in loaders[:1]:
             learning_task,
             n_estimators,
             max_hyperopt_eval,
+            early_stopping_round,
             dataset.categorical_columns,
             random_states["expe_random_state"],
+            use_gpu,
             results_dataset_path
         )
 

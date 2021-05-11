@@ -43,6 +43,7 @@ class Experiment(object):
         early_stopping_round=5,
         random_state=0,
         output_folder_path="./",
+        use_gpu=False,
         verbose=True,
     ):
         self.learning_task_, self.bst_name = learning_task, bst_name
@@ -60,6 +61,7 @@ class Experiment(object):
         )  # TODO: write output
         self.default_params, self.best_params = None, None
         self.random_state = random_state
+        self.use_gpu = use_gpu
         self.verbose = verbose
         self.best_n_estimators = None
 
@@ -269,7 +271,7 @@ class RFExperiment(Experiment):
         # hard-coded params search space here TODO: check for other parameters?
         self.space = {
             "max_features": hp.choice("max_features", [None, "sqrt"]),
-            "min_samples_split": hp.choice("min_samples_split", [2, 5, 10])
+            "min_samples_split": hp.choice("min_samples_split", [2, 6, 10])
          }
         # hard-coded default params here
         self.default_params = {"max_features": "sqrt", "min_samples_split": 2}
@@ -282,7 +284,7 @@ class RFExperiment(Experiment):
             {"n_estimators": self.n_estimators,
              "random_state": self.random_state,
              "max_depth": None,
-             "min_samples_leaf": params["min_samples_split"]}
+             "min_samples_leaf": int(params["min_samples_split"]/2)}
         )
         return params_
 
@@ -407,6 +409,7 @@ class LGBExperiment(Experiment):
         categorical_features=None,
         early_stopping_round=5,
         random_state=0,
+        use_gpu=False,
         output_folder_path="./",
     ):
         Experiment.__init__(
@@ -419,6 +422,7 @@ class LGBExperiment(Experiment):
             early_stopping_round,
             random_state,
             output_folder_path,
+            use_gpu
         )
 
         # hard-coded params search space here
@@ -501,7 +505,7 @@ class LGBExperiment(Experiment):
         if n_estimators is not None:
             params.update({"n_estimators": n_estimators})
 
-        bst = lgb.LGBMClassifier(**params)
+        bst = lgb.LGBMClassifier(**params, device_type='cpu' if not self.use_gpu else 'gpu')
         bst.fit(
             X_train,
             y=y_train,
@@ -530,6 +534,7 @@ class XGBExperiment(Experiment):
         max_hyperopt_evals=50,
         early_stopping_round=5,
         random_state=0,
+        use_gpu=False,
         output_folder_path="./",
     ):
         Experiment.__init__(
@@ -542,6 +547,7 @@ class XGBExperiment(Experiment):
             early_stopping_round,
             random_state,
             output_folder_path,
+            use_gpu
         )
 
         # hard-coded params search space here
@@ -621,7 +627,8 @@ class XGBExperiment(Experiment):
             params.update({"seed": seed})
         if n_estimators is not None:
             params.update({"n_estimators": n_estimators})
-        bst = xgb.XGBClassifier(**params, use_label_encoder=False, n_jobs=-1, tree_method='hist')
+        bst = xgb.XGBClassifier(**params, use_label_encoder=False, n_jobs=-1,
+                                tree_method='hist' if not self.use_gpu else 'gpu_hist')
         bst.fit(
             X_train,
             y_train,
@@ -651,6 +658,7 @@ class CABExperiment(Experiment):
         categorical_features=None,
         early_stopping_round=5,
         random_state=0,
+        use_gpu=False,
         output_folder_path="./",
     ):
         Experiment.__init__(
@@ -663,6 +671,7 @@ class CABExperiment(Experiment):
             early_stopping_round,
             random_state,
             output_folder_path,
+            use_gpu,
         )
 
         # hard-coded params search space here
@@ -738,7 +747,7 @@ class CABExperiment(Experiment):
             params.update({"random_seed": seed})
         if n_estimators is not None:
             params.update({"n_estimators": n_estimators})
-        bst = CatBoostClassifier(**params)
+        bst = CatBoostClassifier(**params, task_type="GPU" if self.use_gpu else "CPU")
         bst.fit(
             X_train,
             y=y_train,
