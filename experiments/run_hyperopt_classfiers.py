@@ -32,6 +32,8 @@ from wildwood.datasets import (  # noqa: E402
     load_sensorless,
     load_spambase,
     load_amazon,
+    load_covtype,
+    load_kick
 )
 
 from experiments.experiment import (  # noqa: E402
@@ -101,7 +103,7 @@ data_extraction = {
         "one_hot_encode": False,
         "standardize": False,
         "drop": None,
-        "pd_df_categories": True,
+        "pd_df_categories": False,
     },
 }
 
@@ -186,16 +188,19 @@ logging.basicConfig(
 
 # TODO: add big datasets here
 loaders = [
+    # load_covtype
+    # load_amazon,
+    # load_kick,
     load_adult,
-    load_bank,
-    load_breastcancer,
+    # load_bank,
+    # load_breastcancer,
     load_car,
-    load_cardio,
-    load_churn,
-    load_default_cb,
+    # #load_cardio,
+    # load_churn,
+    # load_default_cb,
     load_letter,
     load_satimage,
-    load_sensorless,
+    # load_sensorless,
     load_spambase,
 ]
 
@@ -237,7 +242,7 @@ random_states = {
     "expe_random_state": 2 + random_state_seed,
 }
 
-for loader in loaders[:1]:
+for loader in loaders:
 
     logging.info("=" * 128)
     dataset = loader()
