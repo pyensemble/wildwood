@@ -889,14 +889,14 @@ class WWExperiment(Experiment):
         )
         # hard-coded params search space here TODO: check for other parameters?
         self.space = {
-            "multiclass": hp.choice("multiclass", ["multinomial"]),
+            "multiclass": hp.choice("multiclass", ["multinomial", "ovr"]),
             "aggregation": hp.choice("aggregation", [True, False]),
             # "class_weight" : hp.choice("class_weight", [None, "balanced"]),
             "min_samples_leaf": hp.choice("min_samples_leaf", [1, 5, 10]),
             "step": hp.loguniform("step", -3, 6),
             "dirichlet": hp.loguniform("dirichlet", -7, 2),
-            "cat_split_strategy": hp.choice("cat_split_strategy", ["binary"]),
-            "max_features": hp.choice("max_features", ["auto"]),
+            "cat_split_strategy": hp.choice("cat_split_strategy", ["binary", "all"]),
+            "max_features": hp.choice("max_features", ["auto", None]),
         }
         # hard-coded default params here
         self.default_params = {"multiclass": "multinomial",
