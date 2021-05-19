@@ -115,6 +115,7 @@ def set_experiment(
     max_hyperopt_eval,
     early_stopping_round,
     categorical_columns,
+    categorical_features,
     expe_random_states,
     use_gpu,
     output_folder_path,
@@ -137,7 +138,7 @@ def set_experiment(
             learning_task,
             n_estimators=n_estimators,
             max_hyperopt_evals=max_hyperopt_eval,
-            categorical_features=categorical_columns,
+            categorical_features=categorical_features,
             random_state=expe_random_states,
             output_folder_path=output_folder_path,
         ),
@@ -174,6 +175,7 @@ def set_experiment(
             learning_task,
             n_estimators=n_estimators,
             max_hyperopt_evals=max_hyperopt_eval,
+            categorical_features=categorical_features,
             random_state=expe_random_states,
             output_folder_path=output_folder_path,
         ),
@@ -219,7 +221,7 @@ clf_names = [
 ]
 # TODO: LogisticRegression
 n_estimators = 100
-max_hyperopt_eval = 50
+max_hyperopt_eval = 10
 do_class_weights = False
 early_stopping_round = 5
 use_gpu = False
@@ -242,7 +244,7 @@ random_states = {
     "expe_random_state": 2 + random_state_seed,
 }
 
-for loader in loaders:
+for loader in loaders[:1]:
 
     logging.info("=" * 128)
     dataset = loader()
@@ -301,6 +303,7 @@ for loader in loaders:
             max_hyperopt_eval,
             early_stopping_round,
             dataset.categorical_columns,
+            dataset.categorical_features_,
             random_states["expe_random_state"],
             use_gpu,
             results_dataset_path

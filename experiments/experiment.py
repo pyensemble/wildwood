@@ -393,7 +393,7 @@ class HGBExperiment(Experiment):
             params.update({"random_state": seed})
         if n_estimators is not None:
             params.update({"max_iter": n_estimators})
-        clf = HistGradientBoostingClassifier(**params, early_stopping="auto")
+        clf = HistGradientBoostingClassifier(**params, categorical_features=self.categorical_features, early_stopping="auto")
         clf.fit(X_train, y_train, sample_weight=sample_weight)
         return clf, None
 
@@ -866,7 +866,6 @@ class LogRegExperiment(Experiment):
         return clf
 
 
-
 class WWExperiment(Experiment):
     def __init__(
             self,
@@ -890,24 +889,24 @@ class WWExperiment(Experiment):
         )
         # hard-coded params search space here TODO: check for other parameters?
         self.space = {
-            "multiclass" : hp.choice("multiclass", ["multinomial", "ovr"]),
-            "aggregation" : hp.choice("aggregation", [True, False]),
-            #"class_weight" : hp.choice("class_weight", [None, "balanced"]),
-            "min_samples_leaf" : hp.choice("min_samples_leaf", [1, 5, 10]),
-            "step" : hp.loguniform("step", -3, 6),
-            "dirichlet" : hp.loguniform("dirichlet", -7, 2),
-            "cat_split_strategy" : hp.choice("cat_split_strategy", ["binary", "all"]),
-            "max_features": hp.choice("max_features", [None, "auto"]),
+            "multiclass": hp.choice("multiclass", ["multinomial"]),
+            "aggregation": hp.choice("aggregation", [True, False]),
+            # "class_weight" : hp.choice("class_weight", [None, "balanced"]),
+            "min_samples_leaf": hp.choice("min_samples_leaf", [1, 5, 10]),
+            "step": hp.loguniform("step", -3, 6),
+            "dirichlet": hp.loguniform("dirichlet", -7, 2),
+            "cat_split_strategy": hp.choice("cat_split_strategy", ["binary"]),
+            "max_features": hp.choice("max_features", ["auto"]),
         }
         # hard-coded default params here
-        self.default_params = {"multiclass" : "multinomial",
-                               "aggregation" : True,
-                               "class_weight" : None,
-                               "min_samples_leaf" : 1,
-                               "step" : 1.0,
-                               "dirichlet" : 0.5,
-                               "cat_split_strategy" : "binary",
-                               "max_features" : "auto"
+        self.default_params = {"multiclass": "multinomial",
+                               "aggregation": True,
+                               "class_weight": None,
+                               "min_samples_leaf": 1,
+                               "step": 1.0,
+                               "dirichlet": 0.5,
+                               "cat_split_strategy": "binary",
+                               "max_features": "auto"
                                }
         self.default_params = self.preprocess_params(self.default_params)
         self.title = "WildWood"
@@ -915,7 +914,9 @@ class WWExperiment(Experiment):
     def preprocess_params(self, params):
         params_ = params.copy()
         params_.update(
-            {"n_estimators": self.n_estimators, "random_state": self.random_state, "min_samples_split" : 2*params_["min_samples_leaf"]}
+            {"n_estimators": self.n_estimators,
+             "random_state": self.random_state,
+             "min_samples_split": 2*params_["min_samples_leaf"]}
         )
         return params_
 
