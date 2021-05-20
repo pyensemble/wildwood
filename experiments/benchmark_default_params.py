@@ -22,7 +22,7 @@ from sklearn.ensemble import RandomForestClassifier
 sys.path.extend([".", ".."])
 
 from wildwood.datasets import (  # noqa: E402
-    load_adult,
+    # load_adult,
     # load_bank,
     # load_breastcancer,
     # load_car,
@@ -34,8 +34,8 @@ from wildwood.datasets import (  # noqa: E402
     # load_sensorless,
     # load_spambase,
     # load_amazon,
-    # load_covtype,
-    # load_higgs,
+    load_covtype,
+    load_higgs,
     # load_kddcup
 )
 from wildwood.forest import ForestClassifier
@@ -56,7 +56,7 @@ logging.basicConfig(
 )
 
 loaders = [
-    load_adult,
+    # load_adult,
     # load_bank,
     # load_breastcancer,
     # load_car,
@@ -67,14 +67,14 @@ loaders = [
     # load_satimage,
     # load_sensorless,
     # load_spambase,
-    # load_covtype,
+    load_covtype,
     # load_higgs,
     # load_kddcup
 ]
 
 # TODO: wildwood avec et sans aggregation ?
 
-random_state = 42
+# random_state = 42
 
 
 def fit_kwargs_generator(clf_name, dataset):
@@ -94,15 +94,17 @@ def fit_kwargs_generator(clf_name, dataset):
         print("ERROR : NOT Found : ", clf_name)
 
 
-
 def set_classifier(clf_name, categorical_features, fit_seed, n_jobs=-1):
     classifier_setting = {
-        "RandomForestClassifier": RandomForestClassifier(n_jobs=n_jobs, random_state=fit_seed),
+        "RandomForestClassifier10": RandomForestClassifier(n_estimators=10, n_jobs=n_jobs, random_state=fit_seed),
+        "RandomForestClassifier100": RandomForestClassifier(n_estimators=100, n_jobs=n_jobs, random_state=fit_seed),
         "HistGradientBoostingClassifier": HistGradientBoostingClassifier(categorical_features=categorical_features, random_state=fit_seed),
-        "XGBClassifier": xgb.XGBClassifier(use_label_encoder=False, n_jobs=n_jobs, random_state=fit_seed),
+        "XGBClassifier": xgb.XGBClassifier(use_label_encoder=False, n_jobs=n_jobs, tree_method='hist', random_state=fit_seed),
         "LGBMClassifier": lgb.LGBMClassifier(n_jobs=n_jobs, random_state=fit_seed),
-        "CatBoostClassifier": CatBoostClassifier(thread_count=n_jobs, random_state=fit_seed),
-        "WildWood": ForestClassifier(n_jobs=n_jobs, random_state=fit_seed),
+        "CatBoostClassifier": CatBoostClassifier(thread_count=n_jobs, random_state=fit_seed,
+                                                 logging_level="Silent", allow_writing_files=False,),
+        "WildWood10": ForestClassifier(n_estimators=10, n_jobs=n_jobs, random_state=fit_seed),
+        "WildWood100": ForestClassifier(n_estimators=100, n_jobs=n_jobs, random_state=fit_seed),
     }
     return classifier_setting[clf_name]
 
@@ -150,12 +152,23 @@ clf_names = [
     "LGBMClassifier",
     "XGBClassifier",
     "CatBoostClassifier",
-    "RandomForestClassifier",
+    "RandomForestClassifier10",
+    "RandomForestClassifier100",
     "HistGradientBoostingClassifier",
-    "WildWood"
+    "WildWood10",
+    "WildWood100"
 ]
 
-n_estimators = 100
+
+def clf_name_to_extract_key(clf_name):
+    if clf_name == "WildWood10" or clf_name == "WildWood100":
+        return "WildWood"
+    elif clf_name == "RandomForestClassifier10" or clf_name == "RandomForestClassifier100":
+        return "RandomForestClassifier"
+    else:
+        return clf_name
+
+# n_estimators = 100
 
 random_state_seed = 42
 fit_seeds = [0, 1, 2, 3, 4]
@@ -209,7 +222,7 @@ for loader in loaders:
     col_repeat = []
 
     for clf_name in clf_names:
-        for key, val in data_extraction[clf_name].items():
+        for key, val in data_extraction[clf_name_to_extract_key(clf_name)].items():
             setattr(dataset, key, val)
 
         X_train, X_test, y_train, y_test = dataset.extract(
@@ -227,7 +240,7 @@ for loader in loaders:
             clf.fit(
                 X_train,
                 y_train,
-                **fit_kwargs_generator(clf_name, dataset)
+                **fit_kwargs_generator(clf_name_to_extract_key(clf_name), dataset)
             )
             toc = timer()
             fit_time = toc - tic
