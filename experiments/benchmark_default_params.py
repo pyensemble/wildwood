@@ -67,8 +67,8 @@ loaders = [
     # load_satimage,
     # load_sensorless,
     # load_spambase,
-    load_covtype,
-    # load_higgs,
+    # load_covtype,
+    load_higgs,
     # load_kddcup
 ]
 
@@ -99,7 +99,7 @@ def set_classifier(clf_name, categorical_features, fit_seed, n_jobs=-1):
         "RandomForestClassifier10": RandomForestClassifier(n_estimators=10, n_jobs=n_jobs, random_state=fit_seed),
         "RandomForestClassifier100": RandomForestClassifier(n_estimators=100, n_jobs=n_jobs, random_state=fit_seed),
         "HistGradientBoostingClassifier": HistGradientBoostingClassifier(categorical_features=categorical_features, random_state=fit_seed),
-        "XGBClassifier": xgb.XGBClassifier(use_label_encoder=False, n_jobs=n_jobs, tree_method='hist', random_state=fit_seed),
+        "XGBClassifier": xgb.XGBClassifier(use_label_encoder=False, n_jobs=n_jobs, tree_method='hist', seed=fit_seed),
         "LGBMClassifier": lgb.LGBMClassifier(n_jobs=n_jobs, random_state=fit_seed),
         "CatBoostClassifier": CatBoostClassifier(thread_count=n_jobs, random_state=fit_seed,
                                                  logging_level="Silent", allow_writing_files=False,),
@@ -234,7 +234,7 @@ for loader in loaders:
         for rep, fit_seed in enumerate(fit_seeds):
             clf = set_classifier(clf_name, dataset.categorical_features_, fit_seed)
 
-            if clf_name == "WildWood":
+            if clf_name_to_extract_key(clf_name) == "WildWood":
                 clf.fit(X_train[:100], y_train[:100])
             tic = timer()
             clf.fit(
