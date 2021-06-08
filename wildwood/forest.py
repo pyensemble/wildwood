@@ -911,7 +911,7 @@ class ForestClassifier(ForestBase, ClassifierMixin):
 
     Parameters
     ----------
-    n_estimators : int, default=100
+    n_estimators : int, default=10
         The number of trees in the forest.
 
     criterion : {"gini", "entropy"}, default="gini"
@@ -1031,7 +1031,7 @@ class ForestClassifier(ForestBase, ClassifierMixin):
     def __init__(
         self,
         *,
-        n_estimators: int = 100,
+        n_estimators: int = 10,
         criterion: str = "gini",
         loss: str = "log",
         step: float = 1.0,
@@ -1373,7 +1373,7 @@ class ForestRegressor(ForestBase, RegressorMixin):
 
     Parameters
     ----------
-    n_estimators : int, default=100
+    n_estimators : int, default=10
         The number of trees in the forest.
 
     criterion : {"mse"}, default="mse"
@@ -1470,7 +1470,7 @@ class ForestRegressor(ForestBase, RegressorMixin):
     def __init__(
         self,
         *,
-        n_estimators: int = 100,
+        n_estimators: int = 10,
         criterion: str = "mse",
         loss: str = "mse",
         step: float = 1.0,

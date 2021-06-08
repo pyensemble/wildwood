@@ -114,7 +114,7 @@ class TestForestClassifier(object):
 
     def test_n_estimators(self):
         clf = ForestClassifier()
-        assert clf.n_estimators == 100
+        assert clf.n_estimators == 10
         clf = ForestClassifier(n_estimators=17)
         assert clf.n_estimators == 17
         clf.n_estimators = 42
