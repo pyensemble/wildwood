@@ -26,8 +26,8 @@ import xgboost as xgb
 from catboost import CatBoostClassifier
 
 sys.path.extend([".", ".."])
+from wildwood.forest import ForestClassifier  # noqa: E402
 
-from wildwood.forest import ForestClassifier
 
 # TODO: to add regressors for every Experiment
 
@@ -62,8 +62,8 @@ class Experiment(object):
         self.early_stopping_round = early_stopping_round
         self.hyperopt_evals, self.hyperopt_eval_num = hyperopt_evals, 0
         self.output_folder_path = os.path.join(
-            output_folder_path, ""  # TODO: put dataset name
-        )  # TODO: write output
+            output_folder_path, ""
+        )
         self.default_params, self.best_params = None, None
         self.random_state = random_state
         self.use_gpu = use_gpu
@@ -115,7 +115,6 @@ class Experiment(object):
 
         self.best_params = self.trials.best_trial["result"]["params"]
         self.best_n_estimators = self.trials.best_trial["result"]["best_n_estimators"]
-        # TODO: recupere best_n_estimators ici
         if self.verbose:
             now = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
             filename = (
@@ -273,7 +272,7 @@ class RFExperiment(Experiment):
             output_folder_path,
         )
 
-        # hard-coded params search space here TODO: check for other parameters?
+        # hard-coded params search space here
         self.space = {
             "max_features": hp.choice("max_features", [None, "sqrt"]),
             "min_samples_split": hp.choice("min_samples_split", [2, 6, 10])
@@ -514,7 +513,7 @@ class LGBExperiment(Experiment):
         bst.fit(
             X_train,
             y=y_train,
-            categorical_feature="auto",  # We do not use `self.categorical_features` actually,
+            categorical_feature="auto",  # We do not use `self.categorical_features` actually, cat features are category
             sample_weight=sample_weight,
             eval_set=[Xy_val] if Xy_val is not None else None,
             early_stopping_rounds=self.early_stopping_round
@@ -680,7 +679,6 @@ class CABExperiment(Experiment):
         )
 
         # hard-coded params search space here
-        # TODO: check these params, and params in catboost paper
         self.space = {
             "depth": hp.choice("depth", [6]),
             # 'ctr_border_count': hp.choice('ctr_border_count', [16]),
@@ -695,11 +693,6 @@ class CABExperiment(Experiment):
             "bagging_temperature": hp.uniform("bagging_temperature", 0, 1),
             "used_ram_limit": hp.choice("used_ram_limit", [100000000000]),
         }
-
-        # if learning_task == 'classification':
-        #     self.space.update({
-        #         'gradient_iterations': hp.choice('gradient_iterations', [1, 10])
-        #     })
 
         # hard-coded default params here
         self.default_params = {
@@ -772,98 +765,98 @@ class CABExperiment(Experiment):
             preds = np.array(bst.predict(X_test))
         return preds
 
-
-class LogRegExperiment(Experiment):
-    def __init__(
-        self,
-        learning_task,
-        max_hyperopt_evals=50,
-        random_state=0,
-        output_folder_path="./",
-    ):
-        Experiment.__init__(
-            self,
-            learning_task,
-            "logreg",
-            max_hyperopt_evals,
-            1,  # n_estimators not useful in log reg
-            None,  # no categorical_feature since log reg uses one-hot
-            0,  # no early stopping
-            random_state,
-            output_folder_path,
-        )
-        # TODO but this subclass seems not useful
-        self.title = "sklearn-LogisticRegression"
-
-    def run(
-        self,
-        X_train,
-        y_train,
-        X_val,
-        y_val,
-        sample_weight,
-        params=None,
-        n_estimators=None,
-        verbose=False,
-    ):
-        clf = LogisticRegression(
-            C=1.0,
-            penalty="l2",
-            n_jobs=-1,
-            solver="saga",
-            verbose=0,
-            max_iter=100,
-        )
-        start_time = time.time()
-        clf.fit(X_train, y_train, sample_weight=sample_weight)
-        fit_time = time.time() - start_time
-        y_scores = clf.predict_proba(X_val)
-        evals_result = log_loss(y_val, y_scores)
-        y_pred = np.argmax(y_scores, axis=1)
-        results = {
-            "loss": evals_result,
-            "fit_time": fit_time,
-            # "params": params.copy(),  # TODO
-        }
-        roc_auc = roc_auc_score(y_val, y_scores[:, 1])
-        roc_auc_weighted = roc_auc
-        avg_precision_score = average_precision_score(y_val, y_scores[:, 1])
-        avg_precision_score_weighted = avg_precision_score
-        log_loss_ = log_loss(y_val, y_scores)
-        accuracy = accuracy_score(y_val, y_pred)
-        results.update(
-            {
-                "roc_auc": roc_auc,
-                "roc_auc_weighted": roc_auc_weighted,
-                "avg_precision_score": avg_precision_score,
-                "avg_precision_score_weighted": avg_precision_score_weighted,
-                "log_loss": log_loss_,
-                "accuracy": accuracy,
-            }
-        )
-        return results
-
-    def optimize_params(
-        self,
-        X_train,
-        y_train,
-        X_val,
-        y_val,
-        sample_weight,
-        max_evals=None,
-        verbose=True,
-    ):
-        clf = LogisticRegressionCV(
-            Cs=self.hyperopt_evals,
-            penalty="l2",
-            n_jobs=-1,
-            solver="lbfgs",  # saga
-            verbose=1,
-            max_iter=500,
-            class_weight="balanced",
-        )
-        clf.fit(X_train, y_train)  # sample_weight=sample_weight
-        return clf
+#
+# class LogRegExperiment(Experiment):
+#     def __init__(
+#         self,
+#         learning_task,
+#         max_hyperopt_evals=50,
+#         random_state=0,
+#         output_folder_path="./",
+#     ):
+#         Experiment.__init__(
+#             self,
+#             learning_task,
+#             "logreg",
+#             max_hyperopt_evals,
+#             1,  # n_estimators not useful in log reg
+#             None,  # no categorical_feature since log reg uses one-hot
+#             0,  # no early stopping
+#             random_state,
+#             output_folder_path,
+#         )
+#         # TODO but this subclass seems not useful
+#         self.title = "sklearn-LogisticRegression"
+#
+#     def run(
+#         self,
+#         X_train,
+#         y_train,
+#         X_val,
+#         y_val,
+#         sample_weight,
+#         params=None,
+#         n_estimators=None,
+#         verbose=False,
+#     ):
+#         clf = LogisticRegression(
+#             C=1.0,
+#             penalty="l2",
+#             n_jobs=-1,
+#             solver="saga",
+#             verbose=0,
+#             max_iter=100,
+#         )
+#         start_time = time.time()
+#         clf.fit(X_train, y_train, sample_weight=sample_weight)
+#         fit_time = time.time() - start_time
+#         y_scores = clf.predict_proba(X_val)
+#         evals_result = log_loss(y_val, y_scores)
+#         y_pred = np.argmax(y_scores, axis=1)
+#         results = {
+#             "loss": evals_result,
+#             "fit_time": fit_time,
+#             # "params": params.copy(),  # TODO
+#         }
+#         roc_auc = roc_auc_score(y_val, y_scores[:, 1])
+#         roc_auc_weighted = roc_auc
+#         avg_precision_score = average_precision_score(y_val, y_scores[:, 1])
+#         avg_precision_score_weighted = avg_precision_score
+#         log_loss_ = log_loss(y_val, y_scores)
+#         accuracy = accuracy_score(y_val, y_pred)
+#         results.update(
+#             {
+#                 "roc_auc": roc_auc,
+#                 "roc_auc_weighted": roc_auc_weighted,
+#                 "avg_precision_score": avg_precision_score,
+#                 "avg_precision_score_weighted": avg_precision_score_weighted,
+#                 "log_loss": log_loss_,
+#                 "accuracy": accuracy,
+#             }
+#         )
+#         return results
+#
+#     def optimize_params(
+#         self,
+#         X_train,
+#         y_train,
+#         X_val,
+#         y_val,
+#         sample_weight,
+#         max_evals=None,
+#         verbose=True,
+#     ):
+#         clf = LogisticRegressionCV(
+#             Cs=self.hyperopt_evals,
+#             penalty="l2",
+#             n_jobs=-1,
+#             solver="lbfgs",  # saga
+#             verbose=1,
+#             max_iter=500,
+#             class_weight="balanced",
+#         )
+#         clf.fit(X_train, y_train)  # sample_weight=sample_weight
+#         return clf
 
 
 class WWExperiment(Experiment):
@@ -887,7 +880,7 @@ class WWExperiment(Experiment):
             random_state,
             output_folder_path,
         )
-        # hard-coded params search space here TODO: check for other parameters?
+        # hard-coded params search space here
         self.space = {
             "multiclass": hp.choice("multiclass", ["multinomial", "ovr"]),
             "aggregation": hp.choice("aggregation", [True, False]),
@@ -937,7 +930,6 @@ class WWExperiment(Experiment):
         clf = ForestClassifier(**params, n_jobs=-1)
         clf.fit(X_train, y_train, sample_weight=sample_weight, categorical_features=self.categorical_features)
         return clf, None
-
 
     def predict(self, bst, X_test):
         if self.learning_task == "classification":

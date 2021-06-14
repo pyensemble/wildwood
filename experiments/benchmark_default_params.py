@@ -33,10 +33,12 @@ from wildwood.datasets import (  # noqa: E402
     # load_satimage,
     # load_sensorless,
     # load_spambase,
-    # load_amazon,
+    load_amazon,
     load_covtype,
     load_higgs,
-    # load_kddcup
+    load_kddcup99,
+    load_kick,
+    load_internet,
 )
 from wildwood.forest import ForestClassifier
 
@@ -68,8 +70,11 @@ loaders = [
     # load_sensorless,
     # load_spambase,
     # load_covtype,
-    load_higgs,
-    # load_kddcup
+    # load_higgs,
+    # load_kddcup99,
+    # load_amazon,
+    load_kick,
+    # load_internet,
 ]
 
 # TODO: wildwood avec et sans aggregation ?
@@ -85,7 +90,7 @@ def fit_kwargs_generator(clf_name, dataset):
     elif clf_name == "XGBClassifier":
         return {}
     elif clf_name == "CatBoostClassifier":
-        return {"cat_features": dataset.categorical_columns, "verbose":False}
+        return {"cat_features": dataset.categorical_columns, "verbose": False}
     elif clf_name == "LGBMClassifier":
         return {"categorical_feature": "auto"}
     elif clf_name == "HistGradientBoostingClassifier":
@@ -98,8 +103,8 @@ def set_classifier(clf_name, categorical_features, fit_seed, n_jobs=-1):
     classifier_setting = {
         "RandomForestClassifier10": RandomForestClassifier(n_estimators=10, n_jobs=n_jobs, random_state=fit_seed),
         "RandomForestClassifier100": RandomForestClassifier(n_estimators=100, n_jobs=n_jobs, random_state=fit_seed),
-        "HistGradientBoostingClassifier": HistGradientBoostingClassifier(categorical_features=categorical_features, random_state=fit_seed),
-        "XGBClassifier": xgb.XGBClassifier(use_label_encoder=False, n_jobs=n_jobs, tree_method='hist', seed=fit_seed),
+        "HistGradientBoostingClassifier": HistGradientBoostingClassifier(random_state=fit_seed),
+        "XGBClassifier": xgb.XGBClassifier(use_label_encoder=False, n_jobs=n_jobs, tree_method='hist', random_state=fit_seed, seed=fit_seed),
         "LGBMClassifier": lgb.LGBMClassifier(n_jobs=n_jobs, random_state=fit_seed),
         "CatBoostClassifier": CatBoostClassifier(thread_count=n_jobs, random_state=fit_seed,
                                                  logging_level="Silent", allow_writing_files=False,),
@@ -149,14 +154,14 @@ data_extraction = {
 }
 
 clf_names = [
-    "LGBMClassifier",
+    # "LGBMClassifier",
     "XGBClassifier",
-    "CatBoostClassifier",
-    "RandomForestClassifier10",
-    "RandomForestClassifier100",
-    "HistGradientBoostingClassifier",
-    "WildWood10",
-    "WildWood100"
+    # "CatBoostClassifier",
+    # "RandomForestClassifier10",
+    # "RandomForestClassifier100",
+    # "HistGradientBoostingClassifier",
+    # "WildWood10",
+    # "WildWood100"
 ]
 
 
@@ -222,12 +227,50 @@ for loader in loaders:
     col_repeat = []
 
     for clf_name in clf_names:
+        dataset = loader()
         for key, val in data_extraction[clf_name_to_extract_key(clf_name)].items():
             setattr(dataset, key, val)
 
         X_train, X_test, y_train, y_test = dataset.extract(
             random_state=random_states["data_extract_random_state"]
         )
+
+        ########
+        ## drop to few occurence classes in kddcup
+        ########
+        if dataset.name == 'kddcup':
+            from collections import Counter
+
+            c = Counter(y_train)
+            classes_to_drop = [key for (key, val) in dict(c).items() if val < 20]
+
+            drop_mask_train = np.isin(y_train, classes_to_drop)
+            print("Drop %4d samples in train set" % drop_mask_train.sum())
+            X_train = X_train[(~ drop_mask_train)]
+            y_train = y_train[(~ drop_mask_train)]
+
+            drop_mask_test = np.isin(y_test, classes_to_drop)
+            print("Drop %4d samples in test set" % drop_mask_test.sum())
+            X_test = X_test[(~ drop_mask_test)]
+            y_test = y_test[(~ drop_mask_test)]
+
+            from sklearn.preprocessing import LabelEncoder
+
+            le = LabelEncoder()
+            y_train = le.fit_transform(y_train)
+            y_test = le.transform(y_test)
+
+        ########
+        ## deal with nan in kick
+        ########
+        if dataset.name == 'kick' and clf_name in [
+                "RandomForestClassifier10", "RandomForestClassifier100",
+                "HistGradientBoostingClassifier", "WildWood10", "WildWood100"]:
+            X_train = np.nan_to_num(X_train)
+            X_test = np.nan_to_num(X_test)
+        ########
+        ## END deal with nan in kick
+        ########
 
         print("Run fitting with " + clf_name + " ...")
 
