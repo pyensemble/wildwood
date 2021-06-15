@@ -61,9 +61,7 @@ class Experiment(object):
         self.categorical_features = categorical_features
         self.early_stopping_round = early_stopping_round
         self.hyperopt_evals, self.hyperopt_eval_num = hyperopt_evals, 0
-        self.output_folder_path = os.path.join(
-            output_folder_path, ""
-        )
+        self.output_folder_path = os.path.join(output_folder_path, "")
         self.default_params, self.best_params = None, None
         self.random_state = random_state
         self.use_gpu = use_gpu
@@ -275,8 +273,8 @@ class RFExperiment(Experiment):
         # hard-coded params search space here
         self.space = {
             "max_features": hp.choice("max_features", [None, "sqrt"]),
-            "min_samples_split": hp.choice("min_samples_split", [2, 6, 10])
-         }
+            "min_samples_split": hp.choice("min_samples_split", [2, 6, 10]),
+        }
         # hard-coded default params here
         self.default_params = {"max_features": "sqrt", "min_samples_split": 2}
         self.default_params = self.preprocess_params(self.default_params)
@@ -285,10 +283,12 @@ class RFExperiment(Experiment):
     def preprocess_params(self, params):
         params_ = params.copy()
         params_.update(
-            {"n_estimators": self.n_estimators,
-             "random_state": self.random_state,
-             "max_depth": None,
-             "min_samples_leaf": int(params["min_samples_split"]/2)}
+            {
+                "n_estimators": self.n_estimators,
+                "random_state": self.random_state,
+                "max_depth": None,
+                "min_samples_leaf": int(params["min_samples_split"] / 2),
+            }
         )
         return params_
 
@@ -373,7 +373,11 @@ class HGBExperiment(Experiment):
 
         params_["max_leaf_nodes"] = max(int(params_["max_leaf_nodes"]), 2)
         params_.update(
-            {"max_iter": self.n_estimators, "random_state": self.random_state, "max_depth": None}
+            {
+                "max_iter": self.n_estimators,
+                "random_state": self.random_state,
+                "max_depth": None,
+            }
         )
         return params_
 
@@ -392,7 +396,11 @@ class HGBExperiment(Experiment):
             params.update({"random_state": seed})
         if n_estimators is not None:
             params.update({"max_iter": n_estimators})
-        clf = HistGradientBoostingClassifier(**params, categorical_features=self.categorical_features, early_stopping="auto")
+        clf = HistGradientBoostingClassifier(
+            **params,
+            categorical_features=self.categorical_features,
+            early_stopping="auto"
+        )
         clf.fit(X_train, y_train, sample_weight=sample_weight)
         return clf, None
 
@@ -426,7 +434,7 @@ class LGBExperiment(Experiment):
             early_stopping_round,
             random_state,
             output_folder_path,
-            use_gpu
+            use_gpu,
         )
 
         # hard-coded params search space here
@@ -509,7 +517,9 @@ class LGBExperiment(Experiment):
         if n_estimators is not None:
             params.update({"n_estimators": n_estimators})
 
-        bst = lgb.LGBMClassifier(**params, device_type='cpu' if not self.use_gpu else 'gpu')
+        bst = lgb.LGBMClassifier(
+            **params, device_type="cpu" if not self.use_gpu else "gpu"
+        )
         bst.fit(
             X_train,
             y=y_train,
@@ -551,7 +561,7 @@ class XGBExperiment(Experiment):
             early_stopping_round,
             random_state,
             output_folder_path,
-            use_gpu
+            use_gpu,
         )
 
         # hard-coded params search space here
@@ -631,8 +641,12 @@ class XGBExperiment(Experiment):
             params.update({"seed": seed})
         if n_estimators is not None:
             params.update({"n_estimators": n_estimators})
-        bst = xgb.XGBClassifier(**params, use_label_encoder=False, n_jobs=-1,
-                                tree_method='hist' if not self.use_gpu else 'gpu_hist')
+        bst = xgb.XGBClassifier(
+            **params,
+            use_label_encoder=False,
+            n_jobs=-1,
+            tree_method="hist" if not self.use_gpu else "gpu_hist"
+        )
         bst.fit(
             X_train,
             y_train,
@@ -765,6 +779,7 @@ class CABExperiment(Experiment):
             preds = np.array(bst.predict(X_test))
         return preds
 
+
 #
 # class LogRegExperiment(Experiment):
 #     def __init__(
@@ -861,13 +876,13 @@ class CABExperiment(Experiment):
 
 class WWExperiment(Experiment):
     def __init__(
-            self,
-            learning_task,
-            n_estimators=100,
-            max_hyperopt_evals=50,
-            categorical_features=None,
-            random_state=0,
-            output_folder_path="./",
+        self,
+        learning_task,
+        n_estimators=100,
+        max_hyperopt_evals=50,
+        categorical_features=None,
+        random_state=0,
+        output_folder_path="./",
     ):
         Experiment.__init__(
             self,
@@ -892,24 +907,27 @@ class WWExperiment(Experiment):
             "max_features": hp.choice("max_features", ["auto", None]),
         }
         # hard-coded default params here
-        self.default_params = {"multiclass": "multinomial",
-                               "aggregation": True,
-                               "class_weight": None,
-                               "min_samples_leaf": 1,
-                               "step": 1.0,
-                               "dirichlet": 0.5,
-                               "cat_split_strategy": "binary",
-                               "max_features": "auto"
-                               }
+        self.default_params = {
+            "multiclass": "multinomial",
+            "aggregation": True,
+            "class_weight": None,
+            "min_samples_leaf": 1,
+            "step": 1.0,
+            "dirichlet": 0.5,
+            "cat_split_strategy": "binary",
+            "max_features": "auto",
+        }
         self.default_params = self.preprocess_params(self.default_params)
         self.title = "WildWood"
 
     def preprocess_params(self, params):
         params_ = params.copy()
         params_.update(
-            {"n_estimators": self.n_estimators,
-             "random_state": self.random_state,
-             "min_samples_split": 2*params_["min_samples_leaf"]}
+            {
+                "n_estimators": self.n_estimators,
+                "random_state": self.random_state,
+                "min_samples_split": 2 * params_["min_samples_leaf"],
+            }
         )
         return params_
 
@@ -928,7 +946,12 @@ class WWExperiment(Experiment):
         if n_estimators is not None:
             params.update({"n_estimators": n_estimators})
         clf = ForestClassifier(**params, n_jobs=-1)
-        clf.fit(X_train, y_train, sample_weight=sample_weight, categorical_features=self.categorical_features)
+        clf.fit(
+            X_train,
+            y_train,
+            sample_weight=sample_weight,
+            categorical_features=self.categorical_features,
+        )
         return clf, None
 
     def predict(self, bst, X_test):
@@ -937,5 +960,3 @@ class WWExperiment(Experiment):
         else:
             preds = bst.predict(X_test)
         return preds
-
-

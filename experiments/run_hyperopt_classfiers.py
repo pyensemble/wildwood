@@ -49,13 +49,6 @@ from experiments.experiment import (  # noqa: E402
     WWExperiment,
 )
 
-# from sklearn.linear_model import LogisticRegression
-# from sklearn.ensemble import RandomForestClassifier
-# import xgboost as xgb
-# from catboost import CatBoostClassifier
-# import lightgbm as lgb
-# from wildwood.forest import ForestClassifier
-
 
 def get_train_sample_weights(labels, n_classes):
     # TODO: maybe put this function in _utils.py?
@@ -186,6 +179,29 @@ def set_experiment(
     return experiment_setting[clf_name]
 
 
+def set_dataloader(dataset_name):
+    loaders_mapping = {
+        "adult": load_adult,
+        "bank": load_bank,
+        "breastcancer": load_breastcancer,
+        "car": load_car,
+        "cardio": load_cardio,
+        "churn": load_churn,
+        "default-cb": load_default_cb,
+        "letter": load_letter,
+        "satimage": load_satimage,
+        "sensorless": load_sensorless,
+        "spambase": load_spambase,
+        "amazon": load_amazon,
+        "covtype": load_covtype,
+        "internet": load_internet,
+        "kick": load_kick,
+        "kddcup": load_kddcup99,
+        "higgs": load_higgs,
+    }
+    return loaders_mapping[dataset_name]
+
+
 def run_hyperopt(
     dataset,
     clf_name,
@@ -225,6 +241,42 @@ def run_hyperopt(
     X_train, X_test, y_train, y_test = dataset.extract(
         random_state=random_states["data_extract_random_state"]
     )
+
+    # drop to few occurrence classes in kddcup
+    if dataset.name == "kddcup":
+        from collections import Counter
+
+        c = Counter(y_train)
+        classes_to_drop = [key for (key, val) in dict(c).items() if val < 20]
+
+        drop_mask_train = np.isin(y_train, classes_to_drop)
+        print("Drop %4d samples in train set" % drop_mask_train.sum())
+        X_train = X_train[(~drop_mask_train)]
+        y_train = y_train[(~drop_mask_train)]
+
+        drop_mask_test = np.isin(y_test, classes_to_drop)
+        print("Drop %4d samples in test set" % drop_mask_test.sum())
+        X_test = X_test[(~drop_mask_test)]
+        y_test = y_test[(~drop_mask_test)]
+
+        from sklearn.preprocessing import LabelEncoder
+
+        le = LabelEncoder()
+        y_train = le.fit_transform(y_train)
+        y_test = le.transform(y_test)
+
+    # deal with nan in kick
+    elif dataset.name == "kick" and clf_name in [
+        "RandomForestClassifier10",
+        "RandomForestClassifier100",
+        "HistGradientBoostingClassifier",
+        "WildWood10",
+        "WildWood100",
+    ]:
+        X_train = np.nan_to_num(X_train)
+        X_test = np.nan_to_num(X_test)
+    # END special cases
+
     X_tr, X_val, y_tr, y_val = train_test_split(
         X_train,
         y_train,
@@ -451,29 +503,6 @@ def run_hyperopt(
     return results
 
 
-def set_dataloader(dataset_name):
-    loaders_mapping = {
-        "adult": load_adult,
-        "bank": load_bank,
-        "breastcancer": load_breastcancer,
-        "car": load_car,
-        "cardio": load_cardio,
-        "churn": load_churn,
-        "default-cb": load_default_cb,
-        "letter": load_letter,
-        "satimage": load_satimage,
-        "sensorless": load_sensorless,
-        "spambase": load_spambase,
-        "amazon": load_amazon,
-        "covtype": load_covtype,
-        "internet": load_internet,
-        "kick": load_kick,
-        "kddcup": load_kddcup99,
-        "higgs": load_higgs,
-    }
-    return loaders_mapping[dataset_name]
-
-
 if __name__ == "__main__":
 
     logging.basicConfig(
@@ -527,6 +556,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     clf_name = args.clf_name
+    loader = set_dataloader(args.dataset_name)
     n_estimators = args.n_estimators
     max_hyperopt_eval = args.hyperopt_evals
     do_class_weights = args.do_class_weights
@@ -547,8 +577,6 @@ if __name__ == "__main__":
         "expe_random_state": 2 + random_state_seed,
     }
     fit_seeds = [0, 1, 2, 3, 4]
-
-    loader = set_dataloader(args.dataset_name)
 
     logging.info("=" * 128)
     dataset = loader()
