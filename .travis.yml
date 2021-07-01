@@ -1,8 +1,6 @@
 language: python
 python:
-  - "3.6"
   - "3.7"
-  - "3.8"
 install:
   - pip install --upgrade pip
   - pip install poetry
@@ -10,7 +8,7 @@ install:
 script:
   - pytest -v
 #  - NUMBA_DISABLE_JIT=1 pytest -v --cov=wildwood tests/
-after_success: coveralls
+# after_success: coveralls
 cache:
   pip: true
   directories:

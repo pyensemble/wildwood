@@ -18,7 +18,7 @@ https://en.wikipedia.org/wiki/Bitwise_operation
 
 from math import ceil, floor
 import numpy as np
-from numba import jit, void, uint8, uint16, uint32, uint64
+from numba import jit, void, uint8, int8, uint16, int16, uint32, int32, uint64, int64
 from numba.experimental import jitclass
 from .._utils import get_type
 
@@ -27,6 +27,7 @@ from .._utils import get_type
 NOPYTHON = True
 NOGIL = True
 BOUNDSCHECK = False
+CACHE = True
 
 
 _UINT8_MAX = np.iinfo(np.uint8).max
@@ -148,20 +149,64 @@ class Dataset(object):
 DatasetType = get_type(Dataset)
 
 
+numba_int_types = [uint8, int8, uint16, int16, uint32, int32, uint64, int64]
+
+
+# TODO: put back signatures everywhere
+
+
 @jit(
-    [
-        void(DatasetType, uint8[:, :]),
-        void(DatasetType, uint16[:, :]),
-        void(DatasetType, uint32[:, :]),
-        void(DatasetType, uint64[:, :]),
-        void(DatasetType, uint8[::1, :]),
-        void(DatasetType, uint16[::1, :]),
-        void(DatasetType, uint32[::1, :]),
-        void(DatasetType, uint64[::1, :]),
-    ],
+    # [void(uint64[::1], uint64, uint64, col_type[:]) for col_type in numba_int_types],
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
+    cache=CACHE,
+    locals={"i": uint64, "x_ij": uint64, "word": uint64, "pos_in_word": uint64},
+)
+def _dataset_fill_column(col_bitarray, n_bits, n_values_in_word, col):
+    """Private function that fills the values of a column in the dataset.
+
+    Parameters
+    ----------
+    col_bitarray : ndarray
+        Numpy array of shape (n_words,) containing the values of the column, where
+        n_words is the number of words used to store its values.
+
+    n_bits : int
+        Number of bits used to store one value from the column
+
+    n_values_in_word : int
+        Number of values from the column saved in a single 64-bits word
+
+    col : ndarray
+        Numpy array of shape (n_samples,) corresponding to the values of a column to
+        add to the dataset. This function exploits the fact that the values in col
+        contain only contiguous non-negative integers {0, 1, 2, ..., max_value}
+        coming from binning of both categorical and continuous columns.
+    """
+    for i, x_ij in enumerate(col):
+        word = i // n_values_in_word
+        pos_in_word = i % n_values_in_word
+        if pos_in_word == 0:
+            col_bitarray[word] = x_ij
+        else:
+            col_bitarray[word] = (col_bitarray[word] << n_bits) | x_ij
+
+    # We need to shift the last word according to the position of the last value in
+    # the word, so that the bits of the values in the last word are on the left
+    # of it. If pos_in_word = n_values_in_word - 1 it does nothing, since the
+    # word is full and already left-aligned
+    col_bitarray[word] = col_bitarray[word] << (
+        (n_values_in_word - pos_in_word - 1) * n_bits
+    )
+
+
+@jit(
+    # [void(DatasetType, col_type[:, :]) for col_type in numba_int_types],
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
+    cache=CACHE,
     locals={
         "bitarray": uint64[::1],
         "offsets": uint64[::1],
@@ -200,56 +245,55 @@ def _dataset_fill_values(dataset, X):
     n_features = dataset.n_features
 
     for j in range(n_features):
-        n_values_in_word = n_values_in_words[j]
-        bitarray_j = bitarray[offsets[j] : offsets[j + 1]]
-        n_bits_j = n_bits[j]
-        for i, x_ij in enumerate(X[:, j]):
-            word = i // n_values_in_word
-            pos_in_word = i % n_values_in_word
-            if pos_in_word == 0:
-                bitarray_j[word] = x_ij
-            else:
-                bitarray_j[word] = (bitarray_j[word] << n_bits_j) | x_ij
-
-        # We need to shift the last word according to the position of the last value in
-        # the word, so that the bits of the values in the last word are on the left
-        # of it. If pos_in_word = n_values_in_word - 1 it does nothing, since the
-        # word is full and already left-aligned
-        bitarray_j[word] = bitarray_j[word] << (
-            (n_values_in_word - pos_in_word - 1) * n_bits_j
-        )
+        col_bitarray = bitarray[offsets[j] : offsets[j + 1]]
+        _dataset_fill_column(col_bitarray, n_bits[j], n_values_in_words[j], X[:, j])
 
 
-def array_to_dataset(X, max_values):
-    """Fills the values in X inside the dataset.
+def dataset_fill_column(dataset, col_idx, col):
+    """Fills the values of a column in the dataset.
 
     Parameters
     ----------
     dataset : Dataset
         The dataset to fill with the values in X
 
+    col_idx : int
+        Index of the column in the dataset
+
+    col : ndarray
+        Numpy array of shape (n_samples,) corresponding to the values of a column to
+        add to the dataset. This function exploits the fact that the values in col
+        contain only contiguous non-negative integers {0, 1, 2, ..., max_value}
+        coming from binning of both categorical and continuous columns.
+    """
+    bitarray = dataset.bitarray
+    offsets = dataset.offsets
+    col_bitarray = bitarray[offsets[col_idx] : offsets[col_idx + 1]]
+    n_values_in_word = dataset.n_values_in_words[col_idx]
+    n_bits = dataset.n_bits[col_idx]
+    _dataset_fill_column(col_bitarray, n_bits, n_values_in_word, col)
+
+
+def array_to_dataset(X):
+    """Converts a numpy array to a Dataset.
+
+    Parameters
+    ----------
     X : ndarray
         Numpy array of shape (n_samples, n_features) corresponding to the matrix of
-        features to be transformed in a Dataset. This function exploits the fact
+        features to be transformed to a Dataset. This function exploits the fact
         that all the columns of X contain only contiguous non-negative integers {0,
         1, 2, ..., max_value} obtained through binning of both categorical and
         continuous columns.
-    """
-    if (
-        hasattr(max_values, "ndim")
-        and hasattr(max_values, "dtype")
-        and hasattr(max_values, "size")
-    ):
-        if max_values.ndim == 1:
-            if max_values.dtype not in (np.uint8, np.uint16, np.uint32, np.uint64):
-                ValueError(
-                    "max_values dtype must be one of uint8, uint16, uint32 or uint64"
-                )
-        else:
-            raise ValueError("max_values must be a 1D numpy array")
-    else:
-        raise ValueError("max_values is not a numpy array")
 
+    Returns
+    -------
+    output : Dataset
+        The dataset corresponding to the values in X.
+    """
+    n_samples, n_features = X.shape
+    max_values = np.empty(n_features, dtype=np.uint64)
+    X.max(axis=0, initial=0, out=max_values)
     if hasattr(X, "ndim") and hasattr(X, "dtype") and hasattr(X, "shape"):
         if X.ndim == 2:
             if X.dtype not in (np.uint8, np.uint16, np.uint32, np.uint64):
@@ -264,7 +308,6 @@ def array_to_dataset(X, max_values):
     if X.shape[1] != max_values.size:
         raise ValueError("max_values size must match X.shape[1]")
 
-    n_samples, n_features = X.shape
     dataset = Dataset(n_samples, max_values)
     _dataset_fill_values(dataset, X)
     return dataset
