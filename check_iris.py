@@ -39,7 +39,7 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
 )
 
-np.set_printoptions(precision=2)
+np.set_printoptions(precision=6)
 
 
 random_state = 42
@@ -48,14 +48,16 @@ np.random.seed(0)
 
 iris = datasets.load_iris()
 
+X, y = iris["data"], iris["target"]
 
-covtype = datasets.fetch_covtype(download_if_missing=True)
+
+# covtype = datasets.fetch_covtype(download_if_missing=True)
 
 # rcv1_train = datasets.fetch_rcv1(subset='train', download_if_missing=True)
 # rcv1_test = datasets.fetch_rcv1(subset='test', download_if_missing=True)
 
-X = covtype.data
-y = covtype.target
+# X = covtype.data
+# y = covtype.target
 
 # X_train = rcv1_train.data
 # y_train = rcv1_train.target
@@ -76,7 +78,7 @@ clf = ForestClassifier(**clf_kwargs)
 
 
 X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.3, random_state=42
+    X, y, shuffle=True, test_size=0.3, random_state=42
 )
 
 tic = time()
@@ -93,6 +95,11 @@ tic = time()
 y_pred = clf.predict(X_test)
 toc = time()
 print("time to predict: ", toc - tic)
+
+tic = time()
+y_scores_no_binning = clf.predict_proba(X_test, False)
+toc = time()
+print("time to predict_proba without binning: ", toc - tic)
 
 cm = confusion_matrix(y_test, y_pred)
 acc = accuracy_score(y_test, y_pred)

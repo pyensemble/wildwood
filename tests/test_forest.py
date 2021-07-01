@@ -910,55 +910,31 @@ class TestForestClassifier(object):
         y_score2 = clf2.predict_proba(X_test)
         assert np.max(np.abs(y_score1 - y_score2)) < 1e-5
 
-        # inspired from
-        # https://scikit-learn.org/stable/auto_examples/ensemble/plot_gradient_boosting_categorical.html#sphx-glr-auto-examples-ensemble-plot-gradient-boosting-categorical-py
-        #  Ames Housing datasets¶
+    def test_pred_no_binning_iris(self):
+        iris = self.iris
+        X, y = iris["data"], iris["target"]
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, shuffle=True, random_state=42, test_size=0.3
+        )  # TODO: assert y_scores would not pass if here I put argument stratify=y, why???
+        clf = ForestClassifier(random_state=42, n_jobs=-1)
+        clf.fit(X_train, y_train)
 
-        # from sklearn.datasets import fetch_openml
-        # from sklearn.pipeline import make_pipeline
-        # from sklearn.compose import make_column_transformer, make_column_selector
-        # from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder
-        #
-        # X, y = fetch_openml(data_id=41211, as_frame=True, return_X_y=True)
-        # X_train = X[:100]
-        # y_train = y[:100]
-        # X_test = X[100:120]
-        # y_test = y[100:120]
-        #
-        # # 1 - drop categorical features
-        # dropper = make_column_transformer(
-        #     ('drop', make_column_selector(dtype_include='category')),
-        #     remainder='passthrough')
-        # X_train_drop = dropper.fit_transform(X_train, y_train)
-        # X_test_drop = dropper.fit_transform(X_test, y_test)
-        # clf_dropped = ForestRegressor(random_state=42)
-        # clf_dropped.fit(X_train_drop, y_train)
-        # y_pred_drop = clf_dropped.predict(X_test_drop)
-        #
-        # # 2 - one-hot encoding on categorical features
-        # one_hot_encoder = make_column_transformer(
-        #     (OneHotEncoder(sparse=False, handle_unknown='ignore'),
-        #      make_column_selector(dtype_include='category')),
-        #     remainder='passthrough')
-        #
-        # hist_one_hot = make_pipeline(one_hot_encoder,
-        #                              ForestClassifier(random_state=42))
-        # # 3 - ordinal encoder
-        # ordinal_encoder = make_column_transformer(
-        #     (OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=np.nan),
-        #      make_column_selector(dtype_include='category')),
-        #     remainder='passthrough')
-        #
-        # hist_ordinal = make_pipeline(ordinal_encoder,
-        #                              ForestClassifier(random_state=42))
-        #
-        # # 4 - use categorical support of Forest Classifier
-        # categorical_features = np.where(X.dtypes == 'category')[0]
-        # hist_native = make_pipeline(
-        #     ordinal_encoder,
-        #     ForestClassifier(random_state=42,
-        #                      categorical_features=categorical_features)
-        # )
+        tic = time()
+        y_scores = clf.predict_proba(X_test, data_binning=True)
+        toc = time()
+        time_pred = toc - tic
+
+        tic = time()
+        y_scores_no_binning = clf.predict_proba(X_test, data_binning=False)
+        toc = time()
+        time_pred_no_binning = toc - tic
+
+        print("time to predict_proba: ", time_pred)
+        print("time to predict_proba without binning: ", time_pred_no_binning)
+        assert time_pred > time_pred_no_binning  # TODO: to understand why it is not always rapid?
+        print(y_scores - y_scores_no_binning)
+        assert np.max(np.abs(y_scores - y_scores_no_binning)) < 1e-5
+
 
     # TODO: faire un test pour compute_split_partition en s'inspirant de ce qui est
     #  en dessous

@@ -20,6 +20,7 @@ from numba import (
     void,
     optional,
 )
+from numba.core.types.misc import Omitted
 from numba.experimental import jitclass
 
 from ._utils import get_type, resize
@@ -647,7 +648,16 @@ def add_node_tree(
 
 
 @jit(
-    [uintp(TreeClassifierType, uint8[:]), uintp(TreeRegressorType, uint8[:])],
+    [
+        uintp(TreeClassifierType, uint8[:], boolean),
+        uintp(TreeRegressorType, uint8[:], boolean),
+        uintp(TreeClassifierType, float32[:], boolean),
+        uintp(TreeRegressorType, float32[:], boolean),
+        uintp(TreeClassifierType, uint8[:], Omitted(True)),
+        uintp(TreeRegressorType, uint8[:], Omitted(True)),
+        uintp(TreeClassifierType, float32[:], Omitted(True)),
+        uintp(TreeRegressorType, float32[:], Omitted(True)),
+    ],
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
@@ -660,7 +670,7 @@ def add_node_tree(
         "bin_partition": uint8[::1],
     },
 )
-def find_leaf(tree, xi):
+def find_leaf(tree, xi, data_binning=True):
     """Find the leaf index containing the given features vector.
 
     Parameters
@@ -669,7 +679,13 @@ def find_leaf(tree, xi):
          The tree
 
     xi : ndarray
-        Array of input features with shape (n_features,) and uint8 dtype
+        Array of input features with shape (n_features,)
+        int8 dtype (when data_binning=True) or float32 dtype (when data_binning=False)
+
+    data_binning : bool
+        optional argument
+        if True, xi was binned before sent to prediction;
+        if False, values in xi are directly used to make prediction.
 
     Returns
     -------
@@ -683,20 +699,45 @@ def find_leaf(tree, xi):
     while not node["is_leaf"]:
         xi_f = xi[node["feature"]]
         if node["is_split_categorical"]:
-            # If the bin is on a categorical features, we use its bin_partition
+            # the split is on a categorical feature, we use its bin_partition
             bin_partition_start = node["bin_partition_start"]
             bin_partition_end = node["bin_partition_end"]
             bin_partition = bin_partitions[bin_partition_start:bin_partition_end]
-            if is_bin_in_partition(xi_f, bin_partition):
-                leaf_idx = node["left_child"]
+            if data_binning:
+                # TODO: clean here
+                # print("xi_f=", xi_f, "bin_partition=", bin_partition)
+                if is_bin_in_partition(xi_f, bin_partition):
+                    leaf_idx = node["left_child"]
+                    # print("go left")
+                else:
+                    leaf_idx = node["right_child"]
+                    # print("go right")
             else:
-                leaf_idx = node["right_child"]
-        else:
-            # If the split is on a continuous feature, we use its bin_threshold
-            if xi_f <= node["bin_threshold"]:
-                leaf_idx = node["left_child"]
-            else:
-                leaf_idx = node["right_child"]
+                # print("xi_f=", xi_f, "bin_partition=", bin_partition)
+                if is_bin_in_partition(uint8(xi_f), bin_partition):
+                    # print("go left")
+                    leaf_idx = node["left_child"]
+                else:
+                    # print("go right")
+                    leaf_idx = node["right_child"]
+        else:  # the split is on a numerical feature
+            if data_binning:
+                # we use its bin_threshold
+                # print("xi_f=", xi_f, "node[bin_threshold]=", node["bin_threshold"])
+                if xi_f <= node["bin_threshold"]:
+                    leaf_idx = node["left_child"]
+                    # print("go left")
+                else:
+                    leaf_idx = node["right_child"]
+                    # print("go right")
+            else:  # data_binning=False, we use its threshold
+                # print("xi_f=", xi_f, "node[threshold]=", node["threshold"])
+                if xi_f <= node["threshold"]:
+                    leaf_idx = node["left_child"]
+                    # print("go left")
+                else:
+                    leaf_idx = node["right_child"]
+                    # print("go right")
         node = nodes[leaf_idx]
     return leaf_idx
 
@@ -813,7 +854,16 @@ def tree_apply(tree, X):
 
 
 @jit(
-    float32[:, ::1](TreeClassifierType, uint8[:, :], boolean, float32),
+    [
+        float32[:, ::1](TreeClassifierType, uint8[:, :], boolean, float32, boolean),
+        float32[:, ::1](
+            TreeClassifierType, uint8[:, :], boolean, float32, Omitted(True)
+        ),
+        float32[:, ::1](TreeClassifierType, float32[:, :], boolean, float32, boolean),
+        float32[:, ::1](
+            TreeClassifierType, float32[:, :], boolean, float32, Omitted(True)
+        ),
+    ],
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
@@ -833,7 +883,7 @@ def tree_apply(tree, X):
         "alpha": float32,
     },
 )
-def tree_classifier_predict_proba(tree, X, aggregation, step):
+def tree_classifier_predict_proba(tree, X, aggregation, step, data_binning=True):
     """Predicts class probabilities for the input matrix of features.
 
     Parameters
@@ -842,7 +892,8 @@ def tree_classifier_predict_proba(tree, X, aggregation, step):
         The tree
 
     X : ndarray
-        Input matrix of features with shape (n_samples, n_features) and uint8 dtype
+        Input matrix of features with shape (n_samples, n_features)
+        int8 dtype (when data_binning=True) or float32 dtype (when data_binning=False)
 
     aggregation : bool
         If True we predict the class probabilities using the aggregation algorithm.
@@ -852,6 +903,11 @@ def tree_classifier_predict_proba(tree, X, aggregation, step):
     step : float
         Step-size used for the computation of the aggregation weights. Used only if
         aggregation=True
+
+    data_binning : boolean
+        optional argument
+        Indicates if we predict with binned data (data_binning=True),
+        or with raw data (data_binning=False)
 
     Returns
     -------
@@ -866,7 +922,7 @@ def tree_classifier_predict_proba(tree, X, aggregation, step):
     out = np.zeros((n_samples, n_classes), dtype=float32)
     for i in range(n_samples):
         # Find the leaf containing X[i]
-        idx_current = find_leaf(tree, X[i])
+        idx_current = find_leaf(tree, X[i], data_binning=data_binning)
         # Get a view to save the prediction for X[i]
         pred_i = out[i]
         # First, we get the prediction of the leaf

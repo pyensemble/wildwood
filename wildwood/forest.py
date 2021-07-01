@@ -121,7 +121,7 @@ def _parallel_build_trees(tree, X, y, sample_weight, random_state_bootstrap):
     return tree
 
 
-def _accumulate_prediction(predict, X, out, lock, label_class_col=None):
+def _accumulate_prediction(predict, X, out, lock, data_binning, label_class_col=None):
     """This is a utility function for joblib's Parallel. It can't go locally in
     ForestClassifier or ForestRegressor, because joblib complains that it cannot
     pickle it when placed there.
@@ -139,12 +139,16 @@ def _accumulate_prediction(predict, X, out, lock, label_class_col=None):
         An array of shape (n_samples, n_classes) in which we store the probabilities
         predictions
 
+    data_binning : bool
+        True if predict with binned data
+        False if predict with raw data
+
     label_class_col : int, default=None
         When multiclass="ovr", a tree predicts the label in a one-versus-rest fashion.
         In this case, this is the column index corresponding to the class for which
         we add the predictions.
     """
-    prediction = predict(X)
+    prediction = predict(X, data_binning)
     with lock:
         if label_class_col is None:
             out += prediction
@@ -159,7 +163,7 @@ def _compute_weighted_depth(weighted_depth, X, out, lock, tree_idx):
 
 
 def _get_tree_prediction(predict, X, out, lock, tree_idx):
-    prediction = predict(X)  # , check_input=False)
+    prediction = predict(X)  # here is called `tree.predict_proba`, so no need for check_input
     with lock:
         out[tree_idx] = prediction
 
@@ -347,7 +351,7 @@ class ForestBase(BaseEstimator):
 
         # TODO: Deal more intelligently with this. Do not bin if the data is already
         #  binned by test for dtype=='uint8' for instance
-        # If is is an array with dtypd uint8 then the data is already binned
+        # If is is an array with dtyped uint8 then the data is already binned
         # Otherwise we need to bin the features indicated by the either a boolean or
         # integer array
 
@@ -363,6 +367,14 @@ class ForestBase(BaseEstimator):
         else:
             self.is_categorical_ = np.asarray(is_categorical, dtype=np.bool)
         X_binned = self._bin_data(X, is_training_data=True)
+
+        bin_thresholds_list = self._bin_mapper.bin_thresholds_
+        # list of ndarray of shape(min(max_bins, n_unique_values) - 1,)
+        # A given value x will be mapped into bin value i iff
+        # bin_thresholds[i - 1] < x <= bin_thresholds[i]
+        bin_thresholds = np.zeros([n_features, len(max(bin_thresholds_list, key=len))], dtype=np.float32)
+        for (f, f_thres) in enumerate(bin_thresholds_list):
+            bin_thresholds[f][:len(f_thres)] = f_thres
 
         # TODO: Deal with missing data
         # Uses binned data to check for missing values
@@ -389,6 +401,7 @@ class ForestBase(BaseEstimator):
                     categorical_features=self.categorical_features,
                     is_categorical=self.is_categorical_,
                     max_features=max_features_,
+                    bin_thresholds=bin_thresholds,
                     random_state=random_state,
                     cat_split_strategy=split_strategy_mapping[self.cat_split_strategy],
                     verbose=self.verbose,
@@ -412,6 +425,7 @@ class ForestBase(BaseEstimator):
                     categorical_features=self.categorical_features,
                     is_categorical=self.is_categorical_,
                     max_features=max_features_,
+                    bin_thresholds=bin_thresholds,
                     random_state=random_state,
                     verbose=self.verbose,
                 )
@@ -626,15 +640,17 @@ class ForestBase(BaseEstimator):
 
         return X_binned
 
-    def predict_helper(self, X):
+    def predict_helper(self, X, data_binning=True):
         """A method used in all predict functions to avoid code duplication
         """
         # Is the forest fitted ?
         check_is_fitted(self)
         # Check data
         X = self._validate_X_predict(X, check_input=True)
-        # TODO: we can also avoid data binning for predictions...
-        X_binned = self._bin_data(X, is_training_data=False)
+        if data_binning:
+            X_binned = self._bin_data(X, is_training_data=False)
+        else:
+            X_binned = X
         n_jobs, _, _ = _partition_estimators(len(self.trees), self.n_jobs)
         lock = threading.Lock()
         return X_binned, n_jobs, lock
@@ -1143,7 +1159,7 @@ class ForestClassifier(ForestBase, ClassifierMixin):
 
         return y, expanded_class_weight
 
-    def predict(self, X):
+    def predict(self, X, data_binning=True):
         """
         Predict class for X.
 
@@ -1159,17 +1175,22 @@ class ForestClassifier(ForestBase, ClassifierMixin):
             ``dtype=np.float32``. If a sparse matrix is provided, it will be
             converted into a sparse ``csr_matrix``.
 
+        data_binning : bool
+            optional argument
+            True if data is binned
+            False if raw data
+
         Returns
         -------
         y : ndarray of shape (n_samples,) or (n_samples, n_outputs)
             The predicted classes.
         """
-        proba = self.predict_proba(X)
+        proba = self.predict_proba(X, data_binning=data_binning)
         return self.classes_.take(np.argmax(proba, axis=1), axis=0)
 
-    def predict_proba(self, X):
+    def predict_proba(self, X, data_binning=True):
         # TODO: write the correct docstring
-        X_binned, n_jobs, lock = self.predict_helper(X)
+        X_binned, n_jobs, lock = self.predict_helper(X, data_binning=data_binning)
         all_proba = np.zeros((X_binned.shape[0], self.n_classes_))
         n_estimators = self.n_estimators
 
@@ -1185,6 +1206,7 @@ class ForestClassifier(ForestBase, ClassifierMixin):
                 X_binned,
                 all_proba,
                 lock,
+                data_binning,
                 label_class_col=tree_idx // n_estimators if ovr else None,
             )
             for tree_idx, tree in enumerate(self.trees)
@@ -1200,12 +1222,14 @@ class ForestClassifier(ForestBase, ClassifierMixin):
 
         return all_proba
 
-    def predict_proba_trees(self, X):
+    def predict_proba_trees(self, X, data_binning=True):
         check_is_fitted(self)
         # Check data
         X = self._validate_X_predict(X)
-        # TODO: we can also avoid data binning for predictions...
-        X_binned = self._bin_data(X, is_training_data=False)
+        if data_binning:
+            X_binned = self._bin_data(X, is_training_data=False)
+        else:
+            X_binned = X
         n_samples, _ = X.shape
         n_estimators = len(self.trees)
         n_jobs, _, _ = _partition_estimators(n_estimators, self.n_jobs)
@@ -1534,16 +1558,18 @@ class ForestRegressor(ForestBase, RegressorMixin):
         )
         return all_weighted_depths
 
-    def predict_trees(self, X):
+    def predict_trees(self, X, data_binning=True):
         check_is_fitted(self)
         # Check data
         X = self._validate_X_predict(X)
-        # TODO: we can also avoid data binning for predictions...
-        X_binned = self._bin_data(X, is_training_data=False)
+        if data_binning:
+            X_binned = self._bin_data(X, is_training_data=False)
+        else:
+            X_binned = X
         n_samples, _ = X.shape
         n_estimators = len(self.trees)
         n_jobs, _, _ = _partition_estimators(self.n_estimators, self.n_jobs)
-        probas = np.empty((n_estimators, n_samples, n_features))
+        probas = np.empty((n_estimators, n_samples, n_features))  # TODO: ??? there is a bug here
 
         lock = threading.Lock()
         Parallel(
