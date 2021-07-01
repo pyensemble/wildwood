@@ -97,6 +97,8 @@ tree_context_type = [
     #
     # A "buffer" used in the split_indices function
     ("right_buffer", uintp[::1]),
+    # bin thresholds
+    ("bin_thresholds", float32[:, :]),
 ]
 
 
@@ -133,7 +135,7 @@ class TreeClassifierContext:
         valid_indices,
         n_classes,
         max_bins,
-        n_bins_per_feature,
+        # n_bins_per_feature,
         max_features,
         min_samples_split,
         min_samples_leaf,
@@ -142,6 +144,7 @@ class TreeClassifierContext:
         step,
         is_categorical,
         cat_split_strategy,
+        bin_thresholds,
     ):
         init_tree_context(
             self,
@@ -157,6 +160,7 @@ class TreeClassifierContext:
             aggregation,
             step,
             is_categorical,
+            bin_thresholds,
         )
         self.n_classes = n_classes
         self.dirichlet = dirichlet
@@ -183,6 +187,7 @@ class TreeRegressorContext:
         aggregation,
         step,
         is_categorical,
+        bin_thresholds,
     ):
         init_tree_context(
             self,
@@ -198,6 +203,7 @@ class TreeRegressorContext:
             aggregation,
             step,
             is_categorical,
+            bin_thresholds,
         )
 
 
@@ -221,6 +227,7 @@ TreeRegressorContextType = get_type(TreeRegressorContext)
             boolean,
             float32,
             boolean[::1],
+            float32[:, :],  # TODO: for bin_thresholds, would float32[::1, ::1] be better?
         ),
         void(
             TreeRegressorContextType,
@@ -236,6 +243,7 @@ TreeRegressorContextType = get_type(TreeRegressorContext)
             boolean,
             float32,
             boolean[::1],
+            float32[:, :],
         ),
     ],
     nopython=NOPYTHON,
@@ -256,6 +264,7 @@ def init_tree_context(
     aggregation,
     step,
     is_categorical,
+    bin_thresholds,
 ):
     tree_context.X = X
     tree_context.y = y
@@ -271,6 +280,7 @@ def init_tree_context(
     tree_context.partition_train = train_indices.copy()
     tree_context.partition_valid = valid_indices.copy()
     tree_context.is_categorical = is_categorical.copy()
+    tree_context.bin_thresholds = bin_thresholds.copy()
 
     n_samples, n_features = X.shape
     tree_context.n_samples = n_samples

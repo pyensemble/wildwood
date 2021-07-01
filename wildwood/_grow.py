@@ -374,9 +374,10 @@ def grow(
         # If we did not find a split then the node is a leaf, since we can't split it
         is_leaf = is_leaf or not found_split
 
-        # TODO: correct this when actually using the threshold instead of
-        #  bin_threshold
-        threshold = 0.42
+        if is_split_categorical:
+            threshold = 0.42  # we do not need threshold, while the split is on categorical feature
+        else:
+            threshold = tree_context.bin_thresholds[feature][bin]
 
         node_id = add_node_tree(
             # The tree
@@ -391,7 +392,7 @@ def grow(
             is_leaf,
             # The feature used for splitting
             feature,
-            # NOT USED FOR NOW
+            # The numerical threshold used for splitting
             threshold,
             # The bin threshold used for splitting
             bin,
