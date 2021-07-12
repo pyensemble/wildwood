@@ -204,6 +204,7 @@ class TreeClassifier(ClassifierMixin, TreeBase):
             self._step,
             self.is_categorical,
             self.cat_split_strategy,
+            self.criterion,
         )
 
         node_context = NodeClassifierContext(tree_context)
@@ -312,6 +313,7 @@ class TreeRegressor(TreeBase, RegressorMixin):
             self.aggregation,
             self._step,
             self.is_categorical,
+            self.criterion,
         )
 
         node_context = NodeRegressorContext(tree_context)

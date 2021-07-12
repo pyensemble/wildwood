@@ -18,6 +18,16 @@ split_strategy_mapping = {
     "random": SPLIT_STRATEGY_RANDOM,
 }
 
+CRITERIA_GINI = 0
+CRITERIA_ENTROPY = 1
+CRITERIA_MSE = 3
+
+criteria_mapping = {
+    "gini": CRITERIA_GINI,
+    "entropy": CRITERIA_ENTROPY,
+    "mse": CRITERIA_MSE,
+}
+
 
 def get_numba_type(class_):
     """Gives the numba type of an object is numba.jit decorators are enabled and None

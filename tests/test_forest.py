@@ -214,6 +214,16 @@ class TestForestClassifier(object):
         with pytest.raises(ValueError, match="verbose must be boolean"):
             clf.verbose = 1
 
+    def test_criterion(self):
+        clf = ForestClassifier()
+        assert clf.criterion == "gini"
+        with pytest.raises(ValueError, match="criterion must be a string"):
+            clf.criterion = 1
+        clf.criterion = "entropy"
+        assert clf.criterion == "entropy"
+        with pytest.raises(ValueError, match="Unknown criterion: other"):
+            clf.criterion = "other"
+
     def test_loss(self):
         clf = ForestClassifier()
         assert clf.loss == "log"
@@ -521,6 +531,17 @@ class TestForestClassifier(object):
         y_score = clf.predict_proba(X_test)
         assert roc_auc_score(y_test, y_score, multi_class="ovo") >= 0.985
 
+        clf = ForestClassifier(
+            class_weight="balanced", random_state=42, criterion="entropy"
+        )
+        clf.fit(X_train, y_train)
+        y_score = clf.predict_proba(X_test)
+        assert roc_auc_score(y_test, y_score, multi_class="ovo") >= 0.985
+        clf = ForestClassifier(random_state=42, criterion="entropy")
+        clf.fit(X_train, y_train)
+        y_score = clf.predict_proba(X_test)
+        assert roc_auc_score(y_test, y_score, multi_class="ovo") >= 0.985
+
     def test_performance_cat_split_strategy_iris(self):
         iris = self.iris
         X, y = iris["data"], iris["target"]
@@ -547,6 +568,15 @@ class TestForestClassifier(object):
         y_score = clf.predict_proba(X_test)
         assert roc_auc_score(y_test, y_score[:, 1]) >= 0.98
         clf = ForestClassifier(random_state=42)
+        clf.fit(X_train, y_train)
+        y_score = clf.predict_proba(X_test)
+        assert roc_auc_score(y_test, y_score[:, 1]) >= 0.98
+        clf = ForestClassifier(class_weight="balanced", random_state=42,
+                               criterion="entropy")
+        clf.fit(X_train, y_train)
+        y_score = clf.predict_proba(X_test)
+        assert roc_auc_score(y_test, y_score[:, 1]) >= 0.98
+        clf = ForestClassifier(random_state=42, criterion="entropy")
         clf.fit(X_train, y_train)
         y_score = clf.predict_proba(X_test)
         assert roc_auc_score(y_test, y_score[:, 1]) >= 0.98

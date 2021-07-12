@@ -24,7 +24,7 @@ from sklearn.utils.multiclass import check_classification_targets
 from sklearn.utils.validation import check_is_fitted
 
 from ._binning import Binner
-from ._utils import split_strategy_mapping
+from ._utils import split_strategy_mapping, criteria_mapping
 
 eps = np.finfo("float32").eps
 
@@ -381,7 +381,7 @@ class ForestBase(BaseEstimator):
                 TreeClassifier(
                     n_bins=n_bins,
                     n_classes=n_classes_per_tree,
-                    criterion=self.criterion,
+                    criterion=criteria_mapping[self.criterion],
                     loss=self.loss,
                     step=self.step,
                     aggregation=self.aggregation,
@@ -405,7 +405,7 @@ class ForestBase(BaseEstimator):
             trees = [
                 TreeRegressor(
                     n_bins=n_bins,
-                    criterion=self.criterion,
+                    criterion=criteria_mapping[self.criterion],
                     loss=self.loss,
                     step=self.step,
                     aggregation=self.aggregation,
@@ -1235,10 +1235,6 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         return probas
 
     @property
-    def criterion(self):
-        return self._criterion
-
-    @property
     def loss(self):
         return self._loss
 
@@ -1252,15 +1248,19 @@ class ForestClassifier(ForestBase, ClassifierMixin):
             else:
                 self._loss = val
 
+    @property
+    def criterion(self):
+        return self._criterion
+
     @criterion.setter
     def criterion(self, val):
         if not isinstance(val, str):
             raise ValueError("criterion must be a string")
         else:
-            if val != "gini":
-                raise ValueError("Only criterion='gini' is supported for now")
-            else:
+            if val in {"gini", "entropy"}:
                 self._criterion = val
+            else:
+                raise ValueError("Unknown criterion: " + val)
 
     @property
     def dirichlet(self):

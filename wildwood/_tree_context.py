@@ -97,6 +97,9 @@ tree_context_type = [
     #
     # A "buffer" used in the split_indices function
     ("right_buffer", uintp[::1]),
+    #
+    # Criteria: "gini" or "entropy" or "mse", in int (according to _utils.criteria_mapping)
+    ("criterion", uint8)
 ]
 
 
@@ -142,6 +145,7 @@ class TreeClassifierContext:
         step,
         is_categorical,
         cat_split_strategy,
+        criterion,
     ):
         init_tree_context(
             self,
@@ -157,6 +161,7 @@ class TreeClassifierContext:
             aggregation,
             step,
             is_categorical,
+            criterion,
         )
         self.n_classes = n_classes
         self.dirichlet = dirichlet
@@ -183,6 +188,7 @@ class TreeRegressorContext:
         aggregation,
         step,
         is_categorical,
+        criterion,
     ):
         init_tree_context(
             self,
@@ -198,6 +204,7 @@ class TreeRegressorContext:
             aggregation,
             step,
             is_categorical,
+            criterion,
         )
 
 
@@ -221,6 +228,7 @@ TreeRegressorContextType = get_type(TreeRegressorContext)
             boolean,
             float32,
             boolean[::1],
+            uint8,
         ),
         void(
             TreeRegressorContextType,
@@ -236,6 +244,7 @@ TreeRegressorContextType = get_type(TreeRegressorContext)
             boolean,
             float32,
             boolean[::1],
+            uint8,
         ),
     ],
     nopython=NOPYTHON,
@@ -256,6 +265,7 @@ def init_tree_context(
     aggregation,
     step,
     is_categorical,
+    criterion,
 ):
     tree_context.X = X
     tree_context.y = y
@@ -268,6 +278,7 @@ def init_tree_context(
     tree_context.valid_indices = valid_indices
     tree_context.aggregation = aggregation
     tree_context.step = step
+    tree_context.criterion = criterion
     tree_context.partition_train = train_indices.copy()
     tree_context.partition_valid = valid_indices.copy()
     tree_context.is_categorical = is_categorical.copy()
