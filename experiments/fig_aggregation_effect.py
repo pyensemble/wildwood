@@ -1,10 +1,18 @@
+# Authors: Stephane Gaiffas <stephane.gaiffas@gmail.com>
+# License: BSD 3 clause
+
+"""
+This script produces Figure 1 from the WildWood's paper.
+"""
+
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
-from wildwood import ForestClassifier
 from sklearn.datasets import make_moons
 
 sys.path.extend([".", ".."])
+
+from wildwood import ForestClassifier
 
 norm = plt.Normalize(vmin=0.0, vmax=1.0)
 levels = 30
@@ -139,9 +147,9 @@ def plot_forest_effect(n_estimators, dataset):
     plt.tight_layout()
 
 
-n_samples = 250
+n_samples = 2000
 random_state = 42
-dataset = make_moons(n_samples=n_samples, noise=0.15, random_state=random_state)
+dataset = make_moons(n_samples=n_samples, noise=0.35, random_state=random_state)
 
-plot_forest_effect(8, dataset)
-plt.savefig("fig_aggregation_effect.pdf", bbox_tight=0)
+plot_forest_effect(10, dataset)
+plt.savefig("fig_aggregation_effect10.pdf", bbox_tight=0)

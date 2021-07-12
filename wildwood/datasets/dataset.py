@@ -345,3 +345,6 @@ class Dataset:
             self.scaled_gini_ = scaled_gini(label_probs)
 
         return X_train, X_test, y_train, y_test
+
+    def compute_gini(self):
+        return 1 - ((np.bincount(LabelEncoder().fit_transform(self.df_raw[self.label_column]))/len(self.df_raw))**2).sum()

@@ -1,3 +1,11 @@
+# Authors: Stephane Gaiffas <stephane.gaiffas@gmail.com>
+# License: BSD 3 clause
+
+"""
+This script produces Figure 2 from the WildWood's paper.
+"""
+
+
 import sys
 import subprocess
 from datetime import datetime
@@ -17,51 +25,30 @@ from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
 
 sys.path.extend([".", ".."])
 
-from wildwood.datasets import load_adult, load_bank, load_spambase, load_default_cb
+from wildwood.datasets import load_adult, load_bank, load_car, load_default_cb
 from wildwood.forest import ForestClassifier
 
-loaders_small_classification = [load_adult, load_bank, load_spambase, load_default_cb]
+loaders = [load_adult, load_bank, load_default_cb, load_car]
 
 
-def get_train_sample_weights(y_train, n_classes):
-    def get_class_proportions(data):
-        return np.bincount(data.astype(int)) / len(data)
-
-    return (1 / (n_classes * get_class_proportions(y_train)))[y_train]
-
+random_state = 42
 
 classifiers = [
     lambda n: (
         "RFW",
-        RandomForestClassifier(
-            n_estimators=n,
-            # class_weight="balanced",
-            n_jobs=-1,
-            random_state=random_state,
-        ),
+        RandomForestClassifier(n_estimators=n, n_jobs=-1, random_state=random_state,),
     ),
     lambda n: (
         "WildWood",
         ForestClassifier(
-            n_estimators=n,
-            # class_weight="balanced",
-            multiclass="ovr",
-            n_jobs=-1,
-            random_state=random_state,
+            n_estimators=n, multiclass="ovr", n_jobs=-1, random_state=random_state,
         ),
     ),
     lambda n: (
         "ET",
-        ExtraTreesClassifier(
-            n_estimators=n,
-            n_jobs=-1,
-            # class_weight="balanced",
-            random_state=random_state,
-        ),
+        ExtraTreesClassifier(n_estimators=n, n_jobs=-1, random_state=random_state,),
     ),
 ]
-
-random_state = 42
 
 
 logging.basicConfig(
@@ -108,14 +95,14 @@ def fit_kwargs_generator(clf_name, y_train, dataset):
 
 
 # Number of time each experiment is repeated, one for each seed (leading
-data_random_states = [42, 43, 44]  # , 46, 47, 49, 50, 52, 53, 55]
-# data_random_states = [42]
-clf_random_state = 42
+data_random_states = list(range(42, 42 + 2))
+# data_random_states = list(range(42, 42 + 20))
 
 col_data = []
 col_classifier = []
 col_classifier_title = []
 col_n_trees = []
+col_x_pos = []
 col_repeat = []
 col_roc_auc = []
 col_roc_auc_weighted = []
@@ -124,15 +111,14 @@ col_avg_precision_score_weighted = []
 col_log_loss = []
 col_accuracy = []
 
-n_datasets = None  # 3  # set to None to use all
-n_treess = [1, 2, 5, 10, 20, 50]
+n_datasets = None  # set to None to use all
+n_treess = [1, 2, 5, 10, 20, 50, 100, 200]
 
-for n in n_treess:
+for x, n in enumerate(n_treess):
     for Clf in classifiers:
         clf_title, clf = Clf(n)
         clf_name = clf.__class__.__name__
-
-        for loader in loaders_small_classification[:n_datasets]:
+        for loader in loaders[:n_datasets]:
             dataset = loader()
             data_name = dataset.name
             task = dataset.task
@@ -149,6 +135,7 @@ for n in n_treess:
                 col_classifier.append(clf_name)
                 col_classifier_title.append(clf_title)
                 col_n_trees.append(n)
+                col_x_pos.append(x + 1)
                 col_repeat.append(repeat)
 
                 X_train, X_test, y_train, y_test = dataset.extract(
@@ -163,7 +150,6 @@ for n in n_treess:
                 )
 
                 y_scores = clf.predict_proba(X_test)
-
                 y_pred = np.argmax(y_scores, axis=1)
 
                 if task == "binary-classification":
@@ -190,7 +176,6 @@ for n in n_treess:
                     )
                     log_loss_ = log_loss(y_test, y_scores)
                     accuracy = accuracy_score(y_test, y_pred)
-                # TODO: regression
                 else:
                     raise ValueError("Task %s not understood" % task)
 
@@ -209,6 +194,7 @@ results = pd.DataFrame(
         "classifier_title": col_classifier_title,
         "repeat": col_repeat,
         "n_trees": col_n_trees,
+        "x_pos": col_x_pos,
         "roc_auc": col_roc_auc,
         "roc_auc_w": col_roc_auc_weighted,
         "avg_prec": col_avg_precision_score,
