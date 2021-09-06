@@ -41,7 +41,8 @@ np.set_printoptions(precision=2)
 
 
 # n_samples = 1000
-n_samples = 2_000_000
+# n_samples = 2_000_000
+n_samples = 1_000_000
 
 # n_samples = 10
 random_state = 42
@@ -63,6 +64,7 @@ datasets = [
 
 clf_kwargs = {
     "n_estimators": 100,
+    "max_features": 2,
     "min_samples_split": 2,
     "random_state": random_state,
     "n_jobs": -1,

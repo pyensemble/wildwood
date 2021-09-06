@@ -300,6 +300,9 @@ class ForestBase(BaseEstimator):
             multiclass = self.multiclass
             n_classes = self._n_classes_
 
+            if self.aggregation and self.dirichlet == 0.0:
+                raise ValueError("dirichlet must be > 0 when aggregation=True")
+
             if multiclass == "ovr":
                 n_classes_per_tree = 2
                 n_trees = n_classes * n_estimators

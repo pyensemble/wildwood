@@ -193,6 +193,15 @@ class TestForestClassifier(object):
         with pytest.raises(ValueError, match="aggregation must be boolean"):
             clf.aggregation = 1
 
+    def test_aggregation_dirichlet(self):
+        iris = self.iris
+        X, y = iris["data"], iris["target"]
+        clf = ForestClassifier(dirichlet=0.0, aggregation=True)
+        with pytest.raises(
+            ValueError, match="dirichlet must be > 0 when aggregation=True"
+        ):
+            clf.fit(X, y)
+
     def test_verbose(self):
         clf = ForestClassifier()
         assert not clf.verbose
@@ -764,7 +773,6 @@ class TestForestClassifier(object):
         y_scores_train = clf.predict_proba(X_train)
         y_scores_test = clf.predict_proba(X_test)
         lloss_train_binary = log_loss(y_train, y_scores_train)
-        lloss_test_binary = log_loss(y_test, y_scores_test)
 
         multiclass = "multinomial"
         cat_split_strategy = "all"
@@ -785,57 +793,57 @@ class TestForestClassifier(object):
         lloss_train_all = log_loss(y_train, y_scores_train)
         assert lloss_train_all < lloss_train_binary
 
-    def test_categorical_fit_on_adult(self):
-        dataset = self.adult
-        n_estimators = 10
-        aggregation = False
-        class_weight = "balanced"
-        n_jobs = -1
-        max_features = None
-        random_state = 42
-        dirichlet = 0.0
-        step = 1.0
-
-        def run(multiclass, categorical_features, one_hot_encode):
-            dataset.one_hot_encode = one_hot_encode
-            X_train, X_test, y_train, y_test = dataset.extract(
-                random_state=random_state
-            )
-
-            clf = ForestClassifier(
-                n_estimators=n_estimators,
-                n_jobs=n_jobs,
-                multiclass=multiclass,
-                aggregation=aggregation,
-                max_features=max_features,
-                class_weight=class_weight,
-                categorical_features=categorical_features,
-                random_state=random_state,
-                dirichlet=dirichlet,
-                step=step,
-            )
-            clf.fit(X_train, y_train)
-            # y_scores_test = clf.predict_proba(X_test)
-            y_scores_train = clf.predict_proba(X_train)
-            return log_loss(y_train, y_scores_train)
-
-        # multiclass = "multinomial"
-        # categorical_features = None
-        # one_hot_encode = True
-        # lloss1 = run(multiclass, categorical_features, one_hot_encode)
-
-        multiclass = "multinomial"
-        categorical_features = None
-        one_hot_encode = False
-        lloss2 = run(multiclass, categorical_features, one_hot_encode)
-
-        multiclass = "multinomial"
-        categorical_features = dataset.categorical_features_
-        one_hot_encode = False
-        lloss3 = run(multiclass, categorical_features, one_hot_encode)
-
-        assert lloss3 < lloss2
-        # assert lloss3 < lloss1
+    # def test_categorical_fit_on_adult(self):
+    #     dataset = self.adult
+    #     n_estimators = 10
+    #     aggregation = False
+    #     class_weight = "balanced"
+    #     n_jobs = -1
+    #     max_features = None
+    #     random_state = 42
+    #     dirichlet = 0.0
+    #     step = 1.0
+    #
+    #     def run(multiclass, categorical_features, one_hot_encode):
+    #         dataset.one_hot_encode = one_hot_encode
+    #         X_train, X_test, y_train, y_test = dataset.extract(
+    #             random_state=random_state
+    #         )
+    #
+    #         clf = ForestClassifier(
+    #             n_estimators=n_estimators,
+    #             n_jobs=n_jobs,
+    #             multiclass=multiclass,
+    #             aggregation=aggregation,
+    #             max_features=max_features,
+    #             class_weight=class_weight,
+    #             categorical_features=categorical_features,
+    #             random_state=random_state,
+    #             dirichlet=dirichlet,
+    #             step=step,
+    #         )
+    #         clf.fit(X_train, y_train)
+    #         # y_scores_test = clf.predict_proba(X_test)
+    #         y_scores_train = clf.predict_proba(X_train)
+    #         return log_loss(y_train, y_scores_train)
+    #
+    #     multiclass = "multinomial"
+    #     categorical_features = None
+    #     one_hot_encode = True
+    #     lloss1 = run(multiclass, categorical_features, one_hot_encode)
+    #
+    #     multiclass = "multinomial"
+    #     categorical_features = None
+    #     one_hot_encode = False
+    #     lloss2 = run(multiclass, categorical_features, one_hot_encode)
+    #
+    #     multiclass = "multinomial"
+    #     categorical_features = dataset.categorical_features_
+    #     one_hot_encode = False
+    #     lloss3 = run(multiclass, categorical_features, one_hot_encode)
+    #
+    #     assert lloss3 < lloss1
+    #     assert lloss3 < lloss2
 
     def test_ovr_with_two_classes(self):
         """Test on a binary classification problem that 'ovr' and 'multiclass' are

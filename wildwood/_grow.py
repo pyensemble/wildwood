@@ -303,6 +303,8 @@ def grow(
     start_valid = 0
     end_valid = tree_context.n_samples_valid
 
+    aggregation = tree_context.aggregation
+
     push_record(
         records,
         parent,
@@ -339,11 +341,16 @@ def grow(
         # is_leaf = is_leaf or (depth >= max_depth)
         # This node is a terminal leaf, we won't try to split it
 
-        # We don't split a node if it contains less than min_samples_split training
-        # or validation samples
-        is_leaf = (node_context.n_samples_train < min_samples_split) or (
-            node_context.n_samples_valid < min_samples_split
-        )
+        if aggregation:
+            # When using aggregation, we don't split a node if it contains less than
+            # min_samples_split training or validation samples
+            is_leaf = (node_context.n_samples_train < min_samples_split) or (
+                node_context.n_samples_valid < min_samples_split
+            )
+        else:
+            # When not using aggregation, we don't split a node if it contains less
+            # than min_samples_split training samples
+            is_leaf = node_context.n_samples_train < min_samples_split
 
         # TODO: check that it's indeed the case
         # We don't split a node if it's pure: whenever its impurity computed on
@@ -488,7 +495,6 @@ def grow(
             )
 
     # We finished to grow the tree. Now, we can compute the tree's aggregation weights.
-    aggregation = tree_context.aggregation
     step = tree_context.step
 
     # Since the tree is grown in a depth-first fashion, we know that if we iterate

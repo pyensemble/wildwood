@@ -30,7 +30,7 @@ def test_is_bin_in_partition(bin_partition, bin_):
     assert is_bin_in_partition(bin_, bin_partition) == in_partition
 
 
-def check_nodes(nodes, bin_partitions):
+def check_nodes(nodes, bin_partitions, aggregation):
     node_count = nodes.size
     assert node_count > 0
     for node_id, node in enumerate(nodes):
@@ -38,9 +38,10 @@ def check_nodes(nodes, bin_partitions):
         assert node_id == node["node_id"]
         # Check that nodes contain both training and validation samples
         assert node["n_samples_train"] >= 1
-        assert node["n_samples_valid"] >= 1
         assert node["w_samples_train"] > 0.0
-        assert node["w_samples_valid"] > 0.0
+        if aggregation:
+            assert node["n_samples_valid"] >= 1
+            assert node["w_samples_valid"] > 0.0
 
         # Check start_train, end_train, start_valid and end_valid
         start_train = node["start_train"]
@@ -48,7 +49,8 @@ def check_nodes(nodes, bin_partitions):
         start_valid = node["start_valid"]
         end_valid = node["end_valid"]
         assert start_train < end_train
-        assert start_valid < end_valid
+        if aggregation:
+            assert start_valid < end_valid
 
         parent = node["parent"]
         if node_id != 0:
@@ -58,8 +60,9 @@ def check_nodes(nodes, bin_partitions):
             # included in those of the parent
             assert start_train >= nodes[parent]["start_train"]
             assert end_train <= nodes[parent]["end_train"]
-            assert start_valid >= nodes[parent]["start_valid"]
-            assert end_valid <= nodes[parent]["end_valid"]
+            if aggregation:
+                assert start_valid >= nodes[parent]["start_valid"]
+                assert end_valid <= nodes[parent]["end_valid"]
             # Check that depth of a child is +1 the one of its parent
             assert node["depth"] == nodes[parent]["depth"] + 1
             # TODO: Check that leaves have no child
@@ -148,7 +151,7 @@ def test_nodes_on_adult(
         nodes = tree._tree.nodes[:node_count]
         bin_partitions = tree._tree.bin_partitions
         assert tree._tree.nodes.size >= node_count
-        check_nodes(nodes, bin_partitions)
+        check_nodes(nodes, bin_partitions, aggregation)
 
 
 @pytest.mark.parametrize("n_estimators", [2])
@@ -206,7 +209,7 @@ def test_nodes_on_car(
         nodes = tree._tree.nodes[:node_count]
         bin_partitions = tree._tree.bin_partitions
         assert tree._tree.nodes.size >= node_count
-        check_nodes(nodes, bin_partitions)
+        check_nodes(nodes, bin_partitions, aggregation)
 
 
 @pytest.mark.parametrize("n_estimators", [2])
@@ -264,7 +267,7 @@ def test_nodes_on_churn(
         nodes = tree._tree.nodes[:node_count]
         bin_partitions = tree._tree.bin_partitions
         assert tree._tree.nodes.size >= node_count
-        check_nodes(nodes, bin_partitions)
+        check_nodes(nodes, bin_partitions, aggregation)
 
 
 @pytest.mark.parametrize("n_estimators", [2])
@@ -312,9 +315,10 @@ def test_nodes_on_boston(
         nodes = tree._tree.nodes[:node_count]
         bin_partitions = tree._tree.bin_partitions
         assert tree._tree.nodes.size >= node_count
-        check_nodes(nodes, bin_partitions)
+        check_nodes(nodes, bin_partitions, aggregation)
 
 
+@pytest.mark.parametrize("aggregation", [False, True])
 @pytest.mark.parametrize("max_features", [None, "auto"])
 @pytest.mark.parametrize("random_state", [0, 42])
 @pytest.mark.parametrize(
@@ -324,6 +328,7 @@ def test_nodes_on_boston(
     "min_samples_split, min_samples_leaf", [(2, 1), (13, 7), (3, 5)]
 )
 def test_min_samples_split_min_samples_leaf_on_adult(
+    aggregation,
     max_features,
     random_state,
     one_hot_encode,
@@ -340,9 +345,7 @@ def test_min_samples_split_min_samples_leaf_on_adult(
     n_jobs = -1
     class_weight = "balanced"
     multiclass = "multinomial"
-    aggregation = False
     step = 1.0
-    dirichlet = 0.0
 
     X_train, X_test, y_train, y_test = dataset.extract(random_state=random_state)
     if use_categoricals:
@@ -360,7 +363,6 @@ def test_min_samples_split_min_samples_leaf_on_adult(
         class_weight=class_weight,
         categorical_features=categorical_features,
         random_state=random_state,
-        dirichlet=dirichlet,
         step=step,
     )
     clf.fit(X_train, y_train)
@@ -372,9 +374,11 @@ def test_min_samples_split_min_samples_leaf_on_adult(
             # Check that nodes respect the min_samples_split and
             # min_samples_leaf constraints
             assert node["n_samples_train"] >= min_samples
-            assert node["n_samples_valid"] >= min_samples
+            if aggregation:
+                assert node["n_samples_valid"] >= min_samples
 
 
+@pytest.mark.parametrize("aggregation", [False, True])
 @pytest.mark.parametrize("max_features", [None, "auto"])
 @pytest.mark.parametrize("random_state", [0, 42])
 @pytest.mark.parametrize(
@@ -384,6 +388,7 @@ def test_min_samples_split_min_samples_leaf_on_adult(
     "min_samples_split, min_samples_leaf", [(2, 1), (13, 7), (3, 5)]
 )
 def test_min_samples_split_min_samples_leaf_on_boston(
+    aggregation,
     max_features,
     random_state,
     one_hot_encode,
@@ -398,9 +403,7 @@ def test_min_samples_split_min_samples_leaf_on_boston(
 
     n_estimators = 3
     n_jobs = -1
-    aggregation = False
     step = 1.0
-    dirichlet = 0.0
 
     X_train, X_test, y_train, y_test = dataset.extract(random_state=random_state)
     if use_categoricals:
@@ -427,4 +430,5 @@ def test_min_samples_split_min_samples_leaf_on_boston(
             # Check that nodes respect the min_samples_split and
             # min_samples_leaf constraints
             assert node["n_samples_train"] >= min_samples
-            assert node["n_samples_valid"] >= min_samples
+            if aggregation:
+                assert node["n_samples_valid"] >= min_samples
