@@ -330,6 +330,7 @@ def init_split(split):
     boundscheck=BOUNDSCHECK,
     locals={
         "n_classes": uintp,
+        "aggregation": boolean,
         "n_samples_train": uintp,
         "w_samples_train": float32,
         "n_samples_valid": uintp,
@@ -364,6 +365,7 @@ def try_feature_order_for_classifier_split(
 ):
     n_classes = tree_context.n_classes
     min_samples_leaf = tree_context.min_samples_leaf
+    aggregation = tree_context.aggregation
     n_samples_train = node_context.n_samples_train
     w_samples_train = node_context.w_samples_train
     n_samples_valid = node_context.n_samples_valid
@@ -428,7 +430,7 @@ def try_feature_order_for_classifier_split(
         #  min_samples_leaf validation samples in the left child then we don't
         #  consider the split
         if (n_samples_train_left < min_samples_leaf) or (
-            n_samples_valid_left < min_samples_leaf
+            aggregation and (n_samples_valid_left < min_samples_leaf)
         ):
             continue
 
@@ -437,7 +439,7 @@ def try_feature_order_for_classifier_split(
         #  left to right, no other future bin on the right would lead to an
         #  acceptable split, so we break the for loop over bins.
         if (n_samples_train_right < min_samples_leaf) or (
-            n_samples_valid_right < min_samples_leaf
+            aggregation and (n_samples_valid_right < min_samples_leaf)
         ):
             break
 
@@ -665,6 +667,7 @@ def find_best_split_classifier_along_feature(
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
     locals={
+        "aggregation": boolean,
         "n_samples_train": uintp,
         "w_samples_train": float32,
         "n_samples_valid": uintp,
@@ -731,6 +734,7 @@ def find_best_split_regressor_along_feature(
         Data about the best split found for the feature
     """
     min_samples_leaf = tree_context.min_samples_leaf
+    aggregation = tree_context.aggregation
     n_samples_train = node_context.n_samples_train
     w_samples_train = node_context.w_samples_train
     n_samples_valid = node_context.n_samples_valid
@@ -809,7 +813,7 @@ def find_best_split_regressor_along_feature(
         #  min_samples_leaf validation samples in the left child then we don't
         #  consider the split
         if (n_samples_train_left < min_samples_leaf) or (
-            n_samples_valid_left < min_samples_leaf
+            aggregation and (n_samples_valid_left < min_samples_leaf)
         ):
             continue
 
@@ -818,7 +822,7 @@ def find_best_split_regressor_along_feature(
         #  left to right, no other future bin on the right would lead to an
         #  acceptable split, so we break the for loop over bins.
         if (n_samples_train_right < min_samples_leaf) or (
-            n_samples_valid_right < min_samples_leaf
+            aggregation and (n_samples_valid_right < min_samples_leaf)
         ):
             break
 

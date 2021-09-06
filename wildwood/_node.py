@@ -504,6 +504,7 @@ def init_node_context(tree_context, node_context):
         "partition_valid": uintp[::1],
         "n_classes": uintp,
         "dirichlet": float32,
+        "aggregation": boolean,
         "train_indices": uintp[::1],
         "valid_indices": uintp[::1],
         "w_samples_train": float32,
@@ -585,6 +586,7 @@ def compute_node_classifier_context(
     partition_valid = tree_context.partition_valid
     n_classes = tree_context.n_classes
     dirichlet = tree_context.dirichlet
+    aggregation = tree_context.aggregation
 
     # The indices of the training samples contained in the node
     train_indices = partition_train[start_train:end_train]
@@ -636,25 +638,26 @@ def compute_node_classifier_context(
                 )
 
         # Compute sample counts about validation samples
-        for sample in valid_indices:
-            bin = X[sample, feature]
-            sample_weight = sample_weights[sample]
-            if f == 0:
-                w_samples_valid += sample_weight
-                label = uintp(y[sample])
-                # TODO: aggregation loss is hard-coded here. Call a function instead
-                #  when implementing other losses
-                loss_valid -= sample_weight * log(y_pred[label])
+        if aggregation:
+            for sample in valid_indices:
+                bin = X[sample, feature]
+                sample_weight = sample_weights[sample]
+                if f == 0:
+                    w_samples_valid += sample_weight
+                    label = uintp(y[sample])
+                    # TODO: aggregation loss is hard-coded here. Call a function instead
+                    #  when implementing other losses
+                    loss_valid -= sample_weight * log(y_pred[label])
 
-            if n_samples_valid_in_bins[f, bin] == 0.0:
-                # It's the first time we find a valid sample for this (feature, bin)
-                # We save the bin number at index non_empty_bins_valid_count[f]
-                non_empty_bins_valid[f, non_empty_bins_valid_count[f]] = bin
-                # We increase the count of non-empty bins for this feature
-                non_empty_bins_valid_count[f] += 1
+                if n_samples_valid_in_bins[f, bin] == 0.0:
+                    # It's the first time we find a valid sample for this (feature, bin)
+                    # We save the bin number at index non_empty_bins_valid_count[f]
+                    non_empty_bins_valid[f, non_empty_bins_valid_count[f]] = bin
+                    # We increase the count of non-empty bins for this feature
+                    non_empty_bins_valid_count[f] += 1
 
-            n_samples_valid_in_bins[f, bin] += 1
-            w_samples_valid_in_bins[f, bin] += sample_weight
+                n_samples_valid_in_bins[f, bin] += 1
+                w_samples_valid_in_bins[f, bin] += sample_weight
 
         f += 1
 
@@ -691,6 +694,7 @@ def compute_node_classifier_context(
         "sample_weights": float32[::1],
         "partition_train": uintp[::1],
         "partition_valid": uintp[::1],
+        "aggregation": boolean,
         "train_indices": uintp[::1],
         "valid_indices": uintp[::1],
         "w_samples_train": float32,
@@ -773,6 +777,7 @@ def compute_node_regressor_context(
     sample_weights = tree_context.sample_weights
     partition_train = tree_context.partition_train
     partition_valid = tree_context.partition_valid
+    aggregation = tree_context.aggregation
 
     # The indices of the training samples contained in the node
     train_indices = partition_train[start_train:end_train]
@@ -820,25 +825,26 @@ def compute_node_regressor_context(
             y_pred /= w_samples_train
 
         # Compute sample counts about validation samples
-        for sample in valid_indices:
-            bin = X[sample, feature]
-            sample_weight = sample_weights[sample]
-            if f == 0:
-                w_samples_valid += sample_weight
-                label = y[sample]
-                # TODO: aggregation loss is hard-coded here. Call a function instead
-                #  when implementing other losses
-                loss_valid += sample_weight * (label - y_pred) * (label - y_pred)
+        if aggregation:
+            for sample in valid_indices:
+                bin = X[sample, feature]
+                sample_weight = sample_weights[sample]
+                if f == 0:
+                    w_samples_valid += sample_weight
+                    label = y[sample]
+                    # TODO: aggregation loss is hard-coded here. Call a function instead
+                    #  when implementing other losses
+                    loss_valid += sample_weight * (label - y_pred) * (label - y_pred)
 
-            if n_samples_valid_in_bins[f, bin] == 0:
-                # It's the first time we find a valid sample for this (feature, bin)
-                # We save the bin number at index non_empty_bins_valid_count[f]
-                non_empty_bins_valid[f, non_empty_bins_valid_count[f]] = bin
-                # We increase the count of non-empty bins for this feature
-                non_empty_bins_valid_count[f] += 1
+                if n_samples_valid_in_bins[f, bin] == 0:
+                    # It's the first time we find a valid sample for this (feature, bin)
+                    # We save the bin number at index non_empty_bins_valid_count[f]
+                    non_empty_bins_valid[f, non_empty_bins_valid_count[f]] = bin
+                    # We increase the count of non-empty bins for this feature
+                    non_empty_bins_valid_count[f] += 1
 
-            n_samples_valid_in_bins[f, bin] += 1
-            w_samples_valid_in_bins[f, bin] += sample_weight
+                n_samples_valid_in_bins[f, bin] += 1
+                w_samples_valid_in_bins[f, bin] += sample_weight
 
         f += 1
 
