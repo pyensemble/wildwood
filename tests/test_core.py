@@ -101,7 +101,7 @@ def check_nodes(nodes, bin_partitions, aggregation):
 @pytest.mark.parametrize("class_weight", [None, "balanced"])
 @pytest.mark.parametrize("n_jobs", [1, -1])
 @pytest.mark.parametrize("max_features", [None, "auto"])
-@pytest.mark.parametrize("random_state", [0, 42])
+@pytest.mark.parametrize("random_state", [42])
 @pytest.mark.parametrize("step", [1.0])
 @pytest.mark.parametrize("multiclass", ["multinomial"])
 @pytest.mark.parametrize("cat_split_strategy", ["binary", "all", "random"])
@@ -159,7 +159,7 @@ def test_nodes_on_adult(
 @pytest.mark.parametrize("class_weight", [None, "balanced"])
 @pytest.mark.parametrize("n_jobs", [1, -1])
 @pytest.mark.parametrize("max_features", [None, "auto"])
-@pytest.mark.parametrize("random_state", [0, 42])
+@pytest.mark.parametrize("random_state", [42])
 @pytest.mark.parametrize("step", [1.0])
 @pytest.mark.parametrize("multiclass", ["multinomial", "ovr"])
 @pytest.mark.parametrize("cat_split_strategy", ["binary", "all", "random"])
@@ -217,7 +217,7 @@ def test_nodes_on_car(
 @pytest.mark.parametrize("class_weight", [None, "balanced"])
 @pytest.mark.parametrize("n_jobs", [1, -1])
 @pytest.mark.parametrize("max_features", [None, "auto"])
-@pytest.mark.parametrize("random_state", [0, 42])
+@pytest.mark.parametrize("random_state", [42])
 @pytest.mark.parametrize("step", [1.0])
 @pytest.mark.parametrize("multiclass", ["multinomial"])
 @pytest.mark.parametrize("cat_split_strategy", ["binary", "all", "random"])
@@ -274,7 +274,7 @@ def test_nodes_on_churn(
 @pytest.mark.parametrize("aggregation", [False, True])
 @pytest.mark.parametrize("n_jobs", [1, -1])
 @pytest.mark.parametrize("max_features", [None, "auto"])
-@pytest.mark.parametrize("random_state", [0, 42])
+@pytest.mark.parametrize("random_state", [42])
 @pytest.mark.parametrize("step", [1.0])
 @pytest.mark.parametrize(
     "one_hot_encode, use_categoricals", [(False, False), (False, True), (True, False)]
@@ -320,7 +320,7 @@ def test_nodes_on_boston(
 
 @pytest.mark.parametrize("aggregation", [False, True])
 @pytest.mark.parametrize("max_features", [None, "auto"])
-@pytest.mark.parametrize("random_state", [0, 42])
+@pytest.mark.parametrize("random_state", [42])
 @pytest.mark.parametrize(
     "one_hot_encode, use_categoricals", [(False, False), (False, True), (True, False)]
 )
@@ -380,7 +380,7 @@ def test_min_samples_split_min_samples_leaf_on_adult(
 
 @pytest.mark.parametrize("aggregation", [False, True])
 @pytest.mark.parametrize("max_features", [None, "auto"])
-@pytest.mark.parametrize("random_state", [0, 42])
+@pytest.mark.parametrize("random_state", [42])
 @pytest.mark.parametrize(
     "one_hot_encode, use_categoricals", [(False, False), (False, True), (True, False)]
 )
