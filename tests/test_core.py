@@ -108,6 +108,7 @@ def check_nodes(nodes, bin_partitions, aggregation):
 @pytest.mark.parametrize(
     "one_hot_encode, use_categoricals", [(False, False), (False, True), (True, False)]
 )
+@pytest.mark.parametrize("criterion", ("gini", "entropy"))
 def test_nodes_on_adult(
     n_estimators,
     aggregation,
@@ -121,6 +122,7 @@ def test_nodes_on_adult(
     cat_split_strategy,
     one_hot_encode,
     use_categoricals,
+    criterion,
 ):
     dataset = load_adult()
     dataset.test_size = 1.0 / 5
@@ -137,6 +139,7 @@ def test_nodes_on_adult(
         multiclass=multiclass,
         cat_split_strategy=cat_split_strategy,
         aggregation=aggregation,
+        criterion=criterion,
         max_features=max_features,
         class_weight=class_weight,
         categorical_features=categorical_features,
@@ -166,6 +169,7 @@ def test_nodes_on_adult(
 @pytest.mark.parametrize(
     "one_hot_encode, use_categoricals", [(False, False), (False, True), (True, False)]
 )
+@pytest.mark.parametrize("criterion", ("gini", "entropy"))
 def test_nodes_on_car(
     n_estimators,
     aggregation,
@@ -179,6 +183,7 @@ def test_nodes_on_car(
     cat_split_strategy,
     one_hot_encode,
     use_categoricals,
+    criterion,
 ):
     dataset = load_car()
     dataset.test_size = 1.0 / 5
@@ -195,6 +200,7 @@ def test_nodes_on_car(
         multiclass=multiclass,
         cat_split_strategy=cat_split_strategy,
         aggregation=aggregation,
+        criterion=criterion,
         max_features=max_features,
         class_weight=class_weight,
         categorical_features=categorical_features,
@@ -224,6 +230,7 @@ def test_nodes_on_car(
 @pytest.mark.parametrize(
     "one_hot_encode, use_categoricals", [(False, False), (False, True), (True, False)]
 )
+@pytest.mark.parametrize("criterion", ("gini", "entropy"))
 def test_nodes_on_churn(
     n_estimators,
     aggregation,
@@ -237,6 +244,7 @@ def test_nodes_on_churn(
     cat_split_strategy,
     one_hot_encode,
     use_categoricals,
+    criterion,
 ):
     dataset = load_car()
     dataset.test_size = 1.0 / 5
@@ -253,6 +261,7 @@ def test_nodes_on_churn(
         multiclass=multiclass,
         cat_split_strategy=cat_split_strategy,
         aggregation=aggregation,
+        criterion=criterion,
         max_features=max_features,
         class_weight=class_weight,
         categorical_features=categorical_features,
@@ -327,6 +336,7 @@ def test_nodes_on_boston(
 @pytest.mark.parametrize(
     "min_samples_split, min_samples_leaf", [(2, 1), (13, 7), (3, 5)]
 )
+@pytest.mark.parametrize("criterion", ("gini", "entropy"))
 def test_min_samples_split_min_samples_leaf_on_adult(
     aggregation,
     max_features,
@@ -335,6 +345,7 @@ def test_min_samples_split_min_samples_leaf_on_adult(
     use_categoricals,
     min_samples_split,
     min_samples_leaf,
+    criterion,
 ):
     dataset = load_adult()
     dataset.test_size = 1.0 / 5
@@ -358,6 +369,7 @@ def test_min_samples_split_min_samples_leaf_on_adult(
         multiclass=multiclass,
         aggregation=aggregation,
         max_features=max_features,
+        criterion=criterion,
         min_samples_split=min_samples_split,
         min_samples_leaf=min_samples_leaf,
         class_weight=class_weight,

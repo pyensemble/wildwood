@@ -8,6 +8,7 @@ nodes and their child nodes, and the information gain associated to it.
 
 from numba import jit, float32, uint32
 from numba.types import Tuple
+import numpy as np
 
 
 @jit(float32(float32, float32, float32, float32), nopython=True, nogil=True)
@@ -47,11 +48,6 @@ def information_gain_proxy(
         and child nodes
     """
     return -w_samples_left * impurity_left - w_samples_right * impurity_right
-
-
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# Gini impurity                                                                       #
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 
 @jit(
@@ -114,6 +110,11 @@ def information_gain(
     )
 
 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# Gini impurity                                                                       #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+
 @jit(
     float32(uint32, float32, float32[::1]),
     nopython=True,
@@ -166,7 +167,7 @@ def gini_childs(n_classes, w_samples_left, w_samples_right, y_sum_left, y_sum_ri
 
     Parameters
     ----------
-    n_classes : int
+    n_classes : int  # TODO: float32 in signature??
         Number of label classes
 
     w_samples_left : float
@@ -200,6 +201,101 @@ def gini_childs(n_classes, w_samples_left, w_samples_right, y_sum_left, y_sum_ri
     gini_left = 1.0 - y_sum_left_sq / w_samples_left_sq
     gini_right = 1.0 - y_sum_right_sq / w_samples_right_sq
     return gini_left, gini_right
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# Entropy impurity                                                                    #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+
+@jit(
+    float32(uint32, float32, float32[::1]),
+    nopython=True,
+    nogil=True,
+    locals={"entropy": float32, "y_sum_k": float32},
+)
+def entropy_node(n_classes, w_samples, y_sum):
+    """Computes the entropy impurity criterion in a node.
+
+    Parameters
+    ----------
+    n_classes : int
+        Number of label classes
+
+    w_samples : float
+        Weighted number of samples in the node
+
+    y_sum : ndarray
+        Array of shape (n_classes,) and float dtype containing the weighted number of
+        samples in each label class
+
+    Returns
+    -------
+    output : float
+        Entropy impurity criterion in the node
+    """
+    entropy = 0.0
+    for k in range(n_classes):
+        y_sum_k = y_sum[k]
+        if y_sum_k > 0.0:
+            y_sum_k /= w_samples
+            entropy -= y_sum_k * np.log(y_sum_k)
+    return entropy
+
+
+@jit(
+    Tuple((float32, float32))(float32, float32, float32, float32[::1], float32[::1]),
+    nopython=True,
+    nogil=True,
+    locals={
+        "entropy_left": float32,
+        "entropy_right": float32,
+        "y_sum_left_k": float32,
+        "y_sum_right_k": float32,
+    },
+)
+def entropy_childs(n_classes, w_samples_left, w_samples_right, y_sum_left, y_sum_right):
+    """Computes the entropy impurity criterion in both left and right child nodes of a
+    parent node.
+
+    Parameters
+    ----------
+    n_classes : int
+        Number of label classes
+
+    w_samples_left : float
+        Weighted number of samples in the left child node
+
+    w_samples_right : float
+        Weighted number of samples in the right child node
+
+    y_sum_left : ndarray
+        Array of shape (n_classes,) and float dtype containing the weighted number of
+        samples in each label class in the left child node
+
+    y_sum_right : ndarray
+        Array of shape (n_classes,) and float dtype containing the weighted number of
+        samples in each label class in the right child node
+
+    Returns
+    -------
+    output : tuple
+        A tuple of two floats containing the Entropy impurities of the left child and
+        right child nodes.
+    """
+    entropy_left = 0.0
+    entropy_right = 0.0
+    for k in range(n_classes):
+        y_sum_left_k = y_sum_left[k]
+        y_sum_right_k = y_sum_right[k]
+        if y_sum_left_k > 0.0:
+            y_sum_left_k /= w_samples_left
+            entropy_left -= y_sum_left_k * np.log(y_sum_left_k)
+        if y_sum_right_k > 0.0:
+            y_sum_right_k /= w_samples_right
+            entropy_right -= y_sum_right_k * np.log(y_sum_right_k)
+
+    return entropy_left, entropy_right
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #

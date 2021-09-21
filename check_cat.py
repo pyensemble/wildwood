@@ -37,6 +37,7 @@ clf = ForestClassifier(
     categorical_features=dataset.categorical_features_,
     n_jobs=1,
     class_weight="balanced",
+    criterion="entropy",
 )
 clf.fit(X_train, y_train)
 y_scores_train = clf.predict_proba(X_train)
@@ -53,6 +54,7 @@ clf = ForestClassifier(
     aggregation=False,
     max_features=None,
     # categorical_features=dataset.categorical_features_,
+    criterion="entropy",
     n_jobs=1,
     class_weight="balanced",
 )
@@ -76,6 +78,7 @@ clf = ForestClassifier(
     max_features=None,
     n_jobs=1,
     class_weight="balanced",
+    criterion="entropy",
 )
 clf.fit(X_train, y_train)
 y_scores_train = clf.predict_proba(X_train)
