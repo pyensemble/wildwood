@@ -14,11 +14,10 @@ from wildwood.preprocessing.dataset import array_to_dataset, dataset_to_array
 np.random.seed(42)
 
 
-@pytest.mark.parametrize("n_samples", [1, 2, 32, 17, 1000, 1_000_000])
+@pytest.mark.parametrize("n_samples", [2, 32, 17, 1000, 1_000_000])
 @pytest.mark.parametrize(
     "max_values, dtype",
     [
-        (np.array([1], dtype=np.uint64), np.uint8),
         (np.array([32], dtype=np.uint64), np.uint8),
         (np.array([17, 2, 64], dtype=np.uint64), np.uint8),
         (np.array([1024, 32, 64], dtype=np.uint64), np.uint16),
@@ -32,6 +31,6 @@ def test_dataset(n_samples, max_values, dtype):
     X_in = np.asfortranarray(
         np.random.randint(max_values + 1, size=(n_samples, n_features)), dtype=dtype
     )
-    dataset = array_to_dataset(X_in, max_values=max_values)
+    dataset = array_to_dataset(X_in)
     X_out = dataset_to_array(dataset)
     np.testing.assert_array_equal(X_in, X_out)
