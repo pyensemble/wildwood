@@ -1,14 +1,3 @@
-# Configuration file for the Sphinx documentation builder.
-#
-# This file only contains a selection of the most common options. For a full
-# list see the documentation:
-# https://www.sphinx-doc.org/en/master/usage/configuration.html
-
-# -- Path setup --------------------------------------------------------------
-
-# If extensions (or modules to document with autodoc) are in another directory,
-# add these directories to sys.path here. If the directory is relative to the
-# documentation root, use os.path.abspath to make it absolute, like shown here.
 import os
 import sys
 
@@ -28,7 +17,7 @@ copyright = "2020, Stéphane Gaïffas"
 author = "Stéphane Gaïffas"
 
 # The full version, including alpha/beta/rc tags
-release = "0.1.0"
+release = "0.1"
 
 # -- General configuration ---------------------------------------------------
 
@@ -44,7 +33,25 @@ extensions = [
     "sphinx.ext.ifconfig",
     "sphinx.ext.mathjax",
     "sphinx.ext.linkcode",
+    "myst_parser",
+    "sphinxcontrib.bibtex"
     #    "sphinx_gallery.gen_gallery",
+]
+
+bibtex_bibfiles = ["biblio.bib"]
+
+myst_enable_extensions = [
+    "amsmath",
+    "colon_fence",
+    "deflist",
+    "dollarmath",
+    "html_admonition",
+    "html_image",
+    # "linkify",
+    # "replacements",
+    # "smartquotes",
+    # "substitution",
+    "tasklist",
 ]
 
 autosummary_generate = True
@@ -77,7 +84,7 @@ templates_path = ["_templates"]
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
-source_suffix = ".rst"
+source_suffix = ".md"
 
 # Generate the plots for the gallery
 plot_gallery = "True"
@@ -89,25 +96,23 @@ master_doc = "index"
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-#
-html_theme = "alabaster"
 
-html_sidebars = {
-    "**": ["about.html", "navigation.html", "searchbox.html"],
-    "auto_examples": ["index.html"],
-}
-html_theme_options = {
-    "description": "scikit-learn compatible alternative random forests algorithms",
-    "github_user": "pyensemble",
-    "github_repo": "wildwood",
-    "github_button": True,
-    "fixed_sidebar": True,
-    "travis_button": False,
-    "logo_text_align": "center",
-    "github_banner": True,
-}
+html_theme = "sphinx_book_theme"
 
-html_logo = "images/logo.png"
+# html_sidebars = {
+#     "**": ["about.html", "navigation.html", "searchbox.html"],
+#     # "auto_examples": ["index.html"],
+# }
+# html_theme_options = {
+#     "description": "scikit-learn compatible alternative random forests algorithms",
+#     "github_user": "pyensemble",
+#     "github_repo": "wildwood",
+#     "github_button": True,
+#     "fixed_sidebar": True,
+#     "travis_button": False,
+#     "logo_text_align": "center",
+#     "github_banner": True,
+# }
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -117,10 +122,10 @@ html_static_path = ["_static"]
 from datetime import datetime
 
 now = datetime.now()
-html_show_copyright = copyright = (
-    str(now.year)
-    + ', <a href="https://github.com/linlearn/linlearn/graphs/contributors">linlearn developers</a>. Updated on '
-    + now.strftime("%B %d, %Y")
+html_show_copyright = copyright = str(
+    now.year
+) + ', <a href="https://github.com/pyensemble/wildwood/graphs/contributors">WildWood ' "developers</a>. Updated on " + now.strftime(
+    "%B %d, %Y"
 )
 
 

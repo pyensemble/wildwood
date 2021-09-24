@@ -899,16 +899,17 @@ class ForestClassifier(ForestBase, ClassifierMixin):
     """
     WildWood forest for classification.
 
-    It grows in parallel `n_estimator` trees using bootstrap samples and aggregates
+    It grows in parallel ``n_estimators`` trees using bootstrap samples and aggregates
     their predictions (bagging). Each tree uses "in-the-bag" samples to grow itself
-    and "out-of-the-bag" samples to compute aggregation weights for all possible
-    subtrees of the whole tree.
+    and "out-of-bag" samples to compute aggregation weights for all possible subtrees of
+    the whole tree.
 
     The prediction function of each tree in WildWood is very different from the one
-    of a standard decision trees. Indeed, the predictions of a tree are computed here
-    as an aggregation with exponential weights of all the predictions given by all
-    possible subtrees (prunings) of the full tree. The required computations are
-    performed efficiently thanks to a variant of the context tree weighting algorithm.
+    of a standard decision trees whenever ``aggregation=True`` (default). Indeed, the
+    predictions of a tree are computed here as an aggregation with exponential
+    weights of all the predictions given by all possible subtrees (prunings) of the
+    full tree. The required computations are performed efficiently thanks to a
+    variant of the context tree weighting algorithm.
 
     Also, features are all binned with a maximum of 255 bins.
 
