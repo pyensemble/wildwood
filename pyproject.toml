@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "wildwood"
-version = "0.1"
+version = "0.2"
 description = "scikit-learn compatible alternative random forests algorithms"
 readme = "README.md"
 authors = ["Stéphane Gaïffas <stephane.gaiffas@gmail.com>"]
