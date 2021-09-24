@@ -83,10 +83,10 @@ class Dataset:
         self.label_encoder = None
         self.df_raw = None
 
-        self.n_samples_ = None
+        self.n_samples_in_ = None
         self.n_samples_train_ = None
         self.n_samples_test_ = None
-        self.n_features_ = None
+        self.n_features_in_ = None
         self.n_columns_ = None
         self.columns_ = None
         self.categorical_columns_ = None
@@ -241,7 +241,7 @@ class Dataset:
         df = self.df_raw
         # Don't put self.n_features_ = df.shape[1] since for now df contains the
         # column label
-        self.n_samples_, _ = df.shape
+        self.n_samples_in_, _ = df.shape
 
         # A list containing the names of the categorical colunms
         self.categorical_columns_ = [
@@ -258,13 +258,13 @@ class Dataset:
 
         self.n_features_categorical_ = len(self.categorical_columns_)
         self.n_features_continuous_ = len(self.continuous_columns_)
-        self.n_features_ = self.n_features_categorical_ + self.n_features_continuous_
+        self.n_features_in_ = self.n_features_categorical_ + self.n_features_continuous_
 
         if not self.one_hot_encode and self.n_features_categorical_ > 0:
             # If we do not use one-hot encoding, we compute a boolean mask indicating
             # which features are categorical. We use the fact that by construction of
             # the Dataset categorical features come last.
-            categorical_features = np.zeros(self.n_features_, dtype=np.bool)
+            categorical_features = np.zeros(self.n_features_in_, dtype=np.bool)
             #
             categorical_features[-self.n_features_categorical_ :] = True
             self.categorical_features_ = categorical_features

@@ -63,14 +63,14 @@ class TestDataLoaders(object):
             X_train, X_test, y_train, y_test = dataset.extract(random_state=42)
 
             assert dataset.n_classes_ == n_classes
-            assert dataset.n_samples_ == n_samples
-            assert dataset.n_features_ == n_features
+            assert dataset.n_samples_in_ == n_samples
+            assert dataset.n_features_in_ == n_features
             assert dataset.n_features_categorical_ == n_features_categorical
 
             if not dataset.one_hot_encode:
-                assert dataset.n_columns_ == dataset.n_features_
-                assert X_train.shape[1] == dataset.n_features_
-                assert X_test.shape[1] == dataset.n_features_
+                assert dataset.n_columns_ == dataset.n_features_in_
+                assert X_train.shape[1] == dataset.n_features_in_
+                assert X_test.shape[1] == dataset.n_features_in_
 
     def test_load_adult(self):
         dataset = load_adult()

@@ -96,7 +96,7 @@ def train_forest(
     )
     reg.fit(X_train, y_train)
     y_pred = reg.predict(X_test)
-    weighted_depths = reg.weighted_depth(X_test.reshape(n_samples_test, 1))
+    weighted_depths = reg._weighted_depth(X_test.reshape(n_samples_test, 1))
     return X_train, y_train, X_test, X_test_binned, reg, y_pred, weighted_depths
 
 

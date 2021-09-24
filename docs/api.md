@@ -1,24 +1,23 @@
 
 # API
 
+``WildWood`` exposes the two classes ``ForestClassifier`` for multi-class 
+classification and ``ForestRegressor`` for regression.
+
 (ForestClassifier)=
-## Classification with `ForestClassifier`
-
-Multi-class classification can be achieved by the `wildwood.ForestClassifier` class.
-
+## Multi-class classification with the `ForestClassifier` class
 
 ```{eval-rst}
 
 .. currentmodule:: wildwood 
 
 .. autoclass:: ForestClassifier
+   :members: fit, predict_proba, predict, apply, score, get_params, set_params
 ```
 
+
 (ForestRegressor)=
-## Regression with `ForestRegressor`
-
-Multi-class classification can be achieved by the `wildwood.ForestRegressor` class.
-
+## Regression with the `ForestRegressor` class
 
 ```{eval-rst}
 

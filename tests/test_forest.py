@@ -100,17 +100,51 @@ class TestForestClassifier(object):
         with pytest.raises(ValueError, match="min_samples_leaf must be >= 1"):
             clf.min_samples_leaf = -3
 
-    def test_n_features_(self):
-        clf = ForestClassifier(n_estimators=2)
+    def test_n_samples_in_(self):
+        clf = ForestClassifier()
         with pytest.raises(
-            ValueError, match="You must call fit before asking for n_features_"
+            ValueError, match="You must call fit before asking for n_samples_in_"
         ):
-            _ = clf.n_features_
+            _ = clf.n_samples_in_
+
+        clf.n_samples_in_ = 42
+        with pytest.raises(
+            ValueError, match="You must call fit before asking for n_samples_in_"
+        ):
+            _ = clf.n_samples_in_
+
+        clf._fitted = True
+        assert clf.n_samples_in_ == 42
+        assert clf.n_samples_in_ == 42
+
         np.random.seed(42)
         X = np.random.randn(10, 3)
         y = np.array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
-        clf.fit(X, y)
-        assert clf.n_features_ == 3
+        clf = ForestClassifier().fit(X, y)
+        assert clf.n_samples_in_ == 10
+
+    def test_n_features_in_(self):
+        clf = ForestClassifier()
+        with pytest.raises(
+            ValueError, match="You must call fit before asking for n_features_in_"
+        ):
+            _ = clf.n_features_in_
+
+        clf.n_features_in_ = 42
+        with pytest.raises(
+            ValueError, match="You must call fit before asking for n_features_in_"
+        ):
+            _ = clf.n_features_in_
+
+        clf._fitted = True
+        assert clf.n_features_in_ == 42
+        assert clf._n_features_ == 42
+
+        np.random.seed(42)
+        X = np.random.randn(10, 3)
+        y = np.array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
+        clf = ForestClassifier().fit(X, y)
+        assert clf.n_features_in_ == 3
 
     def test_n_estimators(self):
         clf = ForestClassifier()
@@ -435,8 +469,8 @@ class TestForestClassifier(object):
 
         assert tuple(clf.classes_) == ("one", "three", "two")
         assert clf.n_classes_ == 3
-        assert clf.n_features_ == 2
-        assert clf.n_samples_ == 6
+        assert clf.n_features_in_ == 2
+        assert clf.n_samples_in_ == 6
 
     # TODO: test that the label is 1D
 
