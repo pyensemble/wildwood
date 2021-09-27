@@ -1,118 +1,84 @@
-
 [![Build Status](https://travis-ci.com/pyensemble/wildwood.svg?branch=master)](https://travis-ci.com/pyensemble/wildwood)
 [![Documentation Status](https://readthedocs.org/projects/wildwood/badge/?version=latest)](https://wildwood.readthedocs.io/en/latest/?badge=latest)
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/wildwood)
 ![PyPI - Wheel](https://img.shields.io/pypi/wheel/wildwood)
 [![GitHub stars](https://img.shields.io/github/stars/pyensemble/wildwood)](https://github.com/pyensemble/wildwood/stargazers)
-[![GitHub issues](https://img.shields.io/github/issues/pyensemble/wildwood)](https://github.com/pyensemble/wildwood/issues)
 [![GitHub license](https://img.shields.io/github/license/pyensemble/wildwood)](https://github.com/pyensemble/wildwood/blob/master/LICENSE)
-[![Coverage Status](https://coveralls.io/repos/github/pyensemble/wildwood/badge.svg?branch=master)](https://coveralls.io/github/pyensemble/wildwood?branch=master)
 
-# WildWood
 
-Scikit-Learn compatible Random Forest algorithms
+`WildWood` is a python package providing improved random forest algorithms for 
+multiclass classification and regression introduced in the paper *Wildwood: a new 
+random forest algorithm* by S. Gaïffas, I. Merad and Y. Yu (2021).
+It follows `scikit-learn`'s API and can be used as an inplace replacement for its 
+Random Forest algorithms (although multilabel/multiclass training is *not* supported yet).
+`WildWood` mainly provides, compared to standard Random Forest algorithms, the 
+following things: 
 
-[Documentation](https://wildwood.readthedocs.io) | [Reproduce experiments](https://wildwood.readthedocs.io/en/latest/experiments.html) |
+- Improved predictions with less trees
+- Faster training times (using a histogram strategy similar to LightGBM)
+- Native support for categorical features
+- Parallel training of the trees in the forest 
 
-# Installation
+Multi-class classification can be performed with `WildWood` using `ForestClassifier` 
+while regression can be performed with `ForestRegressor`.
+
+## Documentation
+
+Documentation is available here: 
+
+>   [http://wildwood.readthedocs.io](http://wildwood.readthedocs.io)
+
+## Installation
 
 The easiest way to install wildwood is using pip
-
-    pip install wildwood
-
+```{code-block} bash
+pip install wildwood
+```
 But you can also use the latest development from github directly with
+```{code-block} bash
+pip install git+https://github.com/pyensemble/wildwood.git
+```
 
-    pip install git+https://github.com/pyensemble/wildwood.git
+## Basic usage
 
-# Experiments
+Basic usage follows the standard scikit-learn API. You can simply use
+```{code-block} python
+from wildwood import ForestClassifier
 
-## Experiments with hyperparameters optimization
+clf = ForestClassifier()
+clf.fit(X_train, y_train)
+y_pred = clf.predict_proba(X_test)[:, 1]
+```
+to train a classifier with all default hyper-parameters.
+However, let us pinpoint below some of the most interesting ones.
 
-To run experiments with hyperparameters optimization, under directory `experiments/`, use
+### Categorical features
 
-    python run_hyperopt_classfiers.py --clf_name WildWood --dataset_name adult
+You should avoid one-hot encoding of categorical features and specify instead to 
+`WildWood` which features should be considered as categorical. 
+This is done using the `categorical_features` argument, which is either a boolean mask 
+or an array of indices corresponding to the categorical features.
 
-(with `WildWood` and on `adult` dataset in this example).
+```{code-block} python
+from wildwood import ForestClassifier
 
-Some options are
+# Assuming columns 0 and 2 are categorical in X
+clf = ForestClassifier(categorical_features=[0, 2])
+clf.fit(X_train, y_train)
+y_pred = clf.predict_proba(X_test)[:, 1]
+```
 
-- Setting `--n_estimators` or `-t` for number of estimators 
-  (for maximal number of boosting iterations in case of gradient boosting algorithms), default 100.
-- Setting `--hyperopt_evals` or `-n` for number of hyperopt steps, default 50.
+```{warning}
+For now, `WildWood` will actually use a maximum of 256 modalities for categorical 
+features, since internally features are encoded using a memory efficient ``uint8`` data 
+type. This will change in a near future.
+```
 
-## Experiments on default parameters
+### Improved predictions through aggregation with exponential weights
 
-To run experiments with default parameters, under directory `experiments/`, use
-
-    python run_benchmark_default_params_classifiers.py --clf_name WildWood --dataset_name adult
-
-(with `WildWood` and on `adult` dataset in this example).
-
-## Datasets and classifiers
-
-For both `run_hyperopt_classfiers.py` and `run_benchmark_default_params_classifiers.
-py`, the available options for `dataset_name` are:
-
-- `adult`
-- `bank`
-- `breastcancer`
-- `car`
-- `cardio`
-- `churn`
-- `default-cb`
-- `letter`
-- `satimage`
-- `sensorless`
-- `spambase`
-- `amazon`
-- `covtype`
-- `internet`
-- `kick`
-- `kddcup`
-- `higgs`
-
-while the available options for `clf_name` are
-
-- `LGBMClassifier`
-- `XGBClassifier`
-- `CatBoostClassifier`
-- `RandomForestClassifier`
-- `HistGradientBoostingClassifier`
-- `WildWood`
-
-## Experiments presented in the paper
-
-All the scripts allowing to reproduce the experiments from the paper are available 
-in the `experiments/` folder
-
-1. Figure 1 is produced using `fig_aggregation_effect.py`.
-1. Figure 2 is produced using `n_tree_experiment.py`. 
-1. Tables 1 and 3 from the paper are produced using `run_hyperopt_classfiers.py` 
-   with `n_estimators=5000` for gradient boosting algorithms and with 
-   `n_estimators=n` for `RFn` and `WWn`
-   - call
-   ```shell
-   python run_hyperopt_classfiers.py --clf_name <classifier> --dataset_name <dataset> --n_estimators <n_estimators>
-   ```   
-   for each pair `(<classifier>, <dataset>)` to run hyperparameters optimization experiments;
-   - use for example
-   ```python
-   import pickle as pkl
-   filename = 'exp_hyperopt_xxx.pickle'
-   with open(filename, "rb") as f:
-       results = pkl.load(f)
-   df = results["results"]
-   ```
-   to retrieve experiments information, such as AUC, logloss and their standard deviation.
-
-1. Tables 2 and 4 are produced using `benchmark_default_params.py`
-    - call
-   ```shell
-   python run_benchmark_default_params_classifiers.py --clf_name <classifier> --dataset_name <dataset>
-   ```   
-   for each pair `(<classifier>, <dataset>)` to run experiments with default parameters;
-   -  use similar commands to retrieve experiments information.
-    
-1. Using experiments results (AUC and fit time) done by `run_hyperopt_classfiers.py`, 
-   then concatenating dataframes and using `fig_auc_fit_time.py` to produce Figure 3.
-
+By default (`aggregation=True`) the predictions produced by `WildWood` are an 
+aggregation with exponential weights (computed on out-of-bag samples) of the predictions
+given by all the possible prunings of each tree. This is computed exactly and very 
+efficiently, at a cost nearly similar to that of a standard Random Forest (which 
+averages the prediction of leaves).
+See {ref}`description-wildwood` for a deeper description of `WildWood`.

@@ -680,8 +680,8 @@ def describe_datasets(include="small-classification", random_state=42):
         n_samples_test, _ = X_test.shape
         col_name.append(dataset.name)
         col_task.append(dataset.task)
-        col_n_samples.append(dataset.n_samples_)
-        col_n_features.append(dataset.n_features_)
+        col_n_samples.append(dataset.n_samples_in_)
+        col_n_features.append(dataset.n_features_in_)
         col_n_classes.append(dataset.n_classes_)
         col_n_features_categorical.append(dataset.n_features_categorical_)
         col_n_features_continuous.append(dataset.n_features_continuous_)

@@ -38,6 +38,8 @@ extensions = [
     #    "sphinx_gallery.gen_gallery",
 ]
 
+# templates_path = ['templates']
+
 bibtex_bibfiles = ["biblio.bib"]
 
 myst_enable_extensions = [
@@ -55,7 +57,10 @@ myst_enable_extensions = [
 ]
 
 autosummary_generate = True
-autodoc_default_options = {"members": None, "inherited-members": None}
+
+autoclass_content = "both"
+
+autodoc_default_options = {"members": True, "inherited-members": True}
 
 
 # sphinx_gallery_conf = {
@@ -77,7 +82,7 @@ linkcode_resolve = make_linkcode_resolve(
 )
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ["_templates"]
+templates_path = ["templates"]
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
@@ -103,16 +108,7 @@ html_theme = "sphinx_book_theme"
 #     "**": ["about.html", "navigation.html", "searchbox.html"],
 #     # "auto_examples": ["index.html"],
 # }
-# html_theme_options = {
-#     "description": "scikit-learn compatible alternative random forests algorithms",
-#     "github_user": "pyensemble",
-#     "github_repo": "wildwood",
-#     "github_button": True,
-#     "fixed_sidebar": True,
-#     "travis_button": False,
-#     "logo_text_align": "center",
-#     "github_banner": True,
-# }
+
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
