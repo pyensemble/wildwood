@@ -403,8 +403,8 @@ circles_data = plot_data.circle(
 
 def show_samples_in_node(node_id):
     tree_id = 0
-    partition_train = clf.trees[tree_id]._tree_context.partition_train
-    partition_valid = clf.trees[tree_id]._tree_context.partition_valid
+    partition_train = clf.trees[tree_id]._tree_classifier_context.partition_train
+    partition_valid = clf.trees[tree_id]._tree_classifier_context.partition_valid
 
     start_train = df_tree.loc[node_id, "start_train"]
     end_train = df_tree.loc[node_id, "end_train"]

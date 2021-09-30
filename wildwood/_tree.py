@@ -76,8 +76,8 @@ tree_classifier_type = [
     # Number of classes
     ("n_classes", uintp),
     #
-    # categorical split strategy
-    ("cat_split_strategy", uint8),
+    # # categorical split strategy
+    # ("cat_split_strategy", uint8),
     #
     # The predictions of each node in the tree with shape (n_nodes, n_classes)
     ("y_pred", float32[:, ::1]),
@@ -141,24 +141,25 @@ class _TreeClassifier(object):
          Actual size of `bin_partitions`
     """
 
-    def __init__(self, n_features, n_classes, random_state):
+    def __init__(self, n_features, n_classes, random_state, node_count, capacity,
+                 bin_partitions_capacity, bin_partitions_end):
         self.n_features = n_features
         self.n_classes = n_classes
         self.max_depth = 0
-        self.node_count = 0
-        self.capacity = 0
+        self.node_count = node_count
+        self.capacity = capacity
         self.random_state = random_state
         # Seed numba's random generator
         np.random.seed(random_state)
         # Both node and prediction arrays have zero on the first axis and are resized
         # later when we know the initial capacity required for the tree
-        self.nodes = np.empty(0, dtype=node_dtype)
-        self.y_pred = np.empty((0, self.n_classes), dtype=np.float32)
+        self.nodes = np.zeros((capacity,), dtype=node_dtype)
+        self.y_pred = np.zeros((capacity, self.n_classes), dtype=np.float32)
         # for categorical features
-        self.bin_partitions = np.empty(0, dtype=np.uint8)
-        self.bin_partitions_capacity = 0
-        self.bin_partitions_end = 0
-        self.cat_split_strategy = 0
+        self.bin_partitions_capacity = bin_partitions_capacity
+        self.bin_partitions = np.zeros((bin_partitions_capacity,), dtype=np.uint8)
+        self.bin_partitions_end = bin_partitions_end
+        # self.cat_split_strategy = 0
 
 
 @jitclass(tree_regressor_type)
@@ -204,22 +205,23 @@ class _TreeRegressor(object):
          Actual size of `bin_partitions`
     """
 
-    def __init__(self, n_features, random_state):
+    def __init__(self, n_features, random_state, node_count, capacity,
+                 bin_partitions_capacity, bin_partitions_end):
         self.n_features = n_features
         self.max_depth = 0
-        self.node_count = 0
-        self.capacity = 0
+        self.node_count = node_count
+        self.capacity = capacity
         self.random_state = random_state
         # Seed numba's random generator...
         np.random.seed(random_state)
         # Both node and prediction arrays have zero on the first axis and are resized
         # later when we know the initial capacity required for the tree
-        self.nodes = np.empty(0, dtype=node_dtype)
-        self.y_pred = np.empty(0, dtype=np.float32)
+        self.nodes = np.zeros((capacity,), dtype=node_dtype)
+        self.y_pred = np.zeros((capacity,), dtype=np.float32)
         # bin partitions for categorical features
-        self.bin_partitions = np.empty(0, dtype=np.uint8)
-        self.bin_partitions_capacity = 0
-        self.bin_partitions_end = 0
+        self.bin_partitions = np.zeros((bin_partitions_capacity,), dtype=np.uint8)
+        self.bin_partitions_capacity = bin_partitions_capacity
+        self.bin_partitions_end = bin_partitions_end
 
 
 # Numba types for Trees
@@ -320,7 +322,7 @@ def resize_tree_(tree, capacity):
     capacity : int
         The new desired capacity (maximum number of nodes it can contain) of the tree
     """
-    tree.nodes = resize(tree.nodes, capacity)
+    tree.nodes = resize(tree.nodes, capacity, zeros=True)
     tree.y_pred = resize(tree.y_pred, capacity, zeros=True)
     tree.capacity = capacity
 

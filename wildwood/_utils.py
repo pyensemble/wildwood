@@ -3,7 +3,6 @@ import numpy as np
 from numpy.random import randint
 from numba import jit, void, float32, uintp
 
-
 NOPYTHON = True
 NOGIL = True
 BOUNDSCHECK = False

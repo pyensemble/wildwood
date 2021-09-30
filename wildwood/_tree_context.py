@@ -136,7 +136,6 @@ class TreeClassifierContext:
         valid_indices,
         n_classes,
         max_bins,
-        n_bins_per_feature,
         max_features,
         min_samples_split,
         min_samples_leaf,
