@@ -1,12 +1,11 @@
 # `WildWood`: a new Random Forest algorithm
 
-[![Build Status](https://travis-ci.com/pyensemble/wildwood.svg?branch=master)](https://travis-ci.com/pyensemble/wildwood)
+[![Build Status](https://app.travis-ci.com/pyensemble/wildwood.svg?branch=master)](https://app.travis-ci.com/pyensemble/wildwood)
 [![Documentation Status](https://readthedocs.org/projects/wildwood/badge/?version=latest)](https://wildwood.readthedocs.io/en/latest/?badge=latest)
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/wildwood)
 ![PyPI - Wheel](https://img.shields.io/pypi/wheel/wildwood)
 [![GitHub stars](https://img.shields.io/github/stars/pyensemble/wildwood)](https://github.com/pyensemble/wildwood/stargazers)
 [![GitHub license](https://img.shields.io/github/license/pyensemble/wildwood)](https://github.com/pyensemble/wildwood/blob/master/LICENSE)
-
 
 `WildWood` is a python package providing improved random forest algorithms for 
 multiclass classification and regression introduced in {cite}`a-wildwood`.
