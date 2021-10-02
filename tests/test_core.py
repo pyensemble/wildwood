@@ -150,10 +150,10 @@ def test_nodes_on_adult(
     clf.fit(X_train, y_train)
 
     for tree in clf.trees:
-        node_count = tree._tree.node_count
-        nodes = tree._tree.nodes[:node_count]
-        bin_partitions = tree._tree.bin_partitions
-        assert tree._tree.nodes.size >= node_count
+        node_count = tree._tree_classifier.node_count
+        nodes = tree._tree_classifier.nodes[:node_count]
+        bin_partitions = tree._tree_classifier.bin_partitions
+        assert tree._tree_classifier.nodes.size >= node_count
         check_nodes(nodes, bin_partitions, aggregation)
 
 
@@ -211,10 +211,10 @@ def test_nodes_on_car(
     clf.fit(X_train, y_train)
 
     for tree in clf.trees:
-        node_count = tree._tree.node_count
-        nodes = tree._tree.nodes[:node_count]
-        bin_partitions = tree._tree.bin_partitions
-        assert tree._tree.nodes.size >= node_count
+        node_count = tree._tree_classifier.node_count
+        nodes = tree._tree_classifier.nodes[:node_count]
+        bin_partitions = tree._tree_classifier.bin_partitions
+        assert tree._tree_classifier.nodes.size >= node_count
         check_nodes(nodes, bin_partitions, aggregation)
 
 
@@ -272,10 +272,10 @@ def test_nodes_on_churn(
     clf.fit(X_train, y_train)
 
     for tree in clf.trees:
-        node_count = tree._tree.node_count
-        nodes = tree._tree.nodes[:node_count]
-        bin_partitions = tree._tree.bin_partitions
-        assert tree._tree.nodes.size >= node_count
+        node_count = tree._tree_classifier.node_count
+        nodes = tree._tree_classifier.nodes[:node_count]
+        bin_partitions = tree._tree_classifier.bin_partitions
+        assert tree._tree_classifier.nodes.size >= node_count
         check_nodes(nodes, bin_partitions, aggregation)
 
 
@@ -320,10 +320,10 @@ def test_nodes_on_boston(
     clf.fit(X_train, y_train)
 
     for tree in clf.trees:
-        node_count = tree._tree.node_count
-        nodes = tree._tree.nodes[:node_count]
-        bin_partitions = tree._tree.bin_partitions
-        assert tree._tree.nodes.size >= node_count
+        node_count = tree._tree_regressor.node_count
+        nodes = tree._tree_regressor.nodes[:node_count]
+        bin_partitions = tree._tree_regressor.bin_partitions
+        assert tree._tree_regressor.nodes.size >= node_count
         check_nodes(nodes, bin_partitions, aggregation)
 
 
@@ -380,8 +380,8 @@ def test_min_samples_split_min_samples_leaf_on_adult(
     clf.fit(X_train, y_train)
     min_samples = min(min_samples_split, min_samples_leaf)
     for tree in clf.trees:
-        node_count = tree._tree.node_count
-        nodes = tree._tree.nodes[:node_count]
+        node_count = tree._tree_classifier.node_count
+        nodes = tree._tree_classifier.nodes[:node_count]
         for node_id, node in enumerate(nodes):
             # Check that nodes respect the min_samples_split and
             # min_samples_leaf constraints
@@ -436,8 +436,8 @@ def test_min_samples_split_min_samples_leaf_on_boston(
     clf.fit(X_train, y_train)
     min_samples = min(min_samples_split, min_samples_leaf)
     for tree in clf.trees:
-        node_count = tree._tree.node_count
-        nodes = tree._tree.nodes[:node_count]
+        node_count = tree._tree_regressor.node_count
+        nodes = tree._tree_regressor.nodes[:node_count]
         for node_id, node in enumerate(nodes):
             # Check that nodes respect the min_samples_split and
             # min_samples_leaf constraints

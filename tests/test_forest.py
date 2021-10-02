@@ -975,12 +975,13 @@ class TestForestClassifier(object):
         assert np.max(np.abs(y_score1 - y_score2)) >= 0.01
         clf2.dirichlet = 0.5
         y_score2 = clf2.predict_proba(X_test)
-        assert np.max(np.abs(y_score1 - y_score2)) < 1e-5
+        assert y_score1 == pytest.approx(y_score2, abs=1e-5)
+
         clf1.dirichlet = 1.1
         clf2.dirichlet = 1.1
         y_score1 = clf1.predict_proba(X_test)
         y_score2 = clf2.predict_proba(X_test)
-        assert np.max(np.abs(y_score1 - y_score2)) < 1e-5
+        assert y_score1 == pytest.approx(y_score2, abs=1e-5)
 
         # inspired from
         # https://scikit-learn.org/stable/auto_examples/ensemble/plot_gradient_boosting_categorical.html#sphx-glr-auto-examples-ensemble-plot-gradient-boosting-categorical-py
