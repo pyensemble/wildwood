@@ -4,6 +4,82 @@ from pandas.testing import assert_frame_equal
 
 from wildwood.preprocessing import Encoder, dataset_to_array, array_to_dataset
 
+# random_state = 42
+# n_samples = 17
+# n_features = 3
+# rng = np.random.RandomState(random_state)
+# X = rng.randn(n_samples, n_features)
+# max_bins = 5
+
+# random_state = 42
+# n_samples = 9
+# n_features = 3
+#
+# X = np.array(
+#     [
+#         ["a", 0.1],
+#         ["a", 0.2],
+#         ["b", 0.1],
+#         ["a", 0.3],
+#         ["a", 0.0],
+#         ["c", -1.2],
+#         ["b", 0.1],
+#     ]
+# )
+
+# X[0, 0] = np.nan
+# X[4, 2] = np.nan
+# X[4, 2] = np.nan
+# max_bins = 4
+# is_categorical = None
+# is_categorical = np.array([False, False])
+
+
+# is_categorical = None
+
+# df = pd.DataFrame({"col": pd.to_datetime(["2011-10-01", "2009-08-17"])})
+#
+# X = np.empty((3, 2), dtype=np.dtype([("a", np.float64)]))
+#
+# encoder = Encoder().fit(X)
+
+X1 = np.random.randn(9, 4)
+X2 = np.random.randn(9, 3)
+
+is_categorical = [True, False]
+X = np.random.randn(7, 3)
+
+
+encoder = Encoder(is_categorical=is_categorical).fit(X)
+# encoder.transform(X2)
+
+
+# is_categorical = [False, False]
+# encoder = Encoder(is_categorical=is_categorical).fit(X)
+# "Column 0 is declared as numerical, but it cannot be converted to float"
+
+
+print("encoder.n_samples_in_:", encoder.n_samples_in_)
+print("encoder.n_features_in_:", encoder.n_features_in_)
+print("encoder.n_bins_no_missing_values_:", encoder.n_bins_no_missing_values_)
+print("encoder.categories_:", encoder.categories_)
+print("encoder.binning_thresholds_:", encoder.binning_thresholds_)
+
+# Check that dataset is correct
+dataset = encoder.transform(X)
+X_binned_out = dataset_to_array(dataset)
+
+print("X_binned_out:", X_binned_out)
+
+
+df_inverse_transform_out = encoder.inverse_transform(dataset)
+print("df_inverse_transform_out:", df_inverse_transform_out)
+
+
+
+exit(0)
+
+
 # df = pd.DataFrame(
 #     {
 #         "A": [None, "a", "b", None, "a", "a", "d", "c"],

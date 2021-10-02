@@ -48,6 +48,11 @@ from ._tree import (
 from ._tree import path_leaf as _path_leaf
 
 
+# TODO: the categorical_features parameter used in TreeClassifier and TreeRegressor
+#  is not used. What is used instead is is_categorical, so we can remove safely
+#  categorical_features from these classes
+
+
 class TreeBase(BaseEstimator, metaclass=ABCMeta):
     def __init__(
         self,
