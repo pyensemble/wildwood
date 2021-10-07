@@ -22,6 +22,8 @@ ALMOST_INF = 1e300
 
 # TODO: put back signatures everywhere
 
+# TODO: We use _find_binning_thresholds on pandas.Series only ?
+
 def _find_binning_thresholds(col, max_bins, col_is_pandas_series=False):
     """Extract quantiles from a continuous feature.
 
