@@ -108,9 +108,8 @@ def _is_series_categorical(col, is_categorical, max_modalities):
                 # non-categorical by the user. We need to raise a warning to the
                 # user even if the column is unchanged
                 warnings.warn(
-                    f"Column {col.name} has categorical data type but "
-                    f"declared non-categorical through "
-                    f"`is_categorical`. I will consider it categorical."
+                    f"I will consider column {col.name} as categorical: it was "
+                    f"declared non-categorical but has a categorical data type."
                 )
                 return "is_category"
             else:
@@ -118,9 +117,8 @@ def _is_series_categorical(col, is_categorical, max_modalities):
                 # declared it as non-categorical. We must convert it to
                 # categorical and raise a warning to the user
                 warnings.warn(
-                    f"Column {col.name} has categorical data type but "
-                    f"declared non-categorical through "
-                    f"`is_categorical`. I will consider it categorical."
+                    f"I will consider column {col.name} as categorical: it was "
+                    f"declared non-categorical but has a categorical data type."
                 )
                 return "to_category"
 
@@ -135,14 +133,14 @@ def _is_series_categorical(col, is_categorical, max_modalities):
             n_modalities = col.nunique()
             if n_modalities <= max_modalities:
                 warnings.warn(
-                    f"Column {col.name} has {n_modalities} unique values: I will "
-                    f"consider it categorical."
+                    f"I will consider column {col.name} as categorical: it has "
+                    f"{n_modalities} unique values."
                 )
                 return "to_category"
             else:
                 warnings.warn(
-                    f"Column {col.name} has {n_modalities} unique values: I will "
-                    f"consider it numerical."
+                    f"I will consider column {col.name} as numerical: it has "
+                    f"{n_modalities} unique values."
                 )
                 return "numerical"
         elif is_categorical:
@@ -544,7 +542,7 @@ class Encoder(TransformerMixin, BaseEstimator):
         if is_dataframe:
             # This array will contain the actual boolean mask corresponding to the
             # categorical features, which might differ from self.is_categorical
-            is_categorical_ = np.zeros(n_features, dtype=np.bool)
+            is_categorical_ = np.zeros(n_features, dtype=np.bool_)
 
             for col_idx, (col_name, col) in enumerate(X.items()):
                 if self.is_categorical is None:
@@ -824,10 +822,7 @@ class Encoder(TransformerMixin, BaseEstimator):
                     missing_value_bin = max_values[col_idx]
                     binned_col = np.empty((n_samples,), dtype=np.uint64)
                     _bin_continuous_column(
-                        col,
-                        binning_thresholds[col_idx],
-                        missing_value_bin,
-                        binned_col,
+                        col, binning_thresholds[col_idx], missing_value_bin, binned_col,
                     )
 
                 # Time to add the binned column in the dataset

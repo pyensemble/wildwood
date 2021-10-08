@@ -264,7 +264,7 @@ class Dataset:
             # If we do not use one-hot encoding, we compute a boolean mask indicating
             # which features are categorical. We use the fact that by construction of
             # the Dataset categorical features come last.
-            categorical_features = np.zeros(self.n_features_in_, dtype=np.bool)
+            categorical_features = np.zeros(self.n_features_in_, dtype=np.bool_)
             #
             categorical_features[-self.n_features_categorical_ :] = True
             self.categorical_features_ = categorical_features

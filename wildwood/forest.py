@@ -372,9 +372,9 @@ class ForestBase(BaseEstimator):
             known_categories=self._known_categories,
         )
         if is_categorical is None:
-            self.is_categorical_ = np.zeros(X.shape[1], dtype=np.bool)
+            self.is_categorical_ = np.zeros(X.shape[1], dtype=np.bool_)
         else:
-            self.is_categorical_ = np.asarray(is_categorical, dtype=np.bool)
+            self.is_categorical_ = np.asarray(is_categorical, dtype=np.bool_)
         X_binned = self._bin_data(X, is_training_data=True)
 
         # TODO: Deal with missing data

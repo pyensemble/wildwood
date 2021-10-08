@@ -87,19 +87,19 @@ def load_adult(download_if_missing=True):
     data_path = join(data_dir, "adult.csv.gz")
 
     dtype = {
-        "age": np.int,
+        "age": np.int64,
         "workclass": "category",
-        "fnlwgt": np.int,
+        "fnlwgt": np.int64,
         "education": "category",
-        "education-num": np.int,
+        "education-num": np.int64,
         "marital-status": "category",
         "occupation": "category",
         "relationship": "category",
         "race": "category",
         "sex": "category",
-        "capital-gain": np.int,
-        "capital-loss": np.int,
-        "hours-per-week": np.int,
+        "capital-gain": np.int64,
+        "capital-loss": np.int64,
+        "hours-per-week": np.int64,
         "native-country": "category",
     }
     dataset = Dataset.from_dtype(
