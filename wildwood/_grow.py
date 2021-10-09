@@ -31,7 +31,7 @@ record_dtype = np.dtype(
     [
         ("parent", np.intp),
         ("depth", np.uintp),
-        ("is_left", np.bool),
+        ("is_left", np.bool_),
         ("impurity", np.float32),
         ("start_train", np.uintp),
         ("end_train", np.uintp),

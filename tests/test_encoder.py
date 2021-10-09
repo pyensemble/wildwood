@@ -54,17 +54,15 @@ def test_is_series_categorical(col, is_categorical, max_modalities):
                 output = "is_category"
                 raises = "warning"
                 msg = (
-                    f"Column {col.name} has categorical data type but declared "
-                    f"non-categorical through `is_categorical`. I will consider "
-                    f"it categorical."
+                    f"I will consider column {col.name} as categorical: it was "
+                    f"declared non-categorical but has a categorical data type."
                 )
             else:
                 output = "to_category"
                 raises = "warning"
                 msg = (
-                    f"Column {col.name} has categorical data type but declared "
-                    f"non-categorical through `is_categorical`. I will consider "
-                    f"it categorical."
+                    f"I will consider column {col.name} as categorical: it was "
+                    f"declared non-categorical but has a categorical data type."
                 )
     elif dtype.kind in "uif":
         if is_categorical is None:
@@ -73,15 +71,15 @@ def test_is_series_categorical(col, is_categorical, max_modalities):
                 output = "to_category"
                 raises = "warning"
                 msg = (
-                    f"Column {col.name} has {n_modalities} unique values: I will "
-                    f"consider it categorical."
+                    f"I will consider column {col.name} as categorical: it has "
+                    f"{n_modalities} unique values."
                 )
             else:
                 output = "numerical"
                 raises = "warning"
                 msg = (
-                    f"Column {col.name} has {n_modalities} unique values: I will "
-                    f"consider it numerical."
+                    f"I will consider column {col.name} as numerical: it has "
+                    f"{n_modalities} unique values."
                 )
         elif is_categorical:
             output = "to_category"
@@ -187,6 +185,7 @@ def test_get_array_dtypes(X, is_categorical, max_modalities, out, error_type, ms
             assert str(warning.message) == warning_message
 
 
+@pytest.mark.filterwarnings("ignore:I will consider column")
 def test_encoder_max_bins():
     encoder = Encoder()
     assert encoder.max_bins == 256
@@ -232,6 +231,7 @@ def test_encoder_subsample():
         encoder = Encoder(subsample=-1)
 
 
+@pytest.mark.filterwarnings("ignore:I will consider column")
 @pytest.mark.parametrize(
     "max_modalities, msg, test_max_modalities_",
     [
@@ -441,6 +441,12 @@ def get_example1_pandas():
         ]
     )
 
+    warnings = [
+        "I will consider column B as categorical.",
+        "I will consider column C as numerical: it has 8 unique values.",
+        "I will consider column E as numerical: it has 7 unique values.",
+    ]
+
     return (
         df,
         max_bins,
@@ -449,6 +455,7 @@ def get_example1_pandas():
         binning_thresholds_,
         X_binned,
         df_inverse_transform,
+        warnings,
     )
 
 
@@ -508,7 +515,10 @@ def get_example2_pandas():
             (2.0, np.inf),
         ]
     )
-
+    warnings = [
+        "I will consider column A as categorical.",
+        "I will consider column D as numerical: it has 5 unique values.",
+    ]
     return (
         df,
         max_bins,
@@ -517,6 +527,7 @@ def get_example2_pandas():
         binning_thresholds_,
         X_binned,
         df_inverse_transform,
+        warnings,
     )
 
 
@@ -596,7 +607,10 @@ def get_example3_pandas():
             (-2.0, 0.0),
         ]
     )
-
+    warnings = [
+        "I will consider column C as numerical: it has 8 unique values.",
+        "I will consider column E as numerical: it has 7 unique values.",
+    ]
     return (
         df,
         max_bins,
@@ -605,6 +619,7 @@ def get_example3_pandas():
         binning_thresholds_,
         X_binned,
         df_inverse_transform,
+        warnings,
     )
 
 
@@ -664,7 +679,7 @@ def get_example4_pandas():
             (2.5, np.inf),
         ]
     )
-
+    warnings = ["I will consider column D as numerical: it has 5 unique values."]
     return (
         df,
         max_bins,
@@ -673,6 +688,7 @@ def get_example4_pandas():
         binning_thresholds_,
         X_binned,
         df_inverse_transform,
+        warnings,
     )
 
 
@@ -680,61 +696,6 @@ def get_example5_pandas():
     # TODO: a purely numerical array with no missing values but is_categorical and a
     #  dependence on max_modalities
     pass
-
-
-@pytest.mark.parametrize(
-    "df, max_bins, n_bins_no_missing_values_, categories_, binning_thresholds_, "
-    "X_binned, df_inverse_transform",
-    [
-        get_example1_pandas(),
-        get_example2_pandas(),
-        get_example3_pandas(),
-        get_example4_pandas(),
-    ],
-)
-def test_encoder_fit_transform_dataframes(
-    df,
-    max_bins,
-    n_bins_no_missing_values_,
-    categories_,
-    binning_thresholds_,
-    X_binned,
-    df_inverse_transform,
-):
-    encoder = Encoder(max_bins=max_bins)
-    encoder.fit(df)
-    assert encoder.n_samples_in_ == df.shape[0]
-    assert encoder.n_features_in_ == df.shape[1]
-    np.testing.assert_array_equal(
-        encoder.n_bins_no_missing_values_, n_bins_no_missing_values_
-    )
-    # Check that categories are OK
-    assert encoder.categories_.keys() == categories_.keys()
-    for (categories1, categories2) in zip(
-        encoder.categories_.values(), categories_.values()
-    ):
-        np.testing.assert_array_equal(categories1, categories2)
-    # Check that binning thresholds are OK
-    assert encoder.binning_thresholds_.keys() == binning_thresholds_.keys()
-    for (thresholds1, thresholds2) in zip(
-        encoder.binning_thresholds_.values(), binning_thresholds_.values()
-    ):
-        np.testing.assert_array_equal(thresholds1, thresholds2)
-
-    # Check that dataset is correct
-    dataset = encoder.transform(df)
-    X_binned_out = dataset_to_array(dataset)
-    np.testing.assert_array_equal(X_binned_out, X_binned)
-
-    # Check that reconstructed dataframe is correct
-    df_inverse_transform_out = encoder.inverse_transform(dataset)
-    pd.testing.assert_frame_equal(df_inverse_transform_out, df_inverse_transform)
-
-    # Test also fit_transform
-    encoder = Encoder(max_bins=max_bins)
-    dataset = encoder.fit_transform(df)
-    df_inverse_transform_out = encoder.inverse_transform(dataset)
-    pd.testing.assert_frame_equal(df_inverse_transform_out, df_inverse_transform)
 
 
 def get_example1_ndarray():
@@ -839,6 +800,11 @@ def get_example1_ndarray():
             (0.31916565099503447, np.inf),
         ]
     )
+    warnings = [
+        "I will consider column 0 as numerical.",
+        "I will consider column 1 as numerical.",
+        "I will consider column 2 as numerical.",
+    ]
 
     return (
         X,
@@ -849,7 +815,73 @@ def get_example1_ndarray():
         binning_thresholds_,
         X_binned,
         df_inverse_transform,
+        warnings,
     )
+
+
+@pytest.mark.filterwarnings("ignore:I will consider column")
+@pytest.mark.parametrize(
+    "df, max_bins, n_bins_no_missing_values_, categories_, binning_thresholds_, "
+    "X_binned, df_inverse_transform, warnings",
+    [
+        get_example1_pandas(),
+        get_example2_pandas(),
+        get_example3_pandas(),
+        get_example4_pandas(),
+    ],
+)
+def test_encoder_fit_transform_dataframes(
+    df,
+    max_bins,
+    n_bins_no_missing_values_,
+    categories_,
+    binning_thresholds_,
+    X_binned,
+    df_inverse_transform,
+    warnings,
+):
+    encoder = Encoder(max_bins=max_bins)
+    if warnings is not None:
+        with pytest.warns(UserWarning) as warn_records:
+            encoder.fit(df)
+        assert len(warn_records) == len(warnings)
+        for warn_record, warning in zip(warn_records, warnings):
+            assert str(warn_record.message) == warning
+    else:
+        encoder.fit(df)
+
+    assert encoder.n_samples_in_ == df.shape[0]
+    assert encoder.n_features_in_ == df.shape[1]
+    np.testing.assert_array_equal(
+        encoder.n_bins_no_missing_values_, n_bins_no_missing_values_
+    )
+    # Check that categories are OK
+    assert encoder.categories_.keys() == categories_.keys()
+    for (categories1, categories2) in zip(
+        encoder.categories_.values(), categories_.values()
+    ):
+        np.testing.assert_array_equal(categories1, categories2)
+    # Check that binning thresholds are OK
+    assert encoder.binning_thresholds_.keys() == binning_thresholds_.keys()
+    for (thresholds1, thresholds2) in zip(
+        encoder.binning_thresholds_.values(), binning_thresholds_.values()
+    ):
+        np.testing.assert_array_equal(thresholds1, thresholds2)
+
+    # Check that dataset is correct
+    dataset = encoder.transform(df)
+    X_binned_out = dataset_to_array(dataset)
+    np.testing.assert_array_equal(X_binned_out, X_binned)
+
+    # Check that reconstructed dataframe is correct
+    df_inverse_transform_out = encoder.inverse_transform(dataset)
+    pd.testing.assert_frame_equal(df_inverse_transform_out, df_inverse_transform)
+
+    # Test also fit_transform
+    encoder = Encoder(max_bins=max_bins)
+    dataset = encoder.fit_transform(df)
+    df_inverse_transform_out = encoder.inverse_transform(dataset)
+    pd.testing.assert_frame_equal(df_inverse_transform_out, df_inverse_transform)
 
 
 def get_example2_ndarray():
@@ -925,6 +957,13 @@ def get_example2_ndarray():
             (-np.inf, -0.8102339816786275),
         ]
     )
+
+    warning = [
+        "I will consider column 0 as numerical.",
+        "I will consider column 1 as numerical.",
+        "I will consider column 2 as numerical.",
+    ]
+
     return (
         X,
         max_bins,
@@ -934,6 +973,7 @@ def get_example2_ndarray():
         binning_thresholds_,
         X_binned,
         df_inverse_transform,
+        warning,
     )
 
 
@@ -1027,6 +1067,7 @@ def get_example3_ndarray():
             (-np.inf, -0.8102339816786275),
         ]
     )
+    warning = None
 
     return (
         X,
@@ -1037,6 +1078,7 @@ def get_example3_ndarray():
         binning_thresholds_,
         X_binned,
         df_inverse_transform,
+        warning,
     )
 
 
@@ -1073,6 +1115,10 @@ def get_example4_ndarray():
             (0.1, 0.15000000000000002),
         ]
     )
+    warning = [
+        "I will consider column 0 as categorical.",
+        "I will consider column 1 as numerical.",
+    ]
     return (
         X,
         max_bins,
@@ -1082,6 +1128,7 @@ def get_example4_ndarray():
         binning_thresholds_,
         X_binned,
         df_inverse_transform,
+        warning,
     )
 
 
@@ -1094,10 +1141,11 @@ def get_example5_ndarray():
 # TODO: faudrait capturer les warnings (qui sont normaux) et les verifier...
 
 
+@pytest.mark.filterwarnings("ignore:I will consider column")
 @pytest.mark.parametrize(
     "X, max_bins, is_categorical, n_bins_no_missing_values_, categories_, "
     "binning_thresholds_, "
-    "X_binned, df_inverse_transform",
+    "X_binned, df_inverse_transform, warnings",
     [
         get_example1_ndarray(),
         get_example2_ndarray(),
@@ -1114,9 +1162,17 @@ def test_encoder_fit_transform_ndarray(
     binning_thresholds_,
     X_binned,
     df_inverse_transform,
+    warnings,
 ):
     encoder = Encoder(max_bins=max_bins, is_categorical=is_categorical)
-    encoder.fit(X)
+    if warnings is not None:
+        with pytest.warns(UserWarning) as warn_records:
+            encoder.fit(X)
+        assert len(warn_records) == len(warnings)
+        for warn_record, warning in zip(warn_records, warnings):
+            assert str(warn_record.message) == warning
+    else:
+        encoder.fit(X)
     assert encoder.n_samples_in_ == X.shape[0]
     assert encoder.n_features_in_ == X.shape[1]
     np.testing.assert_array_equal(
@@ -1192,6 +1248,7 @@ def test_encoder_fit_transform_ndarray(
         )
 
 
+@pytest.mark.filterwarnings("ignore:I will consider column")
 def test_encoder_errors():
     # unsupported dtype in DataFrame raises an error
     df = pd.DataFrame({"col": pd.to_datetime(["2011-10-01", "2009-08-17"])})
@@ -1266,6 +1323,7 @@ def test_encoder_errors():
     )
 
 
+@pytest.mark.filterwarnings("ignore:I will consider column")
 def test_encoder_detects_unknowns():
     df = pd.DataFrame(
         {
@@ -1312,6 +1370,7 @@ def test_encoder_detects_unknowns():
 # TODO: test that encoder detects if categorical columns change
 
 
+@pytest.mark.filterwarnings("ignore:I will consider column")
 def test_encoder_deals_with_unknown():
 
     df = pd.DataFrame(
@@ -1355,6 +1414,7 @@ def test_encoder_deals_with_unknown():
     )
 
 
+@pytest.mark.filterwarnings("ignore:I will consider column")
 def test_encoder_deals_with_unknown_again():
     df = pd.DataFrame(
         {

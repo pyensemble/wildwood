@@ -41,21 +41,21 @@ def load_bank(download_if_missing=True):
     data_path = join(data_dir, "bank.zip")
 
     dtype = {
-        "age": np.int,
+        "age": np.int64,
         "job": "category",
         "marital": "category",
         "education": "category",
         "default": "category",
-        "balance": np.int,
+        "balance": np.int64,
         "housing": "category",
         "loan": "category",
         "contact": "category",
         "day": "category",
         "month": "category",
-        "duration": np.int,
-        "campaign": np.int,
-        "pdays": np.int,
-        "previous": np.int,
+        "duration": np.int64,
+        "campaign": np.int64,
+        "pdays": np.int64,
+        "previous": np.int64,
         "poutcome": "category",
     }
     dataset = Dataset.from_dtype(

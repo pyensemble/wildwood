@@ -39,10 +39,10 @@ node_dtype = np.dtype(
         ("right_child", np.intp),
         #
         # Is the node a leaf ?
-        ("is_leaf", np.bool),
+        ("is_leaf", np.bool_),
         #
         # Is the node a left child ? (it's ? for the root node)
-        ("is_left", np.bool),
+        ("is_left", np.bool_),
         #
         # Depth of the node in the tree
         ("depth", np.uintp),
@@ -95,7 +95,7 @@ node_dtype = np.dtype(
         ("end_valid", np.uintp),
         #
         # Is the split on a categorical feature ?
-        ("is_split_categorical", np.bool),
+        ("is_split_categorical", np.bool_),
         #
         # Whenever the split is on a categorical features: start index of the bin
         # partition for this node. The tree has a bin_partitions array,
