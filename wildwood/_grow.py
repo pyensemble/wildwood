@@ -2,21 +2,18 @@
 # License: BSD 3 clause
 
 """
-This module contains some tools to grow a tree: mainly a Records dataclass and a grow
-function.
-Records is a last-in first-out stack of Record containing partial
+This module contains some tools to grow a tree: mainly a ``Records`` dataclass and a
+grow function. ``Records`` is a last-in first-out stack of Record containing partial
 information about nodes that will be split or transformed in leaves.
-The grow function is the main entry point that grows the decision tree and performs
+The ``grow`` function is the main entry point that grows the decision tree and performs
 aggregation.
 """
 
 from math import log
-
 import numpy as np
-from numba import jit, from_dtype, void, boolean, uint8, intp, uintp, float32, optional
+from numba import jit, from_dtype, void, boolean, intp, uintp, uint64, float32, optional
 from numba.types import Tuple
 from numba.experimental import jitclass
-
 from ._split import find_node_split, split_indices
 from ._node import node_type
 from ._tree import add_node_tree, resize_tree, TREE_UNDEFINED, TreeClassifierType
@@ -258,12 +255,12 @@ def pop_node_record(records):
         "min_samples_split": uintp,
         "min_impurity_split": float32,
         "is_leaf": boolean,
-        "bin": uint8,
+        "bin": uint64,
         "feature": uintp,
         "found_split": boolean,
         "is_split_categorical": boolean,
-        "bin_partition": optional(uint8[::1]),
-        "bin_partition_size": uint8,
+        "bin_partition": optional(uint64[::1]),
+        "bin_partition_size": uint64,
         "threshold": float32,
         "w_samples_valid": float32,
         "pos_train": uintp,
@@ -321,7 +318,6 @@ def grow(
     end_train = tree_context.n_samples_train
     start_valid = 0
     end_valid = tree_context.n_samples_valid
-
     aggregation = tree_context.aggregation
 
     push_record(
@@ -453,6 +449,7 @@ def grow(
             # If it is a leaf, bin_partition_size=0
             bin_partition_size,
         )
+
         # Save in the tree the predictions of the node (works both for regression
         # where node_context.y_pred is a float32 and for classification where
         # node_context.y_pred is a ndarray of shape (n_classes,)
@@ -570,6 +567,7 @@ def compute_tree_weights(nodes, node_count, step):
         else:
             # If the node is not a leaf, then we apply context tree weighting
             loss = -step * node["loss_valid"]
+            # TODO: pourquoi on cast ici ?
             left_child = intp(node["left_child"])
             right_child = intp(node["right_child"])
             log_weight_tree_left = nodes[left_child]["log_weight_tree"]

@@ -2,14 +2,16 @@
 # License: BSD 3 clause
 
 """
-This module performs unittests for the dataset class
+This module performs unittests for the dataset class.
 """
 
 import pytest
 import numpy as np
 
-from wildwood.preprocessing.dataset import array_to_dataset, dataset_to_array
-
+from wildwood.preprocessing.features_bitarray import (
+    array_to_bitarray,
+    features_bitarray_to_array,
+)
 
 np.random.seed(42)
 
@@ -31,6 +33,6 @@ def test_dataset(n_samples, max_values, dtype):
     X_in = np.asfortranarray(
         np.random.randint(max_values + 1, size=(n_samples, n_features)), dtype=dtype
     )
-    dataset = array_to_dataset(X_in)
-    X_out = dataset_to_array(dataset)
+    dataset = array_to_bitarray(X_in)
+    X_out = features_bitarray_to_array(dataset)
     np.testing.assert_array_equal(X_in, X_out)

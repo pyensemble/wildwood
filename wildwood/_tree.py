@@ -12,7 +12,8 @@ import numpy as np
 from numba import (
     jit,
     boolean,
-    uint8,
+    # uint8,
+    uint64,
     int32,
     intp,
     uintp,
@@ -25,6 +26,7 @@ from numba.experimental import jitclass
 from ._utils import NOPYTHON, NOGIL, BOUNDSCHECK, FASTMATH, get_type, resize
 from ._node import node_type, node_dtype
 from ._split import is_bin_in_partition
+from .preprocessing.features_bitarray import FeaturesBitArrayType, get_value
 
 IS_FIRST = 1
 IS_NOT_FIRST = 0
@@ -32,7 +34,6 @@ IS_LEFT = 1
 IS_NOT_LEFT = 0
 TREE_LEAF = intp(-1)
 TREE_UNDEFINED = intp(-2)
-
 
 tree_type = [
     # Number of features
@@ -58,7 +59,7 @@ tree_type = [
     #  categorical feature. A node has `bin_partition_start` and
     #  `bin_partition_end` attributes, its bin partition is given by
     #  `bin_partitions[bin_partition_start:bin_partition_end]`
-    ("bin_partitions", uint8[::1]),
+    ("bin_partitions", uint64[::1]),
     #
     # Size of bin_partitions
     ("bin_partitions_capacity", uintp),
@@ -162,7 +163,7 @@ class _TreeClassifier(object):
         self.y_pred = np.zeros((capacity, self.n_classes), dtype=np.float32)
         # for categorical features
         self.bin_partitions_capacity = bin_partitions_capacity
-        self.bin_partitions = np.zeros((bin_partitions_capacity,), dtype=np.uint8)
+        self.bin_partitions = np.zeros((bin_partitions_capacity,), dtype=np.uint64)
         self.bin_partitions_end = bin_partitions_end
         # self.cat_split_strategy = 0
 
@@ -231,7 +232,7 @@ class _TreeRegressor(object):
         self.nodes = np.zeros((capacity,), dtype=node_dtype)
         self.y_pred = np.zeros((capacity,), dtype=np.float32)
         # bin partitions for categorical features
-        self.bin_partitions = np.zeros((bin_partitions_capacity,), dtype=np.uint8)
+        self.bin_partitions = np.zeros((bin_partitions_capacity,), dtype=np.uint64)
         self.bin_partitions_capacity = bin_partitions_capacity
         self.bin_partitions_end = bin_partitions_end
 
@@ -428,7 +429,8 @@ def resize_tree_bin_partitions(tree, capacity=None):
     if capacity is None:
         if tree.bin_partitions_capacity == 0:
             # If no capacity is specified and there is no node in the tree yet,
-            # we set it to 256
+            # we set it to 256. Note that 256 has nothing to do with the default
+            # value of max_bins here
             resize_tree_bin_partitions_(tree, 256)
         else:
             # If no capacity is specified we double the current capacity
@@ -452,7 +454,7 @@ def resize_tree_bin_partitions(tree, capacity=None):
             boolean,
             uintp,
             float32,
-            uint8,
+            uint64,
             float32,
             uintp,
             uintp,
@@ -464,8 +466,8 @@ def resize_tree_bin_partitions(tree, capacity=None):
             uintp,
             float32,
             boolean,
-            optional(uint8[::1]),
-            uint8,
+            optional(uint64[::1]),
+            uint64,
         ),
         uintp(
             TreeRegressorType,
@@ -475,7 +477,7 @@ def resize_tree_bin_partitions(tree, capacity=None):
             boolean,
             uintp,
             float32,
-            uint8,
+            uint64,
             float32,
             uintp,
             uintp,
@@ -487,8 +489,8 @@ def resize_tree_bin_partitions(tree, capacity=None):
             uintp,
             float32,
             boolean,
-            optional(uint8[::1]),
-            uint8,
+            optional(uint64[::1]),
+            uint64,
         ),
     ],
     nopython=NOPYTHON,
@@ -602,7 +604,6 @@ def add_node_tree(
         bin_partition[:bin_partition_size] go to the left child while the others
         go to the right child. For a leaf, `bin_partition_size=0`
     """
-
     # New node index is given by the current number of nodes in the tree
     node_idx = tree.node_count
     if node_idx >= tree.capacity:
@@ -666,7 +667,10 @@ def add_node_tree(
 
 
 @jit(
-    [uintp(TreeClassifierType, uint8[:]), uintp(TreeRegressorType, uint8[:])],
+    [
+        uintp(TreeClassifierType, FeaturesBitArrayType, uint64),
+        uintp(TreeRegressorType, FeaturesBitArrayType, uint64),
+    ],
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
@@ -676,11 +680,11 @@ def add_node_tree(
         "idx_leaf": uintp,
         "node": node_type,
         "xif_in_partition": boolean,
-        "bin_partitions": uint8[::1],
-        "bin_partition": uint8[::1],
+        "bin_partitions": uint64[::1],
+        "bin_partition": uint64[::1],
     },
 )
-def find_leaf(tree, xi):
+def find_leaf(tree, features_bitarray, i):
     """Find the leaf index containing the given features vector.
 
     Parameters
@@ -688,8 +692,8 @@ def find_leaf(tree, xi):
     tree : TreeClassifier or TreeRegressor
          The tree
 
-    xi : ndarray
-        Array of input features with shape (n_features,) and uint8 dtype
+    features_bitarray : FeaturesBitArray
+        The features bitarray
 
     Returns
     -------
@@ -701,7 +705,8 @@ def find_leaf(tree, xi):
     node = nodes[leaf_idx]
     bin_partitions = tree.bin_partitions
     while not node["is_leaf"]:
-        xi_f = xi[node["feature"]]
+        xi_f = get_value(features_bitarray, i, node["feature"])
+        # xi_f = xi[node["feature"]]
         if node["is_split_categorical"]:
             # If the bin is on a categorical features, we use its bin_partition
             bin_partition_start = node["bin_partition_start"]
@@ -797,8 +802,8 @@ def sample_path_leaf(tree, xi):
 
 @jit(
     [
-        uintp[::1](TreeClassifierType, uint8[:, :]),
-        uintp[::1](TreeRegressorType, uint8[:, :]),
+        uintp[::1](TreeClassifierType, FeaturesBitArrayType),
+        uintp[::1](TreeRegressorType, FeaturesBitArrayType),
     ],
     nopython=NOPYTHON,
     nogil=NOGIL,
@@ -806,7 +811,7 @@ def sample_path_leaf(tree, xi):
     fastmath=FASTMATH,
     locals={"n_samples": uintp, "out": uintp[::1], "i": uintp, "idx_leaf": uintp},
 )
-def tree_apply(tree, X):
+def tree_apply(tree, features_bitarray):
     """Finds the indexes of the leaves containing each input vector of features (rows
     of the input matrix of features)
 
@@ -815,7 +820,7 @@ def tree_apply(tree, X):
     tree : TreeClassifier or TreeRegressor
         The tree
 
-    X : ndarray
+    features_bitarray : ndarray
         Input matrix of features with shape (n_samples, n_features) and uint8 dtype
 
     Returns
@@ -824,17 +829,17 @@ def tree_apply(tree, X):
         An array of shape (n_samples,) and uintp dtype containing the indexes of the
         leaves containing each input vector of features
     """
-    n_samples = X.shape[0]
+    n_samples = features_bitarray.n_samples
     out = np.zeros((n_samples,), dtype=uintp)
     for i in range(n_samples):
-        idx_leaf = find_leaf(tree, X[i])
+        idx_leaf = find_leaf(tree, features_bitarray, i)
         out[i] = idx_leaf
 
     return out
 
 
 @jit(
-    float32[:, ::1](TreeClassifierType, uint8[:, :], boolean, float32),
+    float32[:, ::1](TreeClassifierType, FeaturesBitArrayType, boolean, float32),
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
@@ -855,7 +860,7 @@ def tree_apply(tree, X):
         "alpha": float32,
     },
 )
-def tree_classifier_predict_proba(tree, X, aggregation, step):
+def tree_classifier_predict_proba(tree, features_bitarray, aggregation, step):
     """Predicts class probabilities for the input matrix of features.
 
     Parameters
@@ -863,8 +868,8 @@ def tree_classifier_predict_proba(tree, X, aggregation, step):
     tree : TreeClassifier
         The tree
 
-    X : ndarray
-        Input matrix of features with shape (n_samples, n_features) and uint8 dtype
+    features_bitarray : FeaturesBitArray
+        The features bitarray
 
     aggregation : bool
         If True we predict the class probabilities using the aggregation algorithm.
@@ -881,14 +886,14 @@ def tree_classifier_predict_proba(tree, X, aggregation, step):
         An array of shape (n_samples, n_classes) and float32 dtype containing the
         predicted class probabilities
     """
-    n_samples = X.shape[0]
+    n_samples = features_bitarray.n_samples
     n_classes = tree.n_classes
     nodes = tree.nodes
     y_pred = tree.y_pred
     out = np.zeros((n_samples, n_classes), dtype=float32)
     for i in range(n_samples):
         # Find the leaf containing X[i]
-        idx_current = find_leaf(tree, X[i])
+        idx_current = find_leaf(tree, features_bitarray, i)
         # Get a view to save the prediction for X[i]
         pred_i = out[i]
         # First, we get the prediction of the leaf
@@ -912,7 +917,7 @@ def tree_classifier_predict_proba(tree, X, aggregation, step):
 
 
 @jit(
-    float32[:](TreeRegressorType, uint8[:, :], boolean, float32),
+    float32[:](TreeRegressorType, FeaturesBitArrayType, boolean, float32),
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
@@ -932,7 +937,7 @@ def tree_classifier_predict_proba(tree, X, aggregation, step):
         "alpha": float32,
     },
 )
-def tree_regressor_predict(tree, X, aggregation, step):
+def tree_regressor_predict(tree, features_bitarray, aggregation, step):
     """Predicts the labels for the input matrix of features.
 
     Parameters
@@ -940,8 +945,8 @@ def tree_regressor_predict(tree, X, aggregation, step):
     tree : TreeRegressor
         The tree
 
-    X : ndarray
-        Input matrix of features with shape (n_samples, n_features) and uint8 dtype
+    features_bitarray : FeaturesBitArray
+        The features bitarray
 
     aggregation : bool
         If True we predict the labels using the aggregation algorithm.
@@ -958,13 +963,13 @@ def tree_regressor_predict(tree, X, aggregation, step):
         An array of shape (n_samples,) and float32 dtype containing the
         predicted labels
     """
-    n_samples = X.shape[0]
+    n_samples = features_bitarray.n_samples
     nodes = tree.nodes
     y_pred = tree.y_pred
     out = np.zeros(n_samples, dtype=float32)
 
     for i in range(n_samples):
-        idx_current = find_leaf(tree, X[i])
+        idx_current = find_leaf(tree, features_bitarray, i)
         # First, we get the prediction of the leaf
         pred_i = y_pred[idx_current]
         if aggregation:
@@ -992,7 +997,7 @@ def tree_regressor_predict(tree, X, aggregation, step):
 
 
 @jit(
-    float32[:](TreeRegressorType, uint8[:, :], float32),
+    float32[:](TreeRegressorType, FeaturesBitArrayType, float32),
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
@@ -1011,7 +1016,7 @@ def tree_regressor_predict(tree, X, aggregation, step):
         "alpha": float32,
     },
 )
-def tree_regressor_weighted_depth(tree, X, step):
+def tree_regressor_weighted_depth(tree, features_bitarray, step):
     """Compute the weighted depth used by the aggregation algorithm for the
     input matrix of features.
 
@@ -1020,8 +1025,8 @@ def tree_regressor_weighted_depth(tree, X, step):
     tree : TreeRegressor
         The tree
 
-    X : ndarray
-        Input matrix of features with shape (n_samples, n_features) and uint8 dtype
+    features_bitarray : FeaturesBitArray
+        The features bitarray
 
     step : float
         Step-size used for the computation of the aggregation weights. Used only if
@@ -1033,11 +1038,11 @@ def tree_regressor_weighted_depth(tree, X, step):
         An array of shape (n_samples,) and float32 dtype containing the
         predicted labels
     """
-    n_samples = X.shape[0]
+    n_samples = features_bitarray.n_samples
     nodes = tree.nodes
     out = np.zeros(n_samples, dtype=float32)
     for i in range(n_samples):
-        idx_current = find_leaf(tree, X[i])
+        idx_current = find_leaf(tree, features_bitarray, i)
         node = nodes[idx_current]
         weighted_depth = float32(node["depth"])
         while idx_current != 0:

@@ -18,8 +18,6 @@ ALMOST_INF = 1e300
 
 # TODO: put back signatures everywhere
 
-# TODO: We use _find_binning_thresholds on pandas.Series only ?
-
 
 def _find_binning_thresholds(col, max_bins, col_is_pandas_series=False):
     """Extract quantiles from a continuous feature.
@@ -29,9 +27,8 @@ def _find_binning_thresholds(col, max_bins, col_is_pandas_series=False):
     Parameters
     ----------
     col : array-like
-        A numpy ndarray of shape (n_samples,) or a pandas Series for which we
-        compute binning
-        thresholds.
+        A ``numpy.ndarray`` of shape (n_samples,) or a ``pandas.Series`` for which we
+        compute binning thresholds.
 
     max_bins: int
         The maximum number of bins to use for non-missing values. If a column

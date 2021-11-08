@@ -2,14 +2,15 @@
 # License: BSD 3 clause
 
 """
-This module performs unittests on some core computations involved in WildWood
+This module performs unittests on some core computations involved in WildWood. It
+checks in particular that nodes respect the constraints required during growing.
 """
 
 import pytest
 import numpy as np
 
 from wildwood import ForestClassifier, ForestRegressor
-from wildwood.datasets import load_adult, load_boston, load_car
+from wildwood.datasets import load_adult, load_boston, load_car, load_cardio, load_churn
 
 from wildwood._split import is_bin_in_partition
 
@@ -17,9 +18,9 @@ from wildwood._split import is_bin_in_partition
 @pytest.mark.parametrize(
     "bin_partition",
     [
-        np.array([3], dtype=np.uint8),
-        np.array([3, 4], dtype=np.uint8),
-        np.array([3, 4, 8], dtype=np.uint8),
+        np.array([3], dtype=np.uint64),
+        np.array([3, 4], dtype=np.uint64),
+        np.array([3, 4, 8], dtype=np.uint64),
     ],
 )
 @pytest.mark.parametrize(
@@ -96,20 +97,27 @@ def check_nodes(nodes, bin_partitions, aggregation):
             # assert not nodes[right_child]["is_left"]
 
 
+@pytest.mark.parametrize(
+    "data_loader",
+    [
+        load_adult,
+        load_car,
+        # TODO: adding load_cardio here fails
+        load_churn,
+    ],
+)
 @pytest.mark.parametrize("n_estimators", [2])
 @pytest.mark.parametrize("aggregation, dirichlet", [(False, 0.0), (True, 1e-7)])
-@pytest.mark.parametrize("class_weight", [None, "balanced"])
-@pytest.mark.parametrize("n_jobs", [1, -1])
-@pytest.mark.parametrize("max_features", [None, "auto"])
+@pytest.mark.parametrize("class_weight", ["balanced"])
+@pytest.mark.parametrize("n_jobs", [-1])
+@pytest.mark.parametrize("max_features", ["auto"])
 @pytest.mark.parametrize("random_state", [42])
 @pytest.mark.parametrize("step", [1.0])
 @pytest.mark.parametrize("multiclass", ["multinomial"])
 @pytest.mark.parametrize("cat_split_strategy", ["binary", "all", "random"])
-@pytest.mark.parametrize(
-    "one_hot_encode, use_categoricals", [(False, False), (False, True), (True, False)]
-)
-@pytest.mark.parametrize("criterion", ("gini", "entropy"))
-def test_nodes_on_adult(
+@pytest.mark.parametrize("criterion", ["gini", "entropy"])
+def test_nodes_on_classification_datasets(
+    data_loader,
     n_estimators,
     aggregation,
     class_weight,
@@ -120,19 +128,9 @@ def test_nodes_on_adult(
     step,
     multiclass,
     cat_split_strategy,
-    one_hot_encode,
-    use_categoricals,
     criterion,
 ):
-    dataset = load_adult()
-    dataset.test_size = 1.0 / 5
-    dataset.standardize = False
-    dataset.one_hot_encode = one_hot_encode
-    X_train, X_test, y_train, y_test = dataset.extract(random_state=random_state)
-    if use_categoricals:
-        categorical_features = dataset.categorical_features_
-    else:
-        categorical_features = None
+    X, y = data_loader(raw=True)
     clf = ForestClassifier(
         n_estimators=n_estimators,
         n_jobs=n_jobs,
@@ -142,135 +140,11 @@ def test_nodes_on_adult(
         criterion=criterion,
         max_features=max_features,
         class_weight=class_weight,
-        categorical_features=categorical_features,
         random_state=random_state,
         dirichlet=dirichlet,
         step=step,
     )
-    clf.fit(X_train, y_train)
-
-    for tree in clf.trees:
-        node_count = tree._tree_classifier.node_count
-        nodes = tree._tree_classifier.nodes[:node_count]
-        bin_partitions = tree._tree_classifier.bin_partitions
-        assert tree._tree_classifier.nodes.size >= node_count
-        check_nodes(nodes, bin_partitions, aggregation)
-
-
-@pytest.mark.parametrize("n_estimators", [2])
-@pytest.mark.parametrize("aggregation, dirichlet", [(False, 0.0), (True, 1e-7)])
-@pytest.mark.parametrize("class_weight", [None, "balanced"])
-@pytest.mark.parametrize("n_jobs", [1, -1])
-@pytest.mark.parametrize("max_features", [None, "auto"])
-@pytest.mark.parametrize("random_state", [42])
-@pytest.mark.parametrize("step", [1.0])
-@pytest.mark.parametrize("multiclass", ["multinomial", "ovr"])
-@pytest.mark.parametrize("cat_split_strategy", ["binary", "all", "random"])
-@pytest.mark.parametrize(
-    "one_hot_encode, use_categoricals", [(False, False), (False, True), (True, False)]
-)
-@pytest.mark.parametrize("criterion", ("gini", "entropy"))
-def test_nodes_on_car(
-    n_estimators,
-    aggregation,
-    class_weight,
-    n_jobs,
-    max_features,
-    random_state,
-    dirichlet,
-    step,
-    multiclass,
-    cat_split_strategy,
-    one_hot_encode,
-    use_categoricals,
-    criterion,
-):
-    dataset = load_car()
-    dataset.test_size = 1.0 / 5
-    dataset.standardize = False
-    dataset.one_hot_encode = one_hot_encode
-    X_train, X_test, y_train, y_test = dataset.extract(random_state=random_state)
-    if use_categoricals:
-        categorical_features = dataset.categorical_features_
-    else:
-        categorical_features = None
-    clf = ForestClassifier(
-        n_estimators=n_estimators,
-        n_jobs=n_jobs,
-        multiclass=multiclass,
-        cat_split_strategy=cat_split_strategy,
-        aggregation=aggregation,
-        criterion=criterion,
-        max_features=max_features,
-        class_weight=class_weight,
-        categorical_features=categorical_features,
-        random_state=random_state,
-        dirichlet=dirichlet,
-        step=step,
-    )
-    clf.fit(X_train, y_train)
-
-    for tree in clf.trees:
-        node_count = tree._tree_classifier.node_count
-        nodes = tree._tree_classifier.nodes[:node_count]
-        bin_partitions = tree._tree_classifier.bin_partitions
-        assert tree._tree_classifier.nodes.size >= node_count
-        check_nodes(nodes, bin_partitions, aggregation)
-
-
-@pytest.mark.parametrize("n_estimators", [2])
-@pytest.mark.parametrize("aggregation, dirichlet", [(False, 0.0), (True, 1e-7)])
-@pytest.mark.parametrize("class_weight", [None, "balanced"])
-@pytest.mark.parametrize("n_jobs", [1, -1])
-@pytest.mark.parametrize("max_features", [None, "auto"])
-@pytest.mark.parametrize("random_state", [42])
-@pytest.mark.parametrize("step", [1.0])
-@pytest.mark.parametrize("multiclass", ["multinomial"])
-@pytest.mark.parametrize("cat_split_strategy", ["binary", "all", "random"])
-@pytest.mark.parametrize(
-    "one_hot_encode, use_categoricals", [(False, False), (False, True), (True, False)]
-)
-@pytest.mark.parametrize("criterion", ("gini", "entropy"))
-def test_nodes_on_churn(
-    n_estimators,
-    aggregation,
-    class_weight,
-    n_jobs,
-    max_features,
-    random_state,
-    dirichlet,
-    step,
-    multiclass,
-    cat_split_strategy,
-    one_hot_encode,
-    use_categoricals,
-    criterion,
-):
-    dataset = load_car()
-    dataset.test_size = 1.0 / 5
-    dataset.standardize = False
-    dataset.one_hot_encode = one_hot_encode
-    X_train, X_test, y_train, y_test = dataset.extract(random_state=random_state)
-    if use_categoricals:
-        categorical_features = dataset.categorical_features_
-    else:
-        categorical_features = None
-    clf = ForestClassifier(
-        n_estimators=n_estimators,
-        n_jobs=n_jobs,
-        multiclass=multiclass,
-        cat_split_strategy=cat_split_strategy,
-        aggregation=aggregation,
-        criterion=criterion,
-        max_features=max_features,
-        class_weight=class_weight,
-        categorical_features=categorical_features,
-        random_state=random_state,
-        dirichlet=dirichlet,
-        step=step,
-    )
-    clf.fit(X_train, y_train)
-
+    clf.fit(X, y)
     for tree in clf.trees:
         node_count = tree._tree_classifier.node_count
         nodes = tree._tree_classifier.nodes[:node_count]
@@ -281,44 +155,23 @@ def test_nodes_on_churn(
 
 @pytest.mark.parametrize("n_estimators", [2])
 @pytest.mark.parametrize("aggregation", [False, True])
-@pytest.mark.parametrize("n_jobs", [1, -1])
-@pytest.mark.parametrize("max_features", [None, "auto"])
+@pytest.mark.parametrize("n_jobs", [-1])
+@pytest.mark.parametrize("max_features", ["auto"])
 @pytest.mark.parametrize("random_state", [42])
 @pytest.mark.parametrize("step", [1.0])
-@pytest.mark.parametrize(
-    "one_hot_encode, use_categoricals", [(False, False), (False, True), (True, False)]
-)
 def test_nodes_on_boston(
-    n_estimators,
-    aggregation,
-    n_jobs,
-    max_features,
-    random_state,
-    step,
-    one_hot_encode,
-    use_categoricals,
+    n_estimators, aggregation, n_jobs, max_features, random_state, step
 ):
-    dataset = load_boston()
-    dataset.test_size = 1.0 / 5
-    dataset.standardize = False
-    dataset.one_hot_encode = one_hot_encode
-    X_train, X_test, y_train, y_test = dataset.extract(random_state=random_state)
-
-    if use_categoricals:
-        categorical_features = dataset.categorical_features_
-    else:
-        categorical_features = None
+    X, y = load_boston(raw=True)
     clf = ForestRegressor(
         n_estimators=n_estimators,
         n_jobs=n_jobs,
         aggregation=aggregation,
         max_features=max_features,
-        categorical_features=categorical_features,
         random_state=random_state,
         step=step,
     )
-    clf.fit(X_train, y_train)
-
+    clf.fit(X, y)
     for tree in clf.trees:
         node_count = tree._tree_regressor.node_count
         nodes = tree._tree_regressor.nodes[:node_count]
@@ -328,11 +181,8 @@ def test_nodes_on_boston(
 
 
 @pytest.mark.parametrize("aggregation", [False, True])
-@pytest.mark.parametrize("max_features", [None, "auto"])
+@pytest.mark.parametrize("max_features", ["auto"])
 @pytest.mark.parametrize("random_state", [42])
-@pytest.mark.parametrize(
-    "one_hot_encode, use_categoricals", [(False, False), (False, True), (True, False)]
-)
 @pytest.mark.parametrize(
     "min_samples_split, min_samples_leaf", [(2, 1), (13, 7), (3, 5)]
 )
@@ -341,28 +191,16 @@ def test_min_samples_split_min_samples_leaf_on_adult(
     aggregation,
     max_features,
     random_state,
-    one_hot_encode,
-    use_categoricals,
     min_samples_split,
     min_samples_leaf,
     criterion,
 ):
-    dataset = load_adult()
-    dataset.test_size = 1.0 / 5
-    dataset.standardize = False
-    dataset.one_hot_encode = one_hot_encode
-
+    X, y = load_adult(raw=True)
     n_estimators = 3
     n_jobs = -1
     class_weight = "balanced"
     multiclass = "multinomial"
     step = 1.0
-
-    X_train, X_test, y_train, y_test = dataset.extract(random_state=random_state)
-    if use_categoricals:
-        categorical_features = dataset.categorical_features_
-    else:
-        categorical_features = None
     clf = ForestClassifier(
         n_estimators=n_estimators,
         n_jobs=n_jobs,
@@ -373,11 +211,10 @@ def test_min_samples_split_min_samples_leaf_on_adult(
         min_samples_split=min_samples_split,
         min_samples_leaf=min_samples_leaf,
         class_weight=class_weight,
-        categorical_features=categorical_features,
         random_state=random_state,
         step=step,
     )
-    clf.fit(X_train, y_train)
+    clf.fit(X, y)
     min_samples = min(min_samples_split, min_samples_leaf)
     for tree in clf.trees:
         node_count = tree._tree_classifier.node_count

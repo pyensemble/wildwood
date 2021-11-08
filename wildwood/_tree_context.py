@@ -11,23 +11,24 @@ from numba import (
     void,
     boolean,
     uint8,
+    uint64,
     intp,
     uintp,
     float32,
 )
 from numba.experimental import jitclass
 from ._utils import NOPYTHON, NOGIL, BOUNDSCHECK, FASTMATH, get_type
+from .preprocessing.features_bitarray import FeaturesBitArrayType
 
-
-# TODO: X is uint8[:, :] while it could be uint8[::1, :] namely forced F-major,
-#  but if X has shape (n_samples, 1) (only one feature) then it is both F and C and
-#  this raises a numba compilation error. But, it should not affect performance
 
 # A pure data class which contains global context information, such as the datasets,
 # training and validation indices, etc.
 tree_context_type = [
-    # The binned matrix of features
-    ("X", uint8[:, :]),
+    # The maximum number of actual bins used by the features bitarray
+    ("max_n_bins", uint64),
+    #
+    # The features bitarray
+    ("features_bitarray", FeaturesBitArrayType),
     #
     # The vector of labels
     ("y", float32[::1]),
@@ -52,9 +53,6 @@ tree_context_type = [
     #
     # The total number of features
     ("n_features", uintp),
-    #
-    # Maximum number of bins
-    ("max_bins", intp),  # TODO: obsolete ?
     #
     # Maximum number of features to try for splitting
     ("max_features", uintp),
@@ -93,7 +91,8 @@ tree_context_type = [
     # A "buffer" used in the split_indices function
     ("right_buffer", uintp[::1]),
     #
-    # Criteria: "gini" or "entropy" or "mse", in int (according to _utils.criteria_mapping)
+    # Criterion: "gini", "entropy" or "mse", encoded as a uint8 (following the
+    # mapping from _utils.criteria_mapping)
     ("criterion", uint8),
 ]
 
@@ -124,13 +123,12 @@ class TreeClassifierContext:
 
     def __init__(
         self,
-        X,
+        features_bitarray,
         y,
         sample_weights,
         train_indices,
         valid_indices,
         n_classes,
-        max_bins,
         max_features,
         min_samples_split,
         min_samples_leaf,
@@ -143,12 +141,11 @@ class TreeClassifierContext:
     ):
         init_tree_context(
             self,
-            X,
+            features_bitarray,
             y,
             sample_weights,
             train_indices,
             valid_indices,
-            max_bins,
             max_features,
             min_samples_split,
             min_samples_leaf,
@@ -170,12 +167,11 @@ class TreeRegressorContext:
 
     def __init__(
         self,
-        X,
+        features_bitarray,
         y,
         sample_weights,
         train_indices,
         valid_indices,
-        max_bins,
         max_features,
         min_samples_split,
         min_samples_leaf,
@@ -186,12 +182,11 @@ class TreeRegressorContext:
     ):
         init_tree_context(
             self,
-            X,
+            features_bitarray,
             y,
             sample_weights,
             train_indices,
             valid_indices,
-            max_bins,
             max_features,
             min_samples_split,
             min_samples_leaf,
@@ -209,31 +204,29 @@ TreeRegressorContextType = get_type(TreeRegressorContext)
 @jit(
     [
         void(
-            TreeClassifierContextType,
-            uint8[:, :],
-            float32[::1],
-            float32[::1],
-            uintp[::1],
-            uintp[::1],
-            intp,
-            intp,
-            uintp,
-            uintp,
-            boolean,
-            float32,
-            boolean[::1],
-            uint8,
+            TreeClassifierContextType,  # tree_context
+            FeaturesBitArrayType,       # features_bitarray
+            float32[::1],               # y
+            float32[::1],               # sample_weights
+            uintp[::1],                 # train_indices
+            uintp[::1],                 # valid_indices
+            intp,                       # max_features
+            intp,                       # min_samples_split
+            uintp,                      # min_samples_leaf
+            boolean,                    # aggregation
+            float32,                    # step
+            boolean[::1],               # is_categorical
+            uint8,                      # criterion
         ),
         void(
             TreeRegressorContextType,
-            uint8[:, :],
+            FeaturesBitArrayType,
             float32[::1],
             float32[::1],
             uintp[::1],
             uintp[::1],
             intp,
             intp,
-            uintp,
             uintp,
             boolean,
             float32,
@@ -248,12 +241,11 @@ TreeRegressorContextType = get_type(TreeRegressorContext)
 )
 def init_tree_context(
     tree_context,
-    X,
+    features_bitarray,
     y,
     sample_weights,
     train_indices,
     valid_indices,
-    max_bins,
     max_features,
     min_samples_split,
     min_samples_leaf,
@@ -262,10 +254,13 @@ def init_tree_context(
     is_categorical,
     criterion,
 ):
-    tree_context.X = X
+
+    # The maximum number of actual bins used by the features bitarray
+    max_n_bins = features_bitarray.max_values.max() + 1
+    tree_context.max_n_bins = max_n_bins
+    tree_context.features_bitarray = features_bitarray
     tree_context.y = y
     tree_context.sample_weights = sample_weights
-    tree_context.max_bins = max_bins
     tree_context.max_features = max_features
     tree_context.min_samples_split = min_samples_split
     tree_context.min_samples_leaf = min_samples_leaf
@@ -278,7 +273,8 @@ def init_tree_context(
     tree_context.partition_valid = valid_indices.copy()
     tree_context.is_categorical = is_categorical.copy()
 
-    n_samples, n_features = X.shape
+    n_samples = features_bitarray.n_samples
+    n_features = features_bitarray.n_features
     tree_context.n_samples = n_samples
     tree_context.n_features = n_features
     tree_context.n_samples_train = train_indices.shape[0]
