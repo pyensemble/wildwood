@@ -40,9 +40,9 @@ np.set_printoptions(precision=2)
 # logging.info("Spent {time} compiling.".format(time=toc - tic))
 
 
-# n_samples = 1000
+n_samples = 1000
 # n_samples = 2_000_000
-n_samples = 1_000_000
+# n_samples = 1_000_000
 
 # n_samples = 10
 random_state = 42
@@ -63,14 +63,14 @@ datasets = [
 ]
 
 clf_kwargs = {
-    "n_estimators": 100,
+    "n_estimators": 1,
     "max_features": 2,
     "min_samples_split": 2,
     "random_state": random_state,
     "n_jobs": -1,
     "dirichlet": 1e-8,
     "step": 1.0,
-    "aggregation": True,
+    "aggregation": False,
     "verbose": True
 }
 
@@ -185,7 +185,7 @@ def plot_decision_classification(classifiers, datasets):
             ax = plt.subplot(n_datasets, n_classifiers + 1, i)
             clf.fit(X_train, y_train)
 
-            clf.apply(X_train)
+            # clf.apply(X_train)
             # logging.info("%s had %d nodes" % (name, clf.tree_.node_count))
             truc = np.empty((xx.ravel().shape[0], 2))
             truc[:, 0] = xx.ravel()
