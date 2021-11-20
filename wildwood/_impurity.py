@@ -9,9 +9,16 @@ nodes and their child nodes, and the information gain associated to it.
 from numba import jit, float32, uint32
 from numba.types import Tuple
 import numpy as np
+from ._utils import NOPYTHON, NOGIL, BOUNDSCHECK, FASTMATH
 
 
-@jit(float32(float32, float32, float32, float32), nopython=True, nogil=True)
+@jit(
+    float32(float32, float32, float32, float32),
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
+)
 def information_gain_proxy(
     impurity_left, impurity_right, w_samples_left, w_samples_right,
 ):
@@ -52,8 +59,10 @@ def information_gain_proxy(
 
 @jit(
     float32(float32, float32, float32, float32, float32, float32, float32),
-    nopython=True,
-    nogil=True,
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
 )
 def information_gain(
     w_samples,
@@ -117,8 +126,10 @@ def information_gain(
 
 @jit(
     float32(uint32, float32, float32[::1]),
-    nopython=True,
-    nogil=True,
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     locals={"y_sum_sq": float32, "w_samples_sq": float32},
 )
 def gini_node(n_classes, w_samples, y_sum):
@@ -150,8 +161,10 @@ def gini_node(n_classes, w_samples, y_sum):
 
 @jit(
     Tuple((float32, float32))(float32, float32, float32, float32[::1], float32[::1]),
-    nopython=True,
-    nogil=True,
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     locals={
         "y_sum_left_sq": float32,
         "y_sum_right_sq": float32,
@@ -210,8 +223,10 @@ def gini_childs(n_classes, w_samples_left, w_samples_right, y_sum_left, y_sum_ri
 
 @jit(
     float32(uint32, float32, float32[::1]),
-    nopython=True,
-    nogil=True,
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     locals={"entropy": float32, "y_sum_k": float32},
 )
 def entropy_node(n_classes, w_samples, y_sum):
@@ -245,8 +260,10 @@ def entropy_node(n_classes, w_samples, y_sum):
 
 @jit(
     Tuple((float32, float32))(float32, float32, float32, float32[::1], float32[::1]),
-    nopython=True,
-    nogil=True,
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     locals={
         "entropy_left": float32,
         "entropy_right": float32,
@@ -303,7 +320,13 @@ def entropy_childs(n_classes, w_samples_left, w_samples_right, y_sum_left, y_sum
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 
-@jit(float32(float32, float32, float32), nopython=True, nogil=True)
+@jit(
+    float32(float32, float32, float32),
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
+)
 def mse_node(w_samples, y_sum, y_sq_sum):
     """Computes the variance of the labels in the node
 
@@ -328,8 +351,10 @@ def mse_node(w_samples, y_sum, y_sq_sum):
 
 @jit(
     Tuple((float32, float32))(float32, float32, float32, float32, float32, float32),
-    nopython=True,
-    nogil=True,
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
 )
 def mse_childs(
     w_samples_left,

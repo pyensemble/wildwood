@@ -6,7 +6,7 @@ from numba import jit, void, float32, uintp
 NOPYTHON = True
 NOGIL = True
 BOUNDSCHECK = False
-
+FASTMATH = False
 
 SPLIT_STRATEGY_BINARY = 0
 SPLIT_STRATEGY_ALL = 1
@@ -57,6 +57,7 @@ def get_numba_type(class_):
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     locals={"new_size": uintp, "d0": uintp, "d1": uintp, "d2": uintp},
 )
 def resize(a, new_size, zeros=False):
@@ -89,7 +90,13 @@ def resize(a, new_size, zeros=False):
         raise ValueError("ndim can only be 1, 2 or 3")
 
 
-@jit(float32(float32, float32), nogil=NOGIL, nopython=NOPYTHON, fastmath=True)
+@jit(
+    float32(float32, float32),
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
+    fastmath=True,
+)
 def log_sum_2_exp(a, b):
     """Computation of log( (e^a + e^b) / 2) in an overflow-proof way
 
@@ -139,6 +146,7 @@ def get_type(class_):
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     locals={"n_samples": uintp, "population_size": uintp, "i": uintp, "j": uintp},
 )
 def sample_without_replacement(pool, out):

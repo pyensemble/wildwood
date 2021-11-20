@@ -22,7 +22,7 @@ from numba import (
 )
 from numba.experimental import jitclass
 
-from ._utils import get_type, resize
+from ._utils import NOPYTHON, NOGIL, BOUNDSCHECK, FASTMATH, get_type, resize
 from ._node import node_type, node_dtype
 from ._split import is_bin_in_partition
 
@@ -33,9 +33,6 @@ IS_NOT_LEFT = 0
 TREE_LEAF = intp(-1)
 TREE_UNDEFINED = intp(-2)
 
-NOPYTHON = True
-NOGIL = True
-BOUNDSCHECK = False
 
 tree_type = [
     # Number of features
@@ -141,8 +138,16 @@ class _TreeClassifier(object):
          Actual size of `bin_partitions`
     """
 
-    def __init__(self, n_features, n_classes, random_state, node_count, capacity,
-                 bin_partitions_capacity, bin_partitions_end):
+    def __init__(
+        self,
+        n_features,
+        n_classes,
+        random_state,
+        node_count,
+        capacity,
+        bin_partitions_capacity,
+        bin_partitions_end,
+    ):
         self.n_features = n_features
         self.n_classes = n_classes
         self.max_depth = 0
@@ -205,8 +210,15 @@ class _TreeRegressor(object):
          Actual size of `bin_partitions`
     """
 
-    def __init__(self, n_features, random_state, node_count, capacity,
-                 bin_partitions_capacity, bin_partitions_end):
+    def __init__(
+        self,
+        n_features,
+        random_state,
+        node_count,
+        capacity,
+        bin_partitions_capacity,
+        bin_partitions_end,
+    ):
         self.n_features = n_features
         self.max_depth = 0
         self.node_count = node_count
@@ -309,6 +321,7 @@ def get_nodes_classifier(tree):
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
 )
 def resize_tree_(tree, capacity):
     """Resizes and updates the tree to have the required capacity. This functions
@@ -335,6 +348,7 @@ def resize_tree_(tree, capacity):
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
 )
 def resize_tree(tree, capacity=None):
     """Resizes and updates the tree to have the required capacity if necessary. By
@@ -372,6 +386,7 @@ def resize_tree(tree, capacity=None):
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
 )
 def resize_tree_bin_partitions_(tree, capacity):
     """Resizes and updates `bin_partitions` ndarray of tree attribute
@@ -396,6 +411,7 @@ def resize_tree_bin_partitions_(tree, capacity):
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
 )
 def resize_tree_bin_partitions(tree, capacity=None):
     """Resizes and updates the tree's bin_partitions
@@ -478,6 +494,7 @@ def resize_tree_bin_partitions(tree, capacity=None):
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     locals={
         "node_idx": uintp,
         "nodes": node_type[::1],
@@ -653,6 +670,7 @@ def add_node_tree(
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     locals={
         "nodes": node_type[::1],
         "idx_leaf": uintp,
@@ -785,6 +803,7 @@ def sample_path_leaf(tree, xi):
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     locals={"n_samples": uintp, "out": uintp[::1], "i": uintp, "idx_leaf": uintp},
 )
 def tree_apply(tree, X):
@@ -819,6 +838,7 @@ def tree_apply(tree, X):
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     locals={
         "n_samples": uintp,
         "n_classes": uintp,
@@ -896,6 +916,7 @@ def tree_classifier_predict_proba(tree, X, aggregation, step):
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     locals={
         "n_samples": uintp,
         "nodes": node_type[::1],
@@ -975,6 +996,7 @@ def tree_regressor_predict(tree, X, aggregation, step):
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     locals={
         "n_samples": uintp,
         "nodes": node_type[::1],

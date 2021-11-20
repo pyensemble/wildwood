@@ -15,19 +15,18 @@ from ._node import NodeClassifierContextType, NodeRegressorContextType
 from ._tree_context import TreeClassifierContextType, TreeRegressorContextType
 from ._impurity import gini_childs, entropy_childs, mse_childs, information_gain_proxy
 from ._utils import (
+    NOPYTHON,
+    NOGIL,
+    BOUNDSCHECK,
+    FASTMATH,
     get_type,
     SPLIT_STRATEGY_BINARY,
     SPLIT_STRATEGY_ALL,
     SPLIT_STRATEGY_RANDOM,
     CRITERIA_GINI,
     CRITERIA_ENTROPY,
-    CRITERIA_MSE
+    CRITERIA_MSE,
 )
-
-
-NOPYTHON = True
-NOGIL = True
-BOUNDSCHECK = False
 
 
 split_type = [
@@ -284,6 +283,7 @@ SplitRegressorType = get_type(SplitRegressor)
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
 )
 def init_split(split):
     """A common initializer for SplitClassifier and SplitRegressor.
@@ -319,58 +319,69 @@ def init_split(split):
 
 
 @jit(
-    Tuple((float32, float32))(uint8, float32, float32, float32, float32[::1], float32[::1]),
+    Tuple((float32, float32))(
+        uint8, float32, float32, float32, float32[::1], float32[::1]
+    ),
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
-    locals={
-    },
+    fastmath=FASTMATH,
+    locals={},
 )
-def apply_childs_impurity_function_clf(criterion,
-                                       n_classes,
-                                       w_samples_train_left,
-                                       w_samples_train_right,
-                                       y_sum_left,
-                                       y_sum_right,):
+def apply_childs_impurity_function_clf(
+    criterion,
+    n_classes,
+    w_samples_train_left,
+    w_samples_train_right,
+    y_sum_left,
+    y_sum_right,
+):
     if criterion == CRITERIA_GINI:
-        return gini_childs(n_classes,
-                           w_samples_train_left,
-                           w_samples_train_right,
-                           y_sum_left,
-                           y_sum_right,
-                           )
+        return gini_childs(
+            n_classes,
+            w_samples_train_left,
+            w_samples_train_right,
+            y_sum_left,
+            y_sum_right,
+        )
     else:  # criterion == CRITERIA_ENTROPY:
-        return entropy_childs(n_classes,
-                              w_samples_train_left,
-                              w_samples_train_right,
-                              y_sum_left,
-                              y_sum_right,
-                              )
+        return entropy_childs(
+            n_classes,
+            w_samples_train_left,
+            w_samples_train_right,
+            y_sum_left,
+            y_sum_right,
+        )
 
 
-@jit(Tuple((float32, float32))(uint8, float32, float32, float32, float32, float32, float32),
-     nopython=NOPYTHON,
-     nogil=NOGIL,
-     boundscheck=BOUNDSCHECK,
-     locals={
-    },
+@jit(
+    Tuple((float32, float32))(
+        uint8, float32, float32, float32, float32, float32, float32
+    ),
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
+    locals={},
 )
-def apply_childs_impurity_function_reg(criterion,
-                                       w_samples_train_left,
-                                       w_samples_train_right,
-                                       y_sum_left,
-                                       y_sum_right,
-                                       y_sq_sum_left,
-                                       y_sq_sum_right,
-                                       ):
+def apply_childs_impurity_function_reg(
+    criterion,
+    w_samples_train_left,
+    w_samples_train_right,
+    y_sum_left,
+    y_sum_right,
+    y_sq_sum_left,
+    y_sq_sum_right,
+):
     # if criterion == CRITERIA_MSE:
-    return mse_childs(w_samples_train_left,
-                      w_samples_train_right,
-                      y_sum_left,
-                      y_sum_right,
-                      y_sq_sum_left,
-                      y_sq_sum_right,
-                      )
+    return mse_childs(
+        w_samples_train_left,
+        w_samples_train_right,
+        y_sum_left,
+        y_sum_right,
+        y_sq_sum_left,
+        y_sq_sum_right,
+    )
 
 
 @jit(
@@ -386,6 +397,7 @@ def apply_childs_impurity_function_reg(criterion,
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     locals={
         "n_classes": uintp,
         "aggregation": boolean,
@@ -506,14 +518,14 @@ def try_feature_order_for_classifier_split(
         #  different impurities
         criterion = tree_context.criterion
         # Get the impurities of the left and right childs
-        impurity_left, impurity_right = \
-            apply_childs_impurity_function_clf(criterion,
-                                               n_classes,
-                                               w_samples_train_left,
-                                               w_samples_train_right,
-                                               y_sum_left,
-                                               y_sum_right,
-                                               )
+        impurity_left, impurity_right = apply_childs_impurity_function_clf(
+            criterion,
+            n_classes,
+            w_samples_train_left,
+            w_samples_train_right,
+            y_sum_left,
+            y_sum_right,
+        )
         # And compute the information gain proxy
         gain_proxy = information_gain_proxy(
             impurity_left, impurity_right, w_samples_train_left, w_samples_train_right
@@ -551,6 +563,7 @@ def try_feature_order_for_classifier_split(
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     locals={
         "n_classes": uintp,
         "n_samples_train_in_bins": uintp[::1],
@@ -727,6 +740,7 @@ def find_best_split_classifier_along_feature(
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     locals={
         "aggregation": boolean,
         "n_samples_train": uintp,
@@ -890,15 +904,15 @@ def find_best_split_regressor_along_feature(
 
         criterion = tree_context.criterion
         # Get the impurities of the left and right childs
-        impurity_left, impurity_right = \
-            apply_childs_impurity_function_reg(criterion,
-                                               w_samples_train_left,
-                                               w_samples_train_right,
-                                               y_sum_left,
-                                               y_sum_right,
-                                               y_sq_sum_left,
-                                               y_sq_sum_right,
-                                               )
+        impurity_left, impurity_right = apply_childs_impurity_function_reg(
+            criterion,
+            w_samples_train_left,
+            w_samples_train_right,
+            y_sum_left,
+            y_sum_right,
+            y_sq_sum_left,
+            y_sq_sum_right,
+        )
         # And compute the information gain proxy
         gain_proxy = information_gain_proxy(
             impurity_left, impurity_right, w_samples_train_left, w_samples_train_right,
@@ -932,6 +946,7 @@ def find_best_split_regressor_along_feature(
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     locals={
         "features": uintp[::1],
         "best_gain_proxy": float32,
@@ -986,6 +1001,7 @@ def find_node_split(
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     locals={
         "bin_threshold": uint8,
         "bins": uint8[::1],
@@ -1029,6 +1045,7 @@ def compute_bin_partition(best_split):
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     locals={"size": uintp, "left": intp, "right": intp, "middle": intp},
 )
 def is_bin_in_partition(bin_, bin_partition):
@@ -1078,6 +1095,7 @@ def is_bin_in_partition(bin_, bin_partition):
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     locals={
         "feature": uintp,
         "bin_threshold": uint8,

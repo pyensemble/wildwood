@@ -11,14 +11,15 @@ import numpy as np
 from numba import from_dtype, jit, boolean, uint8, intp, uintp, float32, void
 from numba.experimental import jitclass
 
-from ._utils import get_type, sample_without_replacement
+from ._utils import (
+    NOPYTHON,
+    NOGIL,
+    BOUNDSCHECK,
+    FASTMATH,
+    get_type,
+    sample_without_replacement,
+)
 from ._tree_context import TreeClassifierContextType, TreeRegressorContextType
-
-
-# Global jit decorator options
-NOPYTHON = True
-NOGIL = True
-BOUNDSCHECK = False
 
 
 # This data type describes all the information saved about a node. It is used in
@@ -307,6 +308,7 @@ class NodeClassifierContext:
     y_pred : ndarray
         Prediction produced by the node using the training data it contains
     """
+
     def __init__(self, tree_context):
         init_node_context(tree_context, self)
         max_features = tree_context.max_features
@@ -435,6 +437,7 @@ NodeRegressorContextType = get_type(NodeRegressorContext)
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
 )
 def init_node_context(tree_context, node_context):
     """A common initializer for NodeContextClassifier and NodeContextRegressor.
@@ -485,6 +488,7 @@ def init_node_context(tree_context, node_context):
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     locals={
         "n_samples_train_in_bins": uintp[:, ::1],
         "n_samples_valid_in_bins": uintp[:, ::1],
@@ -676,6 +680,7 @@ def compute_node_classifier_context(
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     locals={
         "n_samples_train_in_bins": uintp[:, ::1],
         "n_samples_valid_in_bins": uintp[:, ::1],

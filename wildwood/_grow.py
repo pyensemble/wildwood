@@ -21,7 +21,15 @@ from ._split import find_node_split, split_indices
 from ._node import node_type
 from ._tree import add_node_tree, resize_tree, TREE_UNDEFINED, TreeClassifierType
 from ._tree_context import TreeClassifierContextType
-from ._utils import resize, log_sum_2_exp, get_type
+from ._utils import (
+    NOPYTHON,
+    NOGIL,
+    BOUNDSCHECK,
+    FASTMATH,
+    resize,
+    log_sum_2_exp,
+    get_type,
+)
 
 INITIAL_STACK_SIZE = uintp(10)
 
@@ -80,8 +88,10 @@ RecordsType = get_type(Records)
 
 @jit(
     void(RecordsType, intp, uintp, boolean, float32, uintp, uintp, uintp, uintp),
-    nopython=True,
-    nogil=True,
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     locals={"stack_top": record_type},
 )
 def push_record(
@@ -147,7 +157,13 @@ def push_record(
     records.top += 1
 
 
-@jit(boolean(RecordsType), nopython=True, nogil=True)
+@jit(
+    boolean(RecordsType),
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
+)
 def has_records(records):
     """Tests if the stack of records contain remaining records.
 
@@ -166,8 +182,10 @@ def has_records(records):
 
 @jit(
     Tuple((intp, uintp, boolean, float32, uintp, uintp, uintp, uintp))(RecordsType),
-    nopython=True,
-    nogil=True,
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     locals={"stack_top": record_type},
 )
 def pop_node_record(records):
@@ -222,9 +240,10 @@ def pop_node_record(records):
 
 
 @jit(
-    fastmath=False,
-    nopython=True,
-    nogil=True,
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     locals={
         "init_capacity": uintp,
         "records": RecordsType,
@@ -508,9 +527,10 @@ def grow(
 
 @jit(
     [void(node_type[:], intp, float32)],
-    fastmath=False,
-    nopython=True,
-    nogil=True,
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     locals={
         "node_idx": intp,
         "node": node_type,
@@ -561,9 +581,10 @@ def compute_tree_weights(nodes, node_count, step):
 
 @jit(
     void(TreeClassifierType, TreeClassifierContextType, float32),
-    nopython=True,
-    nogil=True,
-    boundscheck=False,
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     locals={
         "nodes": node_type[::1],
         "n_classes": uintp,
