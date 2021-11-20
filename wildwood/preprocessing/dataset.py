@@ -20,13 +20,9 @@ from math import ceil, floor
 import numpy as np
 from numba import jit, void, uint8, int8, uint16, int16, uint32, int32, uint64, int64
 from numba.experimental import jitclass
-from .._utils import get_type
+from .._utils import NOPYTHON, NOGIL, BOUNDSCHECK, FASTMATH, get_type
 
 
-# Global jit decorator options
-NOPYTHON = True
-NOGIL = True
-BOUNDSCHECK = False
 CACHE = True
 
 
@@ -160,6 +156,7 @@ numba_int_types = [uint8, int8, uint16, int16, uint32, int32, uint64, int64]
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     cache=CACHE,
     locals={"i": uint64, "x_ij": uint64, "word": uint64, "pos_in_word": uint64},
 )
@@ -206,6 +203,7 @@ def _dataset_fill_column(col_bitarray, n_bits, n_values_in_word, col):
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     cache=CACHE,
     locals={
         "bitarray": uint64[::1],
@@ -362,6 +360,7 @@ def _get_empty_matrix(n_samples, n_features, max_value):
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     locals={
         "n_samples": uint64,
         "n_features": uint64,

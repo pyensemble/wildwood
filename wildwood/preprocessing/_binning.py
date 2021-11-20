@@ -9,12 +9,8 @@ continuous features.
 import numpy as np
 from math import isnan
 from numba import jit, uint64
+from .._utils import NOPYTHON, NOGIL, BOUNDSCHECK, FASTMATH
 
-
-# Global jit decorator options
-NOPYTHON = True
-NOGIL = True
-BOUNDSCHECK = False
 CACHE = True
 
 ALMOST_INF = 1e300
@@ -23,6 +19,7 @@ ALMOST_INF = 1e300
 # TODO: put back signatures everywhere
 
 # TODO: We use _find_binning_thresholds on pandas.Series only ?
+
 
 def _find_binning_thresholds(col, max_bins, col_is_pandas_series=False):
     """Extract quantiles from a continuous feature.
@@ -89,6 +86,7 @@ def _find_binning_thresholds(col, max_bins, col_is_pandas_series=False):
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
     cache=CACHE,
 )
 def _bin_continuous_column(col, binning_thresholds, missing_values_bin, binned_col):

@@ -16,12 +16,7 @@ from numba import (
     float32,
 )
 from numba.experimental import jitclass
-from ._utils import get_type
-
-
-NOPYTHON = True
-NOGIL = True
-BOUNDSCHECK = False
+from ._utils import NOPYTHON, NOGIL, BOUNDSCHECK, FASTMATH, get_type
 
 
 # TODO: X is uint8[:, :] while it could be uint8[::1, :] namely forced F-major,
@@ -99,7 +94,7 @@ tree_context_type = [
     ("right_buffer", uintp[::1]),
     #
     # Criteria: "gini" or "entropy" or "mse", in int (according to _utils.criteria_mapping)
-    ("criterion", uint8)
+    ("criterion", uint8),
 ]
 
 
@@ -249,6 +244,7 @@ TreeRegressorContextType = get_type(TreeRegressorContext)
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
 )
 def init_tree_context(
     tree_context,
