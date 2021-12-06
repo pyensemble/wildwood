@@ -41,7 +41,7 @@ def _fetch_epsilon(download_if_missing=True):
         _fetch_remote(ARCHIVE_TEST, dirname=data_dir)
 
 
-def load_epsilon(download_if_missing=True):
+def load_epsilon(download_if_missing=True, raw=False, verbose=False):
     # Fetch the data is necessary
     _fetch_epsilon(download_if_missing)
 
@@ -65,16 +65,19 @@ def load_epsilon(download_if_missing=True):
     y = np.append(y, y_test)
 
     y[y <= 0] = 0
-    columns = [str(i) for i in range(X.shape[1] + 1)]
 
-    dataset = Dataset(
-        name="epsilon",
-        task="binary-classification",
-        label_column=columns[0],
-        continuous_columns=columns[1:],
-        categorical_columns=None,
-    )
+    if raw:
+        return pd.DataFrame(X), pd.DataFrame(y)
+    else:
+        columns = [str(i) for i in range(X.shape[1] + 1)]
+        dataset = Dataset(
+            name="epsilon",
+            task="binary-classification",
+            label_column=columns[0],
+            continuous_columns=columns[1:],
+            categorical_columns=None,
+        )
 
-    dataset.df_raw = pd.DataFrame(np.hstack((y[:, np.newaxis], X)))
-    dataset.df_raw.columns = columns
-    return dataset
+        dataset.df_raw = pd.DataFrame(np.hstack((y[:, np.newaxis], X)))
+        dataset.df_raw.columns = columns
+        return dataset

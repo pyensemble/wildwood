@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from sklearn.datasets._base import _fetch_remote
 
-from .dataset import Dataset
+from .dataset import Dataset, load_raw_dataset
 from ._utils import _mkdirp, RemoteFileMetadata, get_data_home
 
 
@@ -77,7 +77,7 @@ def _fetch_kick(download_if_missing=True):
         os.remove(filepath)
 
 
-def load_kick(download_if_missing=True):
+def load_kick(download_if_missing=True, raw=False, verbose=False):
     # Fetch the data is necessary
     _fetch_kick(download_if_missing)
 
@@ -85,11 +85,20 @@ def load_kick(download_if_missing=True):
     data_dir = join(data_home, "kick")
     data_path = join(data_dir, "kick.csv.gz")
 
-    dataset = Dataset.from_dtype(
-        name="kick",
-        drop_columns=None,  # ["PRIMEUNIT" ,"AUCGUART"],
-        task="binary-classification",
-        label_column="IsBadBuy",
-        dtype=dtype,
-    )
-    return dataset.load_from_csv(data_path, dtype=dtype)
+    label_column = "IsBadBuy"
+    if raw:
+        return load_raw_dataset(
+            data_path=data_path,
+            label_column=label_column,
+            dtype=dtype,
+            verbose=verbose,
+        )
+    else:
+        dataset = Dataset.from_dtype(
+            name="kick",
+            drop_columns=None,  # ["PRIMEUNIT" ,"AUCGUART"],
+            task="binary-classification",
+            label_column=label_column,
+            dtype=dtype,
+        )
+        return dataset.load_from_csv(data_path, dtype=dtype)

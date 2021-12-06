@@ -39,6 +39,64 @@ def scaled_gini(probs):
 # TODO: same thing with entropy
 
 
+def get_X_y_from_dataframe(df, label_column, drop_columns=None):
+    if drop_columns:
+        df.drop(drop_columns, axis="columns", inplace=True)
+
+    y = df.loc[:, label_column]
+    df.drop(label_column, axis="columns", inplace=True)
+    X = df
+    return X, y
+
+
+def load_raw_dataset(
+    data_path, label_column, dtype=None, verbose=False, drop_columns=None, **kwargs
+):
+    """Loads a dataset without any transformation. This simply reads the data and
+    creates a pandas.DataFrame X containing raw features and a Series y containing
+    the labels.
+
+    Parameters
+    ----------
+    data_path : str
+        The path to the data
+
+    label_column : str or int
+        The name of the column containing the labels
+
+    dtype : dict
+        A dictionary mapping the column to their desired dtype
+
+    drop_columns : None or list
+        Names of the columns to drop
+
+    verbose : bool
+        Display stuff when True.
+
+    kwargs : object
+        Keyword arguments passed to pd.read_csv
+
+    Returns
+    -------
+    output : tuple
+        A tuple (X, y) containing the features and labels
+    """
+    module_path = os.path.dirname(__file__)
+    filename = os.path.join(module_path, "data", data_path)
+    if verbose:
+        logging.info("Reading from file %s..." % filename)
+
+    tic = time()
+    df = pd.read_csv(filename, dtype=dtype, **kwargs)
+    toc = time()
+    if verbose:
+        logging.info("Read from file %s in %.2f seconds" % (filename, toc - tic))
+
+    return get_X_y_from_dataframe(
+        df, label_column=label_column, drop_columns=drop_columns
+    )
+
+
 class Dataset:
     """
 
@@ -347,4 +405,15 @@ class Dataset:
         return X_train, X_test, y_train, y_test
 
     def compute_gini(self):
-        return 1 - ((np.bincount(LabelEncoder().fit_transform(self.df_raw[self.label_column]))/len(self.df_raw))**2).sum()
+        return (
+            1
+            - (
+                (
+                    np.bincount(
+                        LabelEncoder().fit_transform(self.df_raw[self.label_column])
+                    )
+                    / len(self.df_raw)
+                )
+                ** 2
+            ).sum()
+        )

@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from sklearn.datasets._base import _fetch_remote
 
-from .dataset import Dataset
+from .dataset import Dataset, load_raw_dataset
 from ._utils import _mkdirp, RemoteFileMetadata, get_data_home
 
 
@@ -38,7 +38,7 @@ def _fetch_default_cb(download_if_missing=True):
         os.remove(filepath)
 
 
-def load_default_cb(download_if_missing=True):
+def load_default_cb(download_if_missing=True, raw=False, verbose=False):
     # Fetch the data is necessary
     _fetch_default_cb(download_if_missing)
 
@@ -73,11 +73,24 @@ def load_default_cb(download_if_missing=True):
         "PAY_AMT5": np.int64,
         "PAY_AMT6": np.int64,
     }
-    dataset = Dataset.from_dtype(
-        name="default-cb",
-        task="binary-classification",
-        label_column="default payment next month",
-        dtype=dtype,
-        drop_columns=["ID"],
-    )
-    return dataset.load_from_csv(data_path, dtype=dtype)
+
+    label_column = "default payment next month"
+
+    if raw:
+        # TODO: we need to drop the "ID" column here as well
+        return load_raw_dataset(
+            data_path=data_path,
+            label_column=label_column,
+            dtype=dtype,
+            verbose=verbose,
+            drop_columns=["ID"],
+        )
+    else:
+        dataset = Dataset.from_dtype(
+            name="default-cb",
+            task="binary-classification",
+            label_column=label_column,
+            dtype=dtype,
+            drop_columns=["ID"],
+        )
+        return dataset.load_from_csv(data_path, dtype=dtype)

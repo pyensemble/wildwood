@@ -4,7 +4,7 @@
 import pandas as pd
 import numpy as np
 
-from .dataset import Dataset
+from .dataset import Dataset, load_raw_dataset, get_X_y_from_dataframe
 from ._adult import load_adult
 from ._bank import load_bank
 from ._car import load_car
@@ -13,26 +13,30 @@ from ._default_cb import load_default_cb
 # TODO: kdd98 https://www.openml.org/d/23513, Il y a plein de features numeriques avec un grand nombre de "missing" values
 
 
-def load_breastcancer():
+def load_breastcancer(raw=False):
     from sklearn.datasets import load_breast_cancer
 
     data = load_breast_cancer(as_frame=True)
     df = data["frame"]
 
-    continuous_columns = [col for col in df.columns if col != "target"]
-    categorical_columns = None
-    dataset = Dataset(
-        name="breastcancer",
-        task="binary-classification",
-        label_column="target",
-        continuous_columns=continuous_columns,
-        categorical_columns=categorical_columns,
-    )
-    dataset.df_raw = df
-    return dataset
+    label_column = "target"
+    if raw:
+        return get_X_y_from_dataframe(df, label_column=label_column)
+    else:
+        continuous_columns = [col for col in df.columns if col != label_column]
+        categorical_columns = None
+        dataset = Dataset(
+            name="breastcancer",
+            task="binary-classification",
+            label_column="target",
+            continuous_columns=continuous_columns,
+            categorical_columns=categorical_columns,
+        )
+        dataset.df_raw = df
+        return dataset
 
 
-def load_boston():
+def load_boston(raw=False):
     from sklearn.datasets import load_boston
 
     data = load_boston()
@@ -41,60 +45,77 @@ def load_boston():
     df = pd.DataFrame(data["data"], columns=data["feature_names"]).astype(
         {"CHAS": "category"}
     )
-    df["target"] = data["target"]
-    continuous_columns = [
-        "ZN",
-        "RAD",
-        "CRIM",
-        "INDUS",
-        "NOX",
-        "RM",
-        "AGE",
-        "DIS",
-        "TAX",
-        "PTRATIO",
-        "B",
-        "LSTAT",
-    ]
-    categorical_columns = ["CHAS"]
-    dataset = Dataset(
-        name="boston",
-        task="regression",
-        label_column="target",
-        continuous_columns=continuous_columns,
-        categorical_columns=categorical_columns,
-    )
-    dataset.df_raw = df
-    return dataset
+    label_column = "target"
+    df[label_column] = data[label_column]
+
+    if raw:
+        return get_X_y_from_dataframe(df, label_column=label_column)
+    else:
+        continuous_columns = [
+            "ZN",
+            "RAD",
+            "CRIM",
+            "INDUS",
+            "NOX",
+            "RM",
+            "AGE",
+            "DIS",
+            "TAX",
+            "PTRATIO",
+            "B",
+            "LSTAT",
+        ]
+        categorical_columns = ["CHAS"]
+        dataset = Dataset(
+            name="boston",
+            task="regression",
+            label_column=label_column,
+            continuous_columns=continuous_columns,
+            categorical_columns=categorical_columns,
+        )
+        dataset.df_raw = df
+        return dataset
 
 
-def load_californiahousing():
+def load_californiahousing(raw=False):
     from sklearn.datasets import fetch_california_housing
 
     data = fetch_california_housing(as_frame=True)
     df = data["frame"]
-    continuous_columns = [col for col in df.columns if col != "MedHouseVal"]
-    categorical_columns = None
-    dataset = Dataset(
-        name="californiahousing",
-        task="regression",
-        label_column="MedHouseVal",
-        continuous_columns=continuous_columns,
-        categorical_columns=categorical_columns,
-    )
-    dataset.df_raw = df
-    return dataset
+    label_column = "MedHouseVal"
+
+    if raw:
+        return get_X_y_from_dataframe(df, label_column=label_column)
+    else:
+        continuous_columns = [col for col in df.columns if col != label_column]
+        categorical_columns = None
+        dataset = Dataset(
+            name="californiahousing",
+            task="regression",
+            label_column=label_column,
+            continuous_columns=continuous_columns,
+            categorical_columns=categorical_columns,
+        )
+        dataset.df_raw = df
+        return dataset
 
 
-def load_letor():
+def load_letor(raw=False):
     dtype = {str(i): np.float64 for i in range(1, 47)}
-    dataset = Dataset.from_dtype(
-        name="letor", task="multiclass-classification", label_column="0", dtype=dtype,
-    )
-    return dataset.load_from_csv("letor.csv.gz", dtype=dtype)
+    label_column = "0"
+    if raw:
+        return load_raw_dataset("letor.csv.gz", label_column=label_column, dtype=dtype,)
+    else:
+        dataset = Dataset.from_dtype(
+            name="letor",
+            task="multiclass-classification",
+            label_column=label_column,
+            dtype=dtype,
+        )
+        return dataset.load_from_csv("letor.csv.gz", dtype=dtype)
 
 
-def load_cardio():
+def load_cardio(raw=False):
     dtype = {
         "b": np.int32,
         "e": np.int32,
@@ -132,17 +153,28 @@ def load_cardio():
         "FS": np.int32,
         "SUSP": np.int32,
     }
-    dataset = Dataset.from_dtype(
-        name="cardio",
-        task="multiclass-classification",
-        label_column="CLASS",
-        dtype=dtype,
-        # We drop the NSP column which is a 3-class version of the label
-        drop_columns=["FileName", "Date", "SegFile", "NSP"],
-    )
-    return dataset.load_from_csv(
-        "cardiotocography.csv.gz", sep=";", decimal=",", dtype=dtype
-    )
+    label_column = "CLASS"
+    drop_columns = ["FileName", "Date", "SegFile", "NSP"]
+    filename = "cardiotocography.csv.gz"
+    if raw:
+        return load_raw_dataset(
+            filename,
+            label_column=label_column,
+            drop_columns=drop_columns,
+            dtype=dtype,
+            sep=";",
+            decimal=",",
+        )
+    else:
+        dataset = Dataset.from_dtype(
+            name="cardio",
+            task="multiclass-classification",
+            label_column=label_column,
+            dtype=dtype,
+            # We drop the NSP column which is a 3-class version of the label
+            drop_columns=drop_columns,
+        )
+        return dataset.load_from_csv(filename, sep=";", decimal=",", dtype=dtype)
 
 
 #
@@ -155,7 +187,7 @@ def load_cardio():
 #     df.info()
 
 
-def load_churn():
+def load_churn(raw=False):
     dtype = {
         "State": "category",
         "Account Length": np.int32,
@@ -177,18 +209,27 @@ def load_churn():
         "Intl Charge": np.float32,
         "CustServ Calls": np.int32,
     }
-    dataset = Dataset.from_dtype(
-        name="churn",
-        task="binary-classification",
-        label_column="Churn?",
-        dtype=dtype,
-        # We drop the "Phone" column
-        drop_columns=["Phone"],
-    )
-    return dataset.load_from_csv("churn.csv.gz", dtype=dtype)
+
+    label_column = "Churn?"
+    drop_columns = ["Phone"]
+    filename = "churn.csv.gz"
+
+    if raw:
+        return load_raw_dataset(
+            filename, label_column=label_column, drop_columns=drop_columns, dtype=dtype,
+        )
+    else:
+        dataset = Dataset.from_dtype(
+            name="churn",
+            task="binary-classification",
+            label_column=label_column,
+            dtype=dtype,
+            drop_columns=drop_columns,
+        )
+        return dataset.load_from_csv(filename, dtype=dtype)
 
 
-def load_epsilon_catboost():
+def load_epsilon_catboost(raw=False):
     from catboost.datasets import epsilon
 
     df_train, df_test = epsilon()
@@ -206,43 +247,51 @@ def load_epsilon_catboost():
     return dataset
 
 
-def load_covtype():
+def load_covtype(raw=False):
     from sklearn.datasets import fetch_covtype
 
     data = fetch_covtype(as_frame=True)
     df = data["frame"]
-    continuous_columns = [col for col in df.columns if col != "Cover_Type"]
-    categorical_columns = None
-    dataset = Dataset(
-        name="covtype",
-        task="multiclass-classification",
-        label_column="Cover_Type",
-        continuous_columns=continuous_columns,
-        categorical_columns=categorical_columns,
-    )
-    dataset.df_raw = df
-    return dataset
+    label_column = "Cover_Type"
+    if raw:
+        return get_X_y_from_dataframe(df, label_column=label_column,)
+    else:
+        continuous_columns = [col for col in df.columns if col != label_column]
+        categorical_columns = None
+        dataset = Dataset(
+            name="covtype",
+            task="multiclass-classification",
+            label_column=label_column,
+            continuous_columns=continuous_columns,
+            categorical_columns=categorical_columns,
+        )
+        dataset.df_raw = df
+        return dataset
 
 
-def load_diabetes():
+def load_diabetes(raw=False):
     from sklearn.datasets import load_diabetes
 
     data = load_diabetes(as_frame=True)
     df = data["frame"]
-    continuous_columns = [col for col in df.columns if col != "target"]
-    categorical_columns = None
-    dataset = Dataset(
-        name="diabetes",
-        task="regression",
-        label_column="target",
-        continuous_columns=continuous_columns,
-        categorical_columns=categorical_columns,
-    )
-    dataset.df_raw = df
-    return dataset
+    label_column = "target"
+    if raw:
+        return get_X_y_from_dataframe(df, label_column=label_column)
+    else:
+        continuous_columns = [col for col in df.columns if col != label_column]
+        categorical_columns = None
+        dataset = Dataset(
+            name="diabetes",
+            task="regression",
+            label_column="target",
+            continuous_columns=continuous_columns,
+            categorical_columns=categorical_columns,
+        )
+        dataset.df_raw = df
+        return dataset
 
 
-def load_kddcup99():
+def load_kddcup99(raw=False):
     from sklearn.datasets import fetch_kddcup99
 
     # We load the full datasets with 4.8 million rows
@@ -293,17 +342,22 @@ def load_kddcup99():
         "dst_host_srv_rerror_rate": np.float32,
     }
     df = df.astype(dtype)
-    dataset = Dataset.from_dtype(
-        name="kddcup",
-        task="multiclass-classification",
-        label_column="labels",
-        dtype=dtype,
-    )
-    dataset.df_raw = df
-    return dataset
+    label_column = "labels"
+
+    if raw:
+        return get_X_y_from_dataframe(df, label_column=label_column)
+    else:
+        dataset = Dataset.from_dtype(
+            name="kddcup",
+            task="multiclass-classification",
+            label_column=label_column,
+            dtype=dtype,
+        )
+        dataset.df_raw = df
+        return dataset
 
 
-def load_letter():
+def load_letter(raw=False):
     dtype = {
         "X0": np.float32,
         "X1": np.float32,
@@ -322,17 +376,26 @@ def load_letter():
         "X14": np.float32,
         "X15": np.float32,
     }
-    dataset = Dataset.from_dtype(
-        name="letter",
-        task="multiclass-classification",
-        label_column="y",
-        dtype=dtype,
-        drop_columns=["Unnamed: 0"],
-    )
-    return dataset.load_from_csv("letter.csv.gz", dtype=dtype)
+    filename = "letter.csv.gz"
+    drop_columns = ["Unnamed: 0"]
+    label_column = "y"
+
+    if raw:
+        return load_raw_dataset(
+            filename, label_column=label_column, drop_columns=drop_columns, dtype=dtype,
+        )
+    else:
+        dataset = Dataset.from_dtype(
+            name="letter",
+            task="multiclass-classification",
+            label_column=label_column,
+            dtype=dtype,
+            drop_columns=drop_columns,
+        )
+        return dataset.load_from_csv(filename, dtype=dtype)
 
 
-def load_satimage():
+def load_satimage(raw=False):
     dtype = {
         "X0": np.float32,
         "X1": np.float32,
@@ -371,17 +434,25 @@ def load_satimage():
         "X34": np.float32,
         "X35": np.float32,
     }
-    dataset = Dataset.from_dtype(
-        name="satimage",
-        task="multiclass-classification",
-        label_column="y",
-        drop_columns=["Unnamed: 0"],
-        dtype=dtype,
-    )
-    return dataset.load_from_csv("satimage.csv.gz", dtype=dtype)
+    filename = "satimage.csv.gz"
+    label_column = "y"
+    drop_columns = ["Unnamed: 0"]
+    if raw:
+        return load_raw_dataset(
+            filename, label_column=label_column, drop_columns=drop_columns, dtype=dtype,
+        )
+    else:
+        dataset = Dataset.from_dtype(
+            name="satimage",
+            task="multiclass-classification",
+            label_column=label_column,
+            drop_columns=drop_columns,
+            dtype=dtype,
+        )
+        return dataset.load_from_csv(filename, dtype=dtype)
 
 
-def load_sensorless():
+def load_sensorless(raw=False):
     dtype = {
         0: np.float32,
         1: np.float32,
@@ -432,16 +503,23 @@ def load_sensorless():
         46: np.float32,
         47: np.float32,
     }
-    dataset = Dataset.from_dtype(
-        name="sensorless",
-        task="multiclass-classification",
-        label_column=48,
-        dtype=dtype,
-    )
-    return dataset.load_from_csv("sensorless.csv.gz", sep=" ", header=None, dtype=dtype)
+    filename = "sensorless.csv.gz"
+    label_column = 48
+    if raw:
+        return load_raw_dataset(
+            filename, label_column=label_column, dtype=dtype, sep=" ", header=None
+        )
+    else:
+        dataset = Dataset.from_dtype(
+            name="sensorless",
+            task="multiclass-classification",
+            label_column=label_column,
+            dtype=dtype,
+        )
+        return dataset.load_from_csv(filename, sep=" ", header=None, dtype=dtype)
 
 
-def load_spambase():
+def load_spambase(raw=False):
     dtype = {
         0: np.float32,
         1: np.float32,
@@ -501,13 +579,17 @@ def load_spambase():
         55: np.int32,
         56: np.int32,
     }
-    dataset = Dataset.from_dtype(
-        name="spambase", task="binary-classification", label_column=57, dtype=dtype,
-    )
-    return dataset.load_from_csv("spambase.csv.gz", header=None, dtype=dtype)
-
-
-#
+    filename = "spambase.csv.gz"
+    label_column = 57
+    if raw:
+        return load_raw_dataset(
+            filename, label_column=label_column, dtype=dtype, header=None
+        )
+    else:
+        dataset = Dataset.from_dtype(
+            name="spambase", task="binary-classification", label_column=57, dtype=dtype
+        )
+        return dataset.load_from_csv(filename, header=None, dtype=dtype)
 
 
 # class KDDCup(Datasets):  # multiclass
