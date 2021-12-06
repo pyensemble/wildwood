@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from sklearn.datasets._base import _fetch_remote
 
-from .dataset import Dataset
+from .dataset import Dataset, load_raw_dataset
 from ._utils import _mkdirp, RemoteFileMetadata, get_data_home
 import zipfile
 
@@ -41,23 +41,29 @@ def _fetch_internet(download_if_missing=True):
         os.remove(file)
 
 
-def load_internet(download_if_missing=True):
+def load_internet(download_if_missing=True, raw=False, verbose=False):
     # Fetch the data is necessary
     _fetch_internet(download_if_missing)
-
     data_home = get_data_home()
     data_dir = join(data_home, "internet")
     data_path = join(data_dir, "internet.csv.gz")
-
     df = pd.read_csv(data_path)
-
     dtype = {field: "category" for field in list(df.columns)[1:-1]}
-
-    dataset = Dataset.from_dtype(
-        name="internet",
-        task="multiclass-classification",
-        drop_columns=["who"],
-        label_column="Actual_Time",
-        dtype=dtype,
-    )
-    return dataset.load_from_csv(data_path, dtype=dtype)
+    label_column = "Actual_Time"
+    if raw:
+        return load_raw_dataset(
+            data_path=data_path,
+            label_column=label_column,
+            dtype=dtype,
+            drop_columns=["who"],
+            verbose=verbose,
+        )
+    else:
+        dataset = Dataset.from_dtype(
+            name="internet",
+            task="multiclass-classification",
+            drop_columns=["who"],
+            label_column=label_column,
+            dtype=dtype,
+        )
+        return dataset.load_from_csv(data_path, dtype=dtype)

@@ -15,7 +15,7 @@ from sklearn.datasets._base import (
 )
 
 # from sklearn.datasets import get_data_home
-from .dataset import Dataset
+from .dataset import Dataset, load_raw_dataset
 from ._utils import _mkdirp, RemoteFileMetadata, get_data_home
 
 
@@ -50,7 +50,7 @@ def _fetch_higgs(download_if_missing=True):
         _fetch_remote(ARCHIVE, dirname=data_dir)
 
 
-def load_higgs(download_if_missing=True):
+def load_higgs(download_if_missing=True, raw=False, verbose=False):
     # Fetch the data is necessary
     _fetch_higgs(download_if_missing)
 
@@ -59,10 +59,21 @@ def load_higgs(download_if_missing=True):
     data_path = join(data_dir, "HIGGS.csv.gz")
 
     dtype = {i + 1: np.float32 for i in range(28)}
-    dataset = Dataset.from_dtype(
-        name="higgs", task="binary-classification", label_column=0, dtype=dtype
-    )
-    return dataset.load_from_csv(data_path, dtype=dtype, header=None)
+
+    label_column = 0
+    if raw:
+        return load_raw_dataset(
+            data_path=data_path,
+            label_column=label_column,
+            dtype=dtype,
+            verbose=verbose,
+            header=None,
+        )
+    else:
+        dataset = Dataset.from_dtype(
+            name="higgs", task="binary-classification", label_column=0, dtype=dtype
+        )
+        return dataset.load_from_csv(data_path, dtype=dtype, header=None)
 
 
 # def _fetch_higgs(download_if_missing=True):
