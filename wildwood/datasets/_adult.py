@@ -115,5 +115,6 @@ def load_adult(download_if_missing=True, raw=False, verbose=False):
             task="binary-classification",
             label_column=label_column,
             dtype=dtype,
+
         )
         return dataset.load_from_csv(data_path, dtype=dtype)

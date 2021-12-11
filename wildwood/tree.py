@@ -46,6 +46,7 @@ from ._tree import (
     tree_apply,
 )
 from ._tree import path_leaf as _path_leaf
+from .preprocessing.features_bitarray import FeaturesBitArray, spec_features_bit_array
 
 
 # TODO: the categorical_features parameter used in TreeClassifier and TreeRegressor
@@ -58,7 +59,7 @@ class TreeBase(BaseEstimator, metaclass=ABCMeta):
         self,
         *,
         is_classifier,
-        n_bins,
+        # max_bins,
         criterion,
         loss,
         step,
@@ -84,7 +85,7 @@ class TreeBase(BaseEstimator, metaclass=ABCMeta):
         self._train_indices = None
         self._valid_indices = None
 
-        self.n_bins = n_bins
+        # self.max_bins = max_bins
         self.criterion = criterion
         self.loss = loss
         self._step = step
@@ -174,7 +175,7 @@ class TreeClassifier(ClassifierMixin, TreeBase):
     def __init__(
         self,
         *,
-        n_bins,
+        # max_bins,
         n_classes,
         criterion,
         loss,
@@ -193,7 +194,7 @@ class TreeClassifier(ClassifierMixin, TreeBase):
     ):
         super().__init__(
             is_classifier=True,
-            n_bins=n_bins,
+            # max_bins=max_bins,
             criterion=criterion,
             loss=loss,
             step=step,
@@ -213,14 +214,10 @@ class TreeClassifier(ClassifierMixin, TreeBase):
         self._step = step
         self.cat_split_strategy = cat_split_strategy
 
-    def fit(self, X, y, train_indices, valid_indices, sample_weights):
+    def fit(self, features_bitarray, y, train_indices, valid_indices, sample_weights):
         n_classes = self.n_classes
-        max_bins = self.n_bins - 1
         random_state = self.random_state
-        # TODO: on obtiendra cette info via le binner qui est dans la foret
-        n_samples, n_features = X.shape
-        # n_bins_per_feature = max_bins * np.ones(n_features)
-        # n_bins_per_feature = n_bins_per_feature.astype(np.intp)
+        n_features = features_bitarray.n_features
 
         # Create the tree object, which is mostly a data container for the nodes
         node_count = 0
@@ -241,14 +238,12 @@ class TreeClassifier(ClassifierMixin, TreeBase):
         # the data, in particular the way we'll organize data into contiguous
         # node indexes both for training and validation samples
         tree_classifier_context = TreeClassifierContext(
-            X,
+            features_bitarray,
             y,
             sample_weights,
             train_indices,
             valid_indices,
             self.n_classes,
-            self.n_bins - 1,
-            # n_bins_per_feature,
             self.max_features,
             self.min_samples_split,
             self.min_samples_leaf,
@@ -261,7 +256,9 @@ class TreeClassifier(ClassifierMixin, TreeBase):
         )
 
         node_context = NodeClassifierContext(tree_classifier_context)
-        best_split = SplitClassifier(tree_classifier_context.n_classes)
+        best_split = SplitClassifier(
+            tree_classifier_context.n_classes, tree_classifier_context.max_n_bins
+        )
         compute_node_context = compute_node_classifier_context
         grow(
             tree_classifier,
@@ -277,10 +274,10 @@ class TreeClassifier(ClassifierMixin, TreeBase):
         self._tree_classifier_context = tree_classifier_context
         return self
 
-    def predict_proba(self, X):
+    def predict_proba(self, features_bitarray):
         proba = tree_classifier_predict_proba(
             self._tree_classifier,
-            X,
+            features_bitarray,
             self._tree_classifier_context.aggregation,
             self._tree_classifier_context.step,
         )
@@ -314,7 +311,6 @@ class TreeRegressor(TreeBase, RegressorMixin):
     def __init__(
         self,
         *,
-        n_bins,
         criterion,
         loss,
         step=1.0,
@@ -330,7 +326,6 @@ class TreeRegressor(TreeBase, RegressorMixin):
     ):
         super().__init__(
             is_classifier=False,
-            n_bins=n_bins,
             criterion=criterion,
             loss=loss,
             step=step,
@@ -345,14 +340,10 @@ class TreeRegressor(TreeBase, RegressorMixin):
             verbose=verbose,
         )
 
-    def fit(self, X, y, train_indices, valid_indices, sample_weights):
-        max_bins = self.n_bins - 1
+    def fit(self, features_bitarray, y, train_indices, valid_indices, sample_weights):
         random_state = self.random_state
         # TODO: on obtiendra cette info via le binner qui est dans la foret
-        n_samples, n_features = X.shape
-        n_bins_per_feature = max_bins * np.ones(n_features)
-        n_bins_per_feature = n_bins_per_feature.astype(np.intp)
-
+        n_features = features_bitarray.n_features
         # Create the tree object, which is mostly a data container for the nodes
         node_count = 0
         capacity = 0
@@ -371,12 +362,11 @@ class TreeRegressor(TreeBase, RegressorMixin):
         # the data, in particular the way we'll organize data into contiguous
         # node indexes both for training and validation samples
         tree_regressor_context = TreeRegressorContext(
-            X,
+            features_bitarray,
             y,
             sample_weights,
             train_indices,
             valid_indices,
-            self.n_bins - 1,
             self.max_features,
             self.min_samples_split,
             self.min_samples_leaf,
@@ -387,7 +377,7 @@ class TreeRegressor(TreeBase, RegressorMixin):
         )
 
         node_context = NodeRegressorContext(tree_regressor_context)
-        best_split = SplitRegressor()
+        best_split = SplitRegressor(tree_regressor_context.max_n_bins)
         compute_node_context = compute_node_regressor_context
 
         grow(
@@ -426,16 +416,38 @@ def serialize(obj):
     elif isinstance(obj, _TreeRegressor):
         return {attr: getattr(obj, attr) for attr, _ in tree_regressor_type}
     elif isinstance(obj, TreeClassifierContext):
-        return {attr: getattr(obj, attr) for attr, _ in tree_classifier_context_type}
+        dd = {}
+        for attr, _ in tree_classifier_context_type:
+            if attr == "features_bitarray":
+                features_bitarray = getattr(obj, attr)
+                dd[attr] = {
+                    key: getattr(features_bitarray, key)
+                    for key, _ in spec_features_bit_array
+                }
+            else:
+                dd[attr] = getattr(obj, attr)
+        return dd
+        # return {attr: getattr(obj, attr) for attr, _ in tree_classifier_context_type}
     elif isinstance(obj, TreeRegressorContext):
-        return {attr: getattr(obj, attr) for attr, _ in tree_regressor_context_type}
+        dd = {}
+        for attr, _ in tree_regressor_context_type:
+            if attr == "features_bitarray":
+                features_bitarray = getattr(obj, attr)
+                dd[attr] = {
+                    key: getattr(features_bitarray, key)
+                    for key, _ in spec_features_bit_array
+                }
+            else:
+                dd[attr] = getattr(obj, attr)
+        return dd
+    elif isinstance(obj, FeaturesBitArray):
+        return {attr: getattr(obj, attr) for attr, _ in spec_features_bit_array}
     else:
         return obj
 
 
 def unserialize(key, val):
     if key == "_tree_classifier":
-        # print("key:", key)
         n_features = val["n_features"]
         n_classes = val["n_classes"]
         random_state = val["random_state"]
@@ -476,14 +488,23 @@ def unserialize(key, val):
         tree.bin_partitions[:] = val["bin_partitions"]
         return tree
     elif key == "_tree_classifier_context":
-        X = val["X"]
+        dict_features_bitarray = val["features_bitarray"]
+        n_samples = dict_features_bitarray["n_samples"]
+        max_values = dict_features_bitarray["max_values"]
+        features_bitarray = FeaturesBitArray(n_samples, max_values)
+        features_bitarray.n_features = dict_features_bitarray["n_features"]
+        features_bitarray.n_bits[:] = dict_features_bitarray["n_bits"]
+        features_bitarray.offsets[:] = dict_features_bitarray["offsets"]
+        features_bitarray.n_values_in_words[:] = dict_features_bitarray[
+            "n_values_in_words"
+        ]
+        features_bitarray.bitarray[:] = dict_features_bitarray["bitarray"]
+        features_bitarray.bitmasks[:] = dict_features_bitarray["bitmasks"]
         y = val["y"]
         sample_weights = val["sample_weights"]
         train_indices = val["train_indices"]
         valid_indices = val["valid_indices"]
         n_classes = val["n_classes"]
-        max_bins = val["max_bins"]
-        # n_bins_per_feature = val["n_bins_per_feature"]
         max_features = val["max_features"]
         min_samples_split = val["min_samples_split"]
         min_samples_leaf = val["min_samples_leaf"]
@@ -494,14 +515,12 @@ def unserialize(key, val):
         cat_split_strategy = val["cat_split_strategy"]
         criterion = val["criterion"]
         tree_context = TreeClassifierContext(
-            X,
+            features_bitarray,
             y,
             sample_weights,
             train_indices,
             valid_indices,
             n_classes,
-            max_bins,
-            # n_bins_per_feature,
             max_features,
             min_samples_split,
             min_samples_leaf,
@@ -518,13 +537,22 @@ def unserialize(key, val):
         tree_context.right_buffer[:] = val["right_buffer"]
         return tree_context
     elif key == "_tree_regressor_context":
-        X = val["X"]
+        dict_features_bitarray = val["features_bitarray"]
+        n_samples = dict_features_bitarray["n_samples"]
+        max_values = dict_features_bitarray["max_values"]
+        features_bitarray = FeaturesBitArray(n_samples, max_values)
+        features_bitarray.n_features = dict_features_bitarray["n_features"]
+        features_bitarray.n_bits[:] = dict_features_bitarray["n_bits"]
+        features_bitarray.offsets[:] = dict_features_bitarray["offsets"]
+        features_bitarray.n_values_in_words[:] = dict_features_bitarray[
+            "n_values_in_words"
+        ]
+        features_bitarray.bitarray[:] = dict_features_bitarray["bitarray"]
+        features_bitarray.bitmasks[:] = dict_features_bitarray["bitmasks"]
         y = val["y"]
         sample_weights = val["sample_weights"]
         train_indices = val["train_indices"]
         valid_indices = val["valid_indices"]
-        max_bins = val["max_bins"]
-        # n_bins_per_feature = val["n_bins_per_feature"]
         max_features = val["max_features"]
         min_samples_split = val["min_samples_split"]
         min_samples_leaf = val["min_samples_leaf"]
@@ -533,13 +561,11 @@ def unserialize(key, val):
         is_categorical = val["is_categorical"]
         criterion = val["criterion"]
         tree_context = TreeRegressorContext(
-            X,
+            features_bitarray,
             y,
             sample_weights,
             train_indices,
             valid_indices,
-            max_bins,
-            # n_bins_per_feature,
             max_features,
             min_samples_split,
             min_samples_leaf,

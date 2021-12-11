@@ -1,3 +1,10 @@
+# Authors: Stephane Gaiffas <stephane.gaiffas@gmail.com>
+# License: BSD 3 clause
+
+"""
+This module performs unittests for the data loaders proposed in wildwood.
+"""
+
 import numpy as np
 import pandas as pd
 import pytest

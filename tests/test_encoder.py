@@ -2,15 +2,15 @@
 # License: BSD 3 clause
 
 """
-This module performs unittests for the dataset class
+This module performs unittests for the Encoder class
 """
 from math import floor, log, sqrt
 import pandas as pd
 import pytest
 import numpy as np
 
-from wildwood.preprocessing import Encoder, dataset_to_array
-from wildwood.preprocessing.encoder import _is_series_categorical, _get_array_dtypes
+from wildwood.preprocessing import Encoder, features_bitarray_to_array
+from wildwood.preprocessing.encoder import is_series_categorical, get_array_dtypes
 
 np.random.seed(42)
 
@@ -27,8 +27,8 @@ np.random.seed(42)
     ),
 )
 @pytest.mark.parametrize("is_categorical", (True, False, None))
-@pytest.mark.parametrize("max_modalities", (3,))
-def test_is_series_categorical(col, is_categorical, max_modalities):
+@pytest.mark.parametrize("cat_min_categories", (3,))
+def test_is_series_categorical(col, is_categorical, cat_min_categories):
     dtype = col.dtype
     if dtype.kind in "bOSU":
         if is_categorical is None:
@@ -67,7 +67,7 @@ def test_is_series_categorical(col, is_categorical, max_modalities):
     elif dtype.kind in "uif":
         if is_categorical is None:
             n_modalities = col.nunique()
-            if n_modalities <= max_modalities:
+            if n_modalities <= cat_min_categories:
                 output = "to_category"
                 raises = "warning"
                 msg = (
@@ -97,13 +97,19 @@ def test_is_series_categorical(col, is_categorical, max_modalities):
             f"WildWood."
         )
     if raises is None:
-        assert output == _is_series_categorical(col, is_categorical, max_modalities)
+        assert output == is_series_categorical(
+            col, is_categorical, cat_min_categories, verbose=True
+        )
     elif raises == "warning":
         with pytest.warns(UserWarning, match=msg):
-            assert output == _is_series_categorical(col, is_categorical, max_modalities)
+            assert output == is_series_categorical(
+                col, is_categorical, cat_min_categories, verbose=True
+            )
     elif raises == "error":
         with pytest.raises(ValueError) as exc_info:
-            assert output == _is_series_categorical(col, is_categorical, max_modalities)
+            assert output == is_series_categorical(
+                col, is_categorical, cat_min_categories, verbose=True
+            )
         assert exc_info.type is ValueError
         assert exc_info.value.args[0] == msg
     else:
@@ -111,7 +117,7 @@ def test_is_series_categorical(col, is_categorical, max_modalities):
 
 
 @pytest.mark.parametrize(
-    "X, is_categorical, max_modalities, out, error_type, msg",
+    "X, is_categorical, cat_min_categories, out, error_type, msg",
     [
         (
             np.array([[0.1, "a"], [0.2, "b"], [0.4, "c"]]),
@@ -167,17 +173,21 @@ def test_is_series_categorical(col, is_categorical, max_modalities):
         # ),
     ],
 )
-def test_get_array_dtypes(X, is_categorical, max_modalities, out, error_type, msg):
+def test_get_array_dtypes(X, is_categorical, cat_min_categories, out, error_type, msg):
     if error_type is None:
-        output = _get_array_dtypes(X, is_categorical, max_modalities)
+        output = get_array_dtypes(X, is_categorical, cat_min_categories, verbose=True)
         assert np.all(out == output)
     elif isinstance(error_type, ValueError):
         with pytest.raises(ValueError, match=msg):
-            output = _get_array_dtypes(X, is_categorical, max_modalities)
+            output = get_array_dtypes(
+                X, is_categorical, cat_min_categories, verbose=True
+            )
     elif isinstance(error_type, list):
         # In this case, it's the list of the warnings raised
         with pytest.warns(None) as records:
-            output = _get_array_dtypes(X, is_categorical, max_modalities)
+            output = get_array_dtypes(
+                X, is_categorical, cat_min_categories, verbose=True
+            )
 
         assert len(error_type) == len(records)
         for warning, warning_message in zip(records, msg):
@@ -195,8 +205,8 @@ def test_encoder_max_bins():
     assert encoder.max_bins == 42
     with pytest.raises(ValueError, match="max_bins must be an integer number"):
         encoder = Encoder(max_bins=3.14)
-    with pytest.raises(ValueError, match="max_bins must be >= 4"):
-        encoder.max_bins = 3
+    with pytest.raises(ValueError, match="max_bins must be >= 3"):
+        encoder.max_bins = 2
 
 
 def test_encoder_handle_unknown():
@@ -233,7 +243,7 @@ def test_encoder_subsample():
 
 @pytest.mark.filterwarnings("ignore:I will consider column")
 @pytest.mark.parametrize(
-    "max_modalities, msg, test_max_modalities_",
+    "cat_min_categories, msg, test_cat_min_categories_",
     [
         (None, None, False),
         ("log", None, True),
@@ -241,58 +251,58 @@ def test_encoder_subsample():
         (17, None, True),
         (
             1,
-            "max_modalities should be an int >= 3 or either 'log' or 'sqrt'; 1 was given",
+            "cat_min_categories should be an int > 3 or either 'log' or 'sqrt'; 1 was given",
             False,
         ),
         (
             "oops",
-            "max_modalities should be an int >= 3 or either 'log' or 'sqrt'; oops was given",
+            "cat_min_categories should be an int > 3 or either 'log' or 'sqrt'; oops was given",
             False,
         ),
     ],
 )
-def test_encoder_max_modalities(max_modalities, msg, test_max_modalities_):
-    if max_modalities is None:
+def test_encoder_cat_min_categories(cat_min_categories, msg, test_cat_min_categories_):
+    if cat_min_categories is None:
         encoder = Encoder()
-        assert encoder.max_modalities == "log"
+        assert encoder.cat_min_categories == "log"
     else:
         if msg is None:
-            encoder = Encoder(max_modalities=max_modalities)
-            assert encoder.max_modalities == max_modalities
-            assert encoder._max_modalities == max_modalities
+            encoder = Encoder(cat_min_categories=cat_min_categories)
+            assert encoder.cat_min_categories == cat_min_categories
+            assert encoder._cat_min_categories == cat_min_categories
             encoder = Encoder()
-            encoder.max_modalities = max_modalities
-            assert encoder.max_modalities == max_modalities
-            assert encoder._max_modalities == max_modalities
+            encoder.cat_min_categories = cat_min_categories
+            assert encoder.cat_min_categories == cat_min_categories
+            assert encoder._cat_min_categories == cat_min_categories
         else:
             with pytest.raises(ValueError, match=msg):
-                _ = Encoder(max_modalities=max_modalities)
+                _ = Encoder(cat_min_categories=cat_min_categories)
             encoder = Encoder()
             with pytest.raises(ValueError, match=msg):
-                encoder.max_modalities = max_modalities
+                encoder.cat_min_categories = cat_min_categories
 
-    if test_max_modalities_:
+    if test_cat_min_categories_:
         n_samples = 13
         df = pd.DataFrame({"col": np.random.randn(n_samples)})
-        encoder = Encoder(max_modalities=max_modalities)
+        encoder = Encoder(cat_min_categories=cat_min_categories)
         encoder.fit(df)
-        if max_modalities == "log":
-            assert encoder.max_modalities_ == floor(log(n_samples))
-        elif max_modalities == "sqrt":
-            assert encoder.max_modalities_ == floor(sqrt(n_samples))
-        elif isinstance(max_modalities, int):
-            assert encoder.max_modalities_ == max_modalities
+        if cat_min_categories == "log":
+            assert encoder.cat_min_categories_ == floor(log(n_samples))
+        elif cat_min_categories == "sqrt":
+            assert encoder.cat_min_categories_ == floor(sqrt(n_samples))
+        elif isinstance(cat_min_categories, int):
+            assert encoder.cat_min_categories_ == cat_min_categories
 
         n_samples = 2
         df = pd.DataFrame({"col": np.random.randn(n_samples)})
-        encoder = Encoder(max_modalities=max_modalities)
+        encoder = Encoder(cat_min_categories=cat_min_categories)
         encoder.fit(df)
-        if max_modalities == "log":
-            assert encoder.max_modalities_ == 2
-        elif max_modalities == "sqrt":
-            assert encoder.max_modalities_ == 2
-        elif isinstance(max_modalities, int):
-            assert encoder.max_modalities_ == max_modalities
+        if cat_min_categories == "log":
+            assert encoder.cat_min_categories_ == 2
+        elif cat_min_categories == "sqrt":
+            assert encoder.cat_min_categories_ == 2
+        elif isinstance(cat_min_categories, int):
+            assert encoder.cat_min_categories_ == cat_min_categories
 
 
 @pytest.mark.parametrize(
@@ -532,8 +542,7 @@ def get_example2_pandas():
 
 
 def get_example3_pandas():
-    """Same as first example but with default (256) bins
-    """
+    """Same as first example but with default (256) bins"""
     df = pd.DataFrame(
         {
             "A": [0, 1, 1, 1, 0, 0, 0, 0, 1],
@@ -624,8 +633,7 @@ def get_example3_pandas():
 
 
 def get_example4_pandas():
-    """The same with example 2 but with the default max_bins (256)
-    """
+    """The same with example 2 but with the default max_bins (256)"""
     df = pd.DataFrame(
         {
             "A": [None, "a", "b", None, "a", "a", "d", "c"],
@@ -699,8 +707,7 @@ def get_example5_pandas():
 
 
 def get_example1_ndarray():
-    """An example with a purely numerical ndarray
-    """
+    """An example with a purely numerical ndarray"""
     random_state = 42
     n_samples = 17
     n_features = 3
@@ -840,7 +847,7 @@ def test_encoder_fit_transform_dataframes(
     df_inverse_transform,
     warnings,
 ):
-    encoder = Encoder(max_bins=max_bins)
+    encoder = Encoder(max_bins=max_bins, verbose=True)
     if warnings is not None:
         with pytest.warns(UserWarning) as warn_records:
             encoder.fit(df)
@@ -870,7 +877,7 @@ def test_encoder_fit_transform_dataframes(
 
     # Check that dataset is correct
     dataset = encoder.transform(df)
-    X_binned_out = dataset_to_array(dataset)
+    X_binned_out = features_bitarray_to_array(dataset)
     np.testing.assert_array_equal(X_binned_out, X_binned)
 
     # Check that reconstructed dataframe is correct
@@ -885,8 +892,7 @@ def test_encoder_fit_transform_dataframes(
 
 
 def get_example2_ndarray():
-    """An example with a purely numerical ndarray and missing values
-    """
+    """An example with a purely numerical ndarray and missing values"""
     random_state = 42
     n_samples = 9
     n_features = 3
@@ -1083,8 +1089,7 @@ def get_example3_ndarray():
 
 
 def get_example4_ndarray():
-    """An example with object dtype and no missing values, with is_category = None.
-    """
+    """An example with object dtype and no missing values, with is_category = None."""
     X = np.array(
         [
             ["a", 0.1],
@@ -1133,8 +1138,7 @@ def get_example4_ndarray():
 
 
 def get_example5_ndarray():
-    """Same as 4 but with is_categorical
-    """
+    """Same as 4 but with is_categorical"""
     pass
 
 
@@ -1164,7 +1168,7 @@ def test_encoder_fit_transform_ndarray(
     df_inverse_transform,
     warnings,
 ):
-    encoder = Encoder(max_bins=max_bins, is_categorical=is_categorical)
+    encoder = Encoder(max_bins=max_bins, is_categorical=is_categorical, verbose=True)
     if warnings is not None:
         with pytest.warns(UserWarning) as warn_records:
             encoder.fit(X)
@@ -1199,7 +1203,7 @@ def test_encoder_fit_transform_ndarray(
 
     # Check that dataset is correct
     dataset = encoder.transform(X)
-    X_binned_out = dataset_to_array(dataset)
+    X_binned_out = features_bitarray_to_array(dataset)
     np.testing.assert_array_equal(X_binned_out, X_binned)
 
     # If we have categorical dtype with float values, exact comparison of dtype will
@@ -1484,7 +1488,7 @@ def test_encoder_deals_with_unknown_again():
             [0, 1, 2, 4, 1],
         ]
     )
-    X_binned_out = dataset_to_array(dataset)
+    X_binned_out = features_bitarray_to_array(dataset)
     np.testing.assert_array_equal(X_binned_out, X_binned)
 
     df_inverse_transform = pd.DataFrame()

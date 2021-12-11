@@ -1,9 +1,9 @@
 from time import time
 import numpy as np
 
-from wildwood.preprocessing.dataset import (
-    dataset_to_array,
-    array_to_dataset,
+from wildwood.preprocessing.features_bitarray import (
+    features_bitarray_to_array,
+    array_to_bitarray,
 )
 
 
@@ -36,7 +36,7 @@ def test_dataset():
 
     # dataset = Dataset(n_samples, max_values)
 
-    dataset = array_to_dataset(X_in, max_values=max_values)
+    dataset = array_to_bitarray(X_in, max_values=max_values)
 
     print("n_values_in_words:", dataset.n_values_in_words)
     print("n_bits:", dataset.n_bits)
@@ -47,7 +47,7 @@ def test_dataset():
 
     # dataset_fill_values(dataset, X)
 
-    X_out = dataset_to_array(dataset)
+    X_out = features_bitarray_to_array(dataset)
 
     # print(X_in - X_out)
     # print(X_in)

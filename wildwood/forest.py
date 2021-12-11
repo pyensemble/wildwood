@@ -23,8 +23,11 @@ from sklearn.utils.fixes import _joblib_parallel_args, delayed
 from sklearn.utils.multiclass import check_classification_targets
 from sklearn.utils.validation import check_is_fitted
 
-from ._binning import Binner
+# from ._binning import Binner
 from ._utils import split_strategy_mapping, criteria_mapping
+from .preprocessing._checks import get_is_categorical
+from .preprocessing import Encoder
+
 
 eps = np.finfo("float32").eps
 
@@ -72,7 +75,9 @@ def _generate_train_valid_samples(random_state, n_samples):
         return train_indices, valid_indices, train_indices_count
 
 
-def _parallel_build_trees(tree, X, y, sample_weight, random_state_bootstrap):
+def _parallel_build_trees(
+    tree, features_bitarray, y, sample_weight, random_state_bootstrap
+):
     """Private function used to fit a single tree in parallel.
 
     Parameters
@@ -80,10 +85,8 @@ def _parallel_build_trees(tree, X, y, sample_weight, random_state_bootstrap):
     tree : TreeClassifier or TreeRegressor
         The tree to fit
 
-    X : {array-like, sparse matrix} of shape (n_samples, n_features)
-        The training input samples. Internally, it will be binned into a uint8
-        dtype following LightGBM's histogram strategy. If a sparse matrix is
-        provided, it will be converted into a sparse ``csc_matrix``.
+    features_bitarray : FeaturesBitArray
+        The bitarray containing the binned features matrix X
 
     y : array-like of shape (n_samples,)
         The target values (class labels in classification, real numbers in
@@ -100,14 +103,9 @@ def _parallel_build_trees(tree, X, y, sample_weight, random_state_bootstrap):
     output : TreeClassifier or TreeRegressor
         The fitted tree
     """
-    # print("X:", X[:10])
-    # print("y:", y[:10])
-    # print("sample_weight:", sample_weight[:10])
-    # print("random_state_bootstrap:", random_state_bootstrap)
-    n_samples = X.shape[0]
+    n_samples = features_bitarray.n_samples
     # A copy is required, since we'll modify it inplace for the bootstrap
     sample_weight = sample_weight.copy()
-
     train_indices, valid_indices, train_indices_count = _generate_train_valid_samples(
         random_state_bootstrap, n_samples
     )
@@ -115,13 +113,12 @@ def _parallel_build_trees(tree, X, y, sample_weight, random_state_bootstrap):
     # weights by the sample counts. By construction, no repetition is possible in
     # validation data
     sample_weight[train_indices] *= train_indices_count
-
     # Fit the tree
-    tree.fit(X, y, train_indices, valid_indices, sample_weight)
+    tree.fit(features_bitarray, y, train_indices, valid_indices, sample_weight)
     return tree
 
 
-def _accumulate_prediction(predict, X, out, lock, label_class_col=None):
+def _accumulate_prediction(predict, features_bitarray, out, lock, label_class_col=None):
     """This is a utility function for joblib's Parallel. It can't go locally in
     ForestClassifier or ForestRegressor, because joblib complains that it cannot
     pickle it when placed there.
@@ -131,9 +128,8 @@ def _accumulate_prediction(predict, X, out, lock, label_class_col=None):
     predict : function
         The prediction function, such as tree.predict_proba
 
-    X : ndarray
-        The matrix of features of shape (n_samples, n_features) for which we predict
-        the labels
+    features_bitarray : FeaturesBitArray
+        The bitarray containing the binned features matrix X
 
     out : ndarray
         An array of shape (n_samples, n_classes) in which we store the probabilities
@@ -144,7 +140,7 @@ def _accumulate_prediction(predict, X, out, lock, label_class_col=None):
         In this case, this is the column index corresponding to the class for which
         we add the predictions.
     """
-    prediction = predict(X)
+    prediction = predict(features_bitarray)
     with lock:
         if label_class_col is None:
             out += prediction
@@ -170,6 +166,10 @@ def _parallel_tree_apply(apply, X, out, lock, idx_tree):
         out[idx_tree] = leaves
 
 
+# TODO: allow the user to encoder the features matrix before passing it to fit and
+#  transform
+
+
 class ForestBase(BaseEstimator):
     """
     TODO: BLABLA
@@ -186,9 +186,12 @@ class ForestBase(BaseEstimator):
         max_depth=None,
         min_samples_split=2,
         min_samples_leaf=1,
-        max_bins=255,
+        max_bins=256,
         categorical_features=None,
         max_features="auto",
+        subsample=int(2e5),
+        cat_min_categories="log",
+        handle_unknown="error",
         n_jobs=1,
         random_state=None,
         verbose=False,
@@ -201,6 +204,7 @@ class ForestBase(BaseEstimator):
         self.n_jobs_ = None
         self._random_states = None
         self.trees = None
+        self._encoder = None
 
         # Set the parameters. This calls the properties defined below
         self.n_estimators = n_estimators
@@ -215,6 +219,9 @@ class ForestBase(BaseEstimator):
         self.categorical_features = categorical_features
         self.is_categorical_ = None
         self.max_features = max_features
+        self.subsample = subsample
+        self.cat_min_categories = cat_min_categories
+        self.handle_unknown = handle_unknown
         self.n_jobs = n_jobs
         self.random_state = random_state
         self.verbose = verbose
@@ -251,6 +258,7 @@ class ForestBase(BaseEstimator):
 
         Parameters
         ----------
+        # TODO: rewrite this
         X : {array-like, sparse matrix} of shape (n_samples, n_features)
             The training input samples. Internally, it will be binned into a ``uint8``
             data type.
@@ -273,28 +281,15 @@ class ForestBase(BaseEstimator):
             If **None** : no feature will be considered categorical.
             If **boolean array-like** : boolean mask indicating categorical features.
             If **integer array-like** : integer indices indicating categorical features.
-            For each categorical feature, there must be at most ``max_bins`` unique
-            categories, and each categorical value must be in [0, max_bins -1].
 
         Returns
         -------
         self : object
             The fitted forest.
         """
-
         if categorical_features is not None:
             self.categorical_features = categorical_features
 
-        # TODO: Why only float64 ? What if the data is already binned ?
-        X, y = self._validate_data(
-            X,
-            y,
-            dtype=[np.float64],
-            force_all_finite=False,
-            order="F"
-            # TODO: (with cat features) if np.float32 in previous line, would raise
-            #   ValueError: Buffer dtype mismatch, expected 'const X_DTYPE_C' but got 'float'
-        )
         check_consistent_length(X, y)
 
         # In all cases we have a sample_weight_ vector: it contains only ones if
@@ -353,43 +348,29 @@ class ForestBase(BaseEstimator):
 
         self._generate_random_states()
 
-        # Everywhere in the code, the convention is that n_bins == max_bins + 1,
-        # since max_bins is the maximum number of bins, without the eventual bin for
-        # missing values (+ 1 is for the missing values bin)
-        n_bins = self.max_bins + 1  # + 1 for missing values
+        is_categorical = get_is_categorical(categorical_features, n_features)
 
-        # TODO: Deal more intelligently with this. Do not bin if the data is already
-        #  binned by test for dtype=='uint8' for instance
-        # If is is an array with dtypd uint8 then the data is already binned
-        # Otherwise we need to bin the features indicated by the either a boolean or
-        # integer array
-
-        is_categorical, self._known_categories = self._check_categories(X)
-
-        self._bin_mapper = Binner(
-            n_bins=n_bins,
+        encoder = Encoder(
+            max_bins=self.max_bins,
+            subsample=self.subsample,
             is_categorical=is_categorical,
-            known_categories=self._known_categories,
+            cat_min_categories=self.cat_min_categories,
+            handle_unknown=self.handle_unknown,
         )
-        if is_categorical is None:
-            self.is_categorical_ = np.zeros(X.shape[1], dtype=np.bool_)
-        else:
-            self.is_categorical_ = np.asarray(is_categorical, dtype=np.bool_)
-        X_binned = self._bin_data(X, is_training_data=True)
 
-        # TODO: Deal with missing data
-        # Uses binned data to check for missing values
-        has_missing_values = (
-            (X_binned == self._bin_mapper.missing_values_bin_idx_)
-            .any(axis=0)
-            .astype(np.uint8)
-        )
+        encoder.fit(X)
+        is_categorical_ = encoder.is_categorical_
+        # TODO: would be nice to keep the columns names
+        self.is_categorical_ = is_categorical_
+
+        features_bitarray = encoder.transform(X)
+        self._encoder = encoder
 
         if is_classifier:
             # We are training a classifier
             trees = [
                 TreeClassifier(
-                    n_bins=n_bins,
+                    # max_bins=self.max_bins,
                     n_classes=n_classes_per_tree,
                     criterion=criteria_mapping[self.criterion],
                     loss=self.loss,
@@ -400,7 +381,8 @@ class ForestBase(BaseEstimator):
                     min_samples_split=self.min_samples_split,
                     min_samples_leaf=self.min_samples_leaf,
                     categorical_features=self.categorical_features,
-                    is_categorical=self.is_categorical_,
+                    # is_categorical=self.is_categorical_,
+                    is_categorical=is_categorical_,
                     max_features=max_features_,
                     random_state=random_state,
                     cat_split_strategy=split_strategy_mapping[self.cat_split_strategy],
@@ -414,7 +396,7 @@ class ForestBase(BaseEstimator):
             # We are training a regressor
             trees = [
                 TreeRegressor(
-                    n_bins=n_bins,
+                    # max_bins=max_bins,
                     criterion=criteria_mapping[self.criterion],
                     loss=self.loss,
                     step=self.step,
@@ -423,7 +405,8 @@ class ForestBase(BaseEstimator):
                     min_samples_split=self.min_samples_split,
                     min_samples_leaf=self.min_samples_leaf,
                     categorical_features=self.categorical_features,
-                    is_categorical=self.is_categorical_,
+                    # is_categorical=self.is_categorical_,
+                    is_categorical=is_categorical_,
                     max_features=max_features_,
                     random_state=random_state,
                     verbose=self.verbose,
@@ -437,11 +420,12 @@ class ForestBase(BaseEstimator):
         ovr = is_classifier and self.multiclass == "ovr"
         if self.verbose:
             trees = Parallel(
-                n_jobs=self.n_jobs, **_joblib_parallel_args(prefer="threads"),
+                n_jobs=self.n_jobs,
+                **_joblib_parallel_args(prefer="threads"),
             )(
                 delayed(_parallel_build_trees)(
                     tree,
-                    X_binned,
+                    features_bitarray,
                     y if not ovr else y[tree_idx // n_estimators],
                     sample_weight_
                     if not ovr
@@ -452,11 +436,12 @@ class ForestBase(BaseEstimator):
             )
         else:
             trees = Parallel(
-                n_jobs=self.n_jobs, **_joblib_parallel_args(prefer="threads"),
+                n_jobs=self.n_jobs,
+                **_joblib_parallel_args(prefer="threads"),
             )(
                 delayed(_parallel_build_trees)(
                     tree,
-                    X_binned,
+                    features_bitarray,
                     y if not ovr else y[tree_idx // n_estimators],
                     sample_weight_
                     if not ovr
@@ -487,15 +472,15 @@ class ForestBase(BaseEstimator):
             index of the leaf x ends up in.
         """
         # TODO: verifier apply
-        X_binned, n_jobs, lock = self._predict_helper(X)
-        n_samples = X_binned.shape[0]
+        features_bitarray, n_jobs, lock = self._predict_helper(X)
+        n_samples = features_bitarray.n_samples
         out = np.empty((len(self.trees), n_samples), dtype=np.uintp)
         Parallel(
             n_jobs=self.n_jobs,
             verbose=self.verbose,
             **_joblib_parallel_args(prefer="threads"),
         )(
-            delayed(_parallel_tree_apply)(tree.apply, X_binned, out, lock, idx_tree)
+            delayed(_parallel_tree_apply)(tree.apply, features_bitarray, out, lock, idx_tree)
             for idx_tree, tree in enumerate(self.trees)
         )
 
@@ -523,132 +508,130 @@ class ForestBase(BaseEstimator):
             self._check_n_features(X, reset=False)
         return X
 
-    def _check_categories(self, X):
-        """Check and validate categorical features in X
+    # @staticmethod
+    # def _check_categories(self, X):
+    #     """Check and validate categorical features in X
+    #
+    #     Return
+    #     ------
+    #     is_categorical : ndarray of shape (n_features,) or None, dtype=bool
+    #         Indicates whether a feature is categorical. If no feature is
+    #         categorical, this is None.
+    #     known_categories : list of size n_features or None
+    #         The list contains, for each feature:
+    #             - an array of shape (n_categories,) with the unique cat values
+    #             - None if the feature is not categorical
+    #         None if no feature is categorical.
+    #     """
+    #     if self.categorical_features is None:
+    #         return None, None
+    #
+    #     categorical_features = np.asarray(self.categorical_features)
+    #
+    #     if categorical_features.size == 0:
+    #         return None, None
+    #
+    #     if categorical_features.dtype.kind not in ("i", "b"):
+    #         raise ValueError(
+    #             "categorical_features must be an array-like of "
+    #             "bools or array-like of ints."
+    #         )
+    #
+    #     n_features = X.shape[1]
+    #
+    #     # check for categorical features as indices
+    #     if categorical_features.dtype.kind == "i":
+    #         if (
+    #             np.max(categorical_features) >= n_features
+    #             or np.min(categorical_features) < 0
+    #         ):
+    #             raise ValueError(
+    #                 "categorical_features set as integer "
+    #                 "indices must be in [0, n_features - 1]"
+    #             )
+    #         is_categorical = np.zeros(n_features, dtype=bool)
+    #         is_categorical[categorical_features] = True
+    #     else:
+    #         if categorical_features.shape[0] != n_features:
+    #             raise ValueError(
+    #                 "categorical_features set as a boolean mask "
+    #                 "must have shape (n_features,), got: "
+    #                 f"{categorical_features.shape}"
+    #             )
+    #         is_categorical = categorical_features
+    #
+    #     if not np.any(is_categorical):
+    #         return None, None
+    #
+    #     # compute the known categories in the training data. We need to do
+    #     # that here instead of in the BinMapper because in case of early
+    #     # stopping, the mapper only gets a fraction of the training data.
+    #     known_categories = []
+    #
+    #     for f_idx in range(n_features):
+    #         if is_categorical[f_idx]:
+    #             categories = np.unique(X[:, f_idx])
+    #             missing = np.isnan(categories)
+    #             if missing.any():
+    #                 categories = categories[~missing]
+    #
+    #             if categories.size > self.max_bins:
+    #                 raise ValueError(
+    #                     f"Categorical feature at index {f_idx} is "
+    #                     f"expected to have a "
+    #                     f"cardinality <= {self.max_bins}"
+    #                 )
+    #
+    #             if (categories >= self.max_bins).any():
+    #                 raise ValueError(
+    #                     f"Categorical feature at index {f_idx} is "
+    #                     f"expected to be encoded with "
+    #                     f"values < {self.max_bins}"
+    #                 )
+    #         else:
+    #             categories = None
+    #         known_categories.append(categories)
+    #
+    #     return is_categorical, known_categories
 
-        Return
-        ------
-        is_categorical : ndarray of shape (n_features,) or None, dtype=bool
-            Indicates whether a feature is categorical. If no feature is
-            categorical, this is None.
-        known_categories : list of size n_features or None
-            The list contains, for each feature:
-                - an array of shape (n_categories,) with the unique cat values
-                - None if the feature is not categorical
-            None if no feature is categorical.
-        """
-        if self.categorical_features is None:
-            return None, None
-
-        categorical_features = np.asarray(self.categorical_features)
-
-        if categorical_features.size == 0:
-            return None, None
-
-        if categorical_features.dtype.kind not in ("i", "b"):
-            raise ValueError(
-                "categorical_features must be an array-like of "
-                "bools or array-like of ints."
-            )
-
-        n_features = X.shape[1]
-
-        # check for categorical features as indices
-        if categorical_features.dtype.kind == "i":
-            if (
-                np.max(categorical_features) >= n_features
-                or np.min(categorical_features) < 0
-            ):
-                raise ValueError(
-                    "categorical_features set as integer "
-                    "indices must be in [0, n_features - 1]"
-                )
-            is_categorical = np.zeros(n_features, dtype=bool)
-            is_categorical[categorical_features] = True
-        else:
-            if categorical_features.shape[0] != n_features:
-                raise ValueError(
-                    "categorical_features set as a boolean mask "
-                    "must have shape (n_features,), got: "
-                    f"{categorical_features.shape}"
-                )
-            is_categorical = categorical_features
-
-        if not np.any(is_categorical):
-            return None, None
-
-        # compute the known categories in the training data. We need to do
-        # that here instead of in the BinMapper because in case of early
-        # stopping, the mapper only gets a fraction of the training data.
-        known_categories = []
-
-        for f_idx in range(n_features):
-            if is_categorical[f_idx]:
-                categories = np.unique(X[:, f_idx])
-                missing = np.isnan(categories)
-                if missing.any():
-                    categories = categories[~missing]
-
-                if categories.size > self.max_bins:
-                    raise ValueError(
-                        f"Categorical feature at index {f_idx} is "
-                        f"expected to have a "
-                        f"cardinality <= {self.max_bins}"
-                    )
-
-                if (categories >= self.max_bins).any():
-                    raise ValueError(
-                        f"Categorical feature at index {f_idx} is "
-                        f"expected to be encoded with "
-                        f"values < {self.max_bins}"
-                    )
-            else:
-                categories = None
-            known_categories.append(categories)
-
-        return is_categorical, known_categories
-
-    def _bin_data(self, X, is_training_data):
-        """Bin data X.
-
-        If is_training_data, then fit the _bin_mapper attribute.
-        Else, the binned data is converted to a C-contiguous array.
-        """
-
-        description = "training" if is_training_data else "validation"
-        if self.verbose:
-            print(
-                "Binning {:.3f} GB of {} data: ".format(X.nbytes / 1e9, description),
-                end="",
-                flush=True,
-            )
-        # tic = time()
-        if is_training_data:
-            X_binned = self._bin_mapper.fit_transform(X)  # F-aligned array
-        else:
-            X_binned = self._bin_mapper.transform(X)  # F-aligned array
-            # We convert the array to C-contiguous since predicting is faster
-            # with this layout (training is faster on F-arrays though)
-            X_binned = np.ascontiguousarray(X_binned)
-        # toc = time()
-        # if self.verbose:
-        #     duration = toc - tic
-        #     print("{:.3f} s".format(duration))
-
-        return X_binned
+    # def _bin_data(self, X, is_training_data):
+    #     """Bin data X.
+    #
+    #     If is_training_data, then fit the _bin_mapper attribute.
+    #     Else, the binned data is converted to a C-contiguous array.
+    #     """
+    #
+    #     description = "training" if is_training_data else "validation"
+    #     if self.verbose:
+    #         print(
+    #             "Binning {:.3f} GB of {} data: ".format(X.nbytes / 1e9, description),
+    #             end="",
+    #             flush=True,
+    #         )
+    #     # tic = time()
+    #     if is_training_data:
+    #         X_binned = self._bin_mapper.fit_transform(X)  # F-aligned array
+    #     else:
+    #         X_binned = self._bin_mapper.transform(X)  # F-aligned array
+    #         # We convert the array to C-contiguous since predicting is faster
+    #         # with this layout (training is faster on F-arrays though)
+    #         X_binned = np.ascontiguousarray(X_binned)
+    #     # toc = time()
+    #     # if self.verbose:
+    #     #     duration = toc - tic
+    #     #     print("{:.3f} s".format(duration))
+    #
+    #     return X_binned
 
     def _predict_helper(self, X):
-        """A method used in all predict functions to avoid code duplication
-        """
+        """A method used in all predict functions to avoid code duplication"""
         # Is the forest fitted ?
         check_is_fitted(self)
-        # Check data
-        X = self._validate_X_predict(X, check_input=False)
-        # TODO: we can also avoid data binning for predictions...
-        X_binned = self._bin_data(X, is_training_data=False)
+        # TODO: we can avoid data binning for predictions
+        features_bitarray = self._encoder.transform(X)
         n_jobs, _, _ = _partition_estimators(len(self.trees), self.n_jobs)
         lock = threading.Lock()
-        return X_binned, n_jobs, lock
+        return features_bitarray, n_jobs, lock
 
     def get_nodes(self, tree_idx):
         return self.trees[tree_idx].get_nodes()
@@ -760,8 +743,8 @@ class ForestBase(BaseEstimator):
         if not isinstance(val, int):
             raise ValueError("max_bins must be an integer number")
         else:
-            if (val < 2) or (val > 256):
-                raise ValueError("max_bins must be between 2 and 256")
+            if val < 3:
+                raise ValueError("max_bins must be >= 3")
             else:
                 self._max_bins = val
 
@@ -820,16 +803,6 @@ class ForestBase(BaseEstimator):
                 "max_features can be either None, an integer "
                 "value or 'sqrt', 'log2' or 'auto'"
             )
-
-    @max_bins.setter
-    def max_bins(self, val):
-        if not isinstance(val, int):
-            raise ValueError("max_bins must be an integer number")
-        else:
-            if not 2 <= val <= 255:
-                raise ValueError("max_bins must be between 2 and 256")
-            else:
-                self._max_bins = val
 
     @property
     def n_jobs(self):
@@ -970,13 +943,16 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         training samples and out-the-bag samples in the left and right childs.
         This must be >= 1.
 
-    max_bins : int, default=255
-        The maximum number of bins to use for non-missing values. Before
-        training, each feature of the input array ``X``  is binned into
-        integer-valued bins, which leads to faster training. Features with a small
-        number of unique values may use less than ``max_bins`` bins. In addition to
-        the ``max_bins`` bins, one more bin is always reserved for missing values.
-        Must be no larger than 255.
+    max_bins : int, default=256
+        The maximum number of bins for numerical columns, not including the bin used
+        for missing values, if any. Should be at least 4. Before training, each column
+        of the input array ``X``  is binned into integer-valued bins,
+        corresponding to inter-quantile intervals, enabling faster split finding.
+        We will use ``max_bins`` bins when the column has no missing values, and
+        ``max_bins + 1`` bins if it does.
+        The last bin (at index ``max_bins``) is used to encode missing values.
+        If a column has less than ``max_bins`` different inter-quantile or
+        categories, we use less than ``max_bins`` bins for it.
 
     categorical_features : array-like, default=None
         Array-like containing boolean or integer values or shape (n_features,) or
@@ -984,8 +960,6 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         If **None** : no feature will be considered categorical.
         If **boolean array-like** : boolean mask indicating categorical features.
         If **integer array-like** : integer indices indicating categorical features.
-        For each categorical feature, there must be at most ``max_bins`` unique
-        categories, and each categorical value must be in [0, max_bins -1].
 
     max_features : {"auto", "sqrt", "log2"} or int, default="auto"
         The number of features to consider when looking for the best split.
@@ -994,6 +968,27 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         If **"sqrt"**, ``max_features=sqrt(n_features)`` (same as "auto").
         If **"log2"**, ``max_features=log2(n_features)``
         If **None**, ``max_features=n_features``.
+
+    handle_unknown : {"error", "consider_missing"}, default="error"
+        If set to "error", an error will be raised while encoding the data whenever a
+        category in a categorical column was not seen during fit. If set to
+        "consider_missing", we will consider it as a missing value (it will end up in
+        the same bin as missing values).
+
+    cat_min_categories : int or {"log", "sqrt"}, default="log"
+        When a column contains numerical values and its type is not specified through
+        ``categorical_columns``, WildWood decides that it is categorical whenever its
+        number of unique values is smaller or equal to ``cat_min_categories``.
+        Otherwise, it is considered numerical.
+        If an int larger than 3 is given, we use it as ``cat_min_categories``.
+        If "log", we set ``cat_min_categories=max(2, floor(log(n_samples)))``.
+        If "sqrt", we set ``cat_min_categories=max(2, floor(sqrt(n_samples)))``.
+        Default is "log".
+
+    subsample : int or None, default=200000
+        If ``n_samples > subsample``, then ``subsample`` samples are chosen at random
+        to compute the quantiles used to bin numerical columns. If ``None``, the whole
+        dataset is used.
 
     n_jobs : int, default=1
         The number of jobs to run in parallel for :meth:`fit`, :meth:`predict`,
@@ -1069,9 +1064,12 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         max_depth: Union[None, int] = None,
         min_samples_split: int = 2,
         min_samples_leaf: int = 1,
-        max_bins: int = 255,
+        max_bins: int = 256,
         categorical_features=None,
         max_features: Union[None, str, int] = "auto",
+        handle_unknown="error",
+        cat_min_categories="log",
+        subsample=int(2e5),
         n_jobs: int = 1,
         random_state=None,
         verbose: bool = False,
@@ -1091,6 +1089,9 @@ class ForestClassifier(ForestBase, ClassifierMixin):
             max_bins=max_bins,
             categorical_features=categorical_features,
             max_features=max_features,
+            subsample=subsample,
+            cat_min_categories=cat_min_categories,
+            handle_unknown=handle_unknown,
             n_jobs=n_jobs,
             random_state=random_state,
             verbose=verbose,
@@ -1214,8 +1215,8 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         output : ndarray of shape (n_samples, n_classes)
            The class probabilities of the input samples.
         """
-        X_binned, n_jobs, lock = self._predict_helper(X)
-        all_proba = np.zeros((X_binned.shape[0], self.n_classes_))
+        features_bitarray, n_jobs, lock = self._predict_helper(X)
+        all_proba = np.zeros((features_bitarray.n_samples, self.n_classes_))
         n_estimators = self.n_estimators
 
         ovr = self.multiclass == "ovr"
@@ -1227,7 +1228,7 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         )(
             delayed(_accumulate_prediction)(
                 tree.predict_proba,
-                X_binned,
+                features_bitarray,
                 all_proba,
                 lock,
                 label_class_col=tree_idx // n_estimators if ovr else None,
@@ -1431,8 +1432,9 @@ class ForestRegressor(ForestBase, RegressorMixin):
     full tree. The required computations are performed efficiently thanks to a
     variant of the context tree weighting algorithm.
 
-    Also, both continuous and categorical features are binned with a maximum of
-    ``max_bins`` bins, allowing to use an efficient histogram-based split search.
+    Also, continuous features are binned with a maximum of ``max_bins`` bins (+1 if
+    it contains missing values) allowing to use an efficient histogram-based split
+    search.
 
     Parameters
     ----------
@@ -1470,13 +1472,16 @@ class ForestRegressor(ForestBase, RegressorMixin):
         training samples and out-the-bag samples in the left and right childs.
         This must be >= 1.
 
-    max_bins : int, default=255
-        The maximum number of bins to use for non-missing values. Before
-        training, each feature of the input array ``X``  is binned into
-        integer-valued bins, which leads to faster training. Features with a small
-        number of unique values may use less than ``max_bins`` bins. In addition to
-        the ``max_bins`` bins, one more bin is always reserved for missing values.
-        Must be no larger than 255.
+    max_bins : int, default=256
+        The maximum number of bins for numerical columns, not including the bin used
+        for missing values, if any. Should be at least 3. Before training, each column
+        of the input array ``X``  is binned into integer-valued bins,
+        corresponding to inter-quantile intervals, enabling faster split finding.
+        We will use ``max_bins`` bins when the column has no missing values, and
+        ``max_bins + 1`` bins if it does.
+        The last bin (at index ``max_bins``) is used to encode missing values.
+        If a column has less than ``max_bins`` different inter-quantile or
+        categories, we use less than ``max_bins`` bins for it.
 
     categorical_features : array-like, default=None
         Array-like containing boolean or integer values or shape (n_features,) or
@@ -1484,8 +1489,6 @@ class ForestRegressor(ForestBase, RegressorMixin):
         If **None** : no feature will be considered categorical.
         If **boolean array-like** : boolean mask indicating categorical features.
         If **integer array-like** : integer indices indicating categorical features.
-        For each categorical feature, there must be at most ``max_bins`` unique
-        categories, and each categorical value must be in [0, max_bins -1].
 
     max_features : {"auto", "sqrt", "log2"} or int, default="auto"
         The number of features to consider when looking for the best split.
@@ -1494,6 +1497,27 @@ class ForestRegressor(ForestBase, RegressorMixin):
         If **"sqrt"**, ``max_features=sqrt(n_features)`` (same as "auto").
         If **"log2"**, ``max_features=log2(n_features)``
         If **None**, ``max_features=n_features``.
+
+    handle_unknown : {"error", "consider_missing"}, default="error"
+        If set to "error", an error will be raised while encoding the data whenever a
+        category in a categorical column was not seen during fit. If set to
+        "consider_missing", we will consider it as a missing value (it will end up in
+        the same bin as missing values).
+
+    cat_min_categories : int or {"log", "sqrt"}, default="log"
+        When a column contains numerical values and its type is not specified through
+        ``categorical_columns``, WildWood decides that it is categorical whenever its
+        number of unique values is smaller or equal to ``cat_min_categories``.
+        Otherwise, it is considered numerical.
+        If an int larger than 3 is given, we use it as ``cat_min_categories``.
+        If "log", we set ``cat_min_categories=max(2, floor(log(n_samples)))``.
+        If "sqrt", we set ``cat_min_categories=max(2, floor(sqrt(n_samples)))``.
+        Default is "log".
+
+    subsample : int or None, default=200000
+        If ``n_samples > subsample``, then ``subsample`` samples are chosen at random
+        to compute the quantiles used to bin numerical columns. If ``None``, the whole
+        dataset is used.
 
     n_jobs : int, default=1
         The number of jobs to run in parallel for :meth:`fit`, :meth:`predict` and
@@ -1534,9 +1558,12 @@ class ForestRegressor(ForestBase, RegressorMixin):
         max_depth: Union[None, int] = None,
         min_samples_split: int = 2,
         min_samples_leaf: int = 1,
-        max_bins: int = 255,
+        max_bins: int = 256,
         categorical_features=None,
         max_features: Union[str, int] = "auto",
+        handle_unknown="error",
+        cat_min_categories="log",
+        subsample=int(2e5),
         n_jobs: int = 1,
         random_state=None,
         verbose: bool = False,
@@ -1553,6 +1580,9 @@ class ForestRegressor(ForestBase, RegressorMixin):
             max_bins=max_bins,
             categorical_features=categorical_features,
             max_features=max_features,
+            subsample=subsample,
+            cat_min_categories=cat_min_categories,
+            handle_unknown=handle_unknown,
             n_jobs=n_jobs,
             random_state=random_state,
             verbose=verbose,
@@ -1575,15 +1605,14 @@ class ForestRegressor(ForestBase, RegressorMixin):
         y : ndarray of shape (n_samples,)
             The predicted values.
         """
-        X_binned, n_jobs, lock = self._predict_helper(X)
-        all_preds = np.zeros(X_binned.shape[0])
-
+        features_bitarray, n_jobs, lock = self._predict_helper(X)
+        all_preds = np.zeros(features_bitarray.n_samples)
         Parallel(
             n_jobs=n_jobs,
             verbose=self.verbose,
             **_joblib_parallel_args(require="sharedmem"),
         )(
-            delayed(_accumulate_prediction)(tree.predict, X_binned, all_preds, lock)
+            delayed(_accumulate_prediction)(tree.predict, features_bitarray, all_preds, lock)
             for tree in self.trees
         )
         all_preds /= len(self.trees)

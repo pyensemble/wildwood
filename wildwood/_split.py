@@ -7,13 +7,14 @@ a node.
 """
 
 import numpy as np
-from numba import jit, boolean, uint8, uintp, float32, void, uint, intp
+from numba import jit, boolean, uint8, uint64, uintp, float32, void, intp
 from numba.types import Tuple
 from numba.experimental import jitclass
 
 from ._node import NodeClassifierContextType, NodeRegressorContextType
 from ._tree_context import TreeClassifierContextType, TreeRegressorContextType
 from ._impurity import gini_childs, entropy_childs, mse_childs, information_gain_proxy
+from .preprocessing.features_bitarray import get_value_from_column
 from ._utils import (
     NOPYTHON,
     NOGIL,
@@ -31,10 +32,10 @@ from ._utils import (
 
 split_type = [
     # The ordered bins in the feature used by the split (in bins[:bins_count))
-    ("bins", uint8[::1]),
+    ("bins", uint64[::1]),
     #
     # The number of (non-empty) bins in the feature used by the split
-    ("bins_count", uint8),
+    ("bins_count", uint64),
     #
     # True if we found a split, False otherwise
     ("found_split", boolean),
@@ -49,17 +50,17 @@ split_type = [
     ("feature", uintp),
     #
     # Index of the bin threshold used to split the node
-    ("bin_threshold", uint8),
+    ("bin_threshold", uint64),
     #
     # Whenever the split is on a categorical features, array such that the bins in
     #  bin_partition[:bin_partition_size] go to the left child while the others
     #  go to the right child
-    ("bin_partition", uint8[::1]),
+    ("bin_partition", uint64[::1]),
     #
     # Whenever the split is on a categorical features, integer such that the bins in
     #  bin_partition[:bin_partition_size] go to the left child while the others
     #  go to the right child
-    ("bin_partition_size", uint8),
+    ("bin_partition_size", uint64),
     #
     # Number of training samples in the left child node
     ("n_samples_train_left", uintp),
@@ -130,6 +131,8 @@ class SplitClassifier(object):
     n_classes : int
         Number of label classes
 
+    max_n_bins : int
+
     Attributes
     ----------
     bins : ndarray
@@ -154,6 +157,7 @@ class SplitClassifier(object):
         Index of the bin threshold used to split the node
 
     bin_partition : ndarray
+        # TODO: not true anymore...
         Array of shape (128,) with uint8 dtype.
         Whenever the split is on a categorical features, ndarray such that the bins in
         bin_partition[:bin_partition_size] go to the left child while the others
@@ -191,8 +195,8 @@ class SplitClassifier(object):
         of training samples for each label class in the right child node
     """
 
-    def __init__(self, n_classes):
-        init_split(self)
+    def __init__(self, n_classes, max_n_bins):
+        init_split(self, max_n_bins)
         self.y_sum_left = np.empty(n_classes, dtype=np.float32)
         self.y_sum_right = np.empty(n_classes, dtype=np.float32)
 
@@ -266,8 +270,10 @@ class SplitRegressor(object):
         Weighted sum of squared training labels in the riht child node
     """
 
-    def __init__(self):
-        init_split(self)
+    def __init__(self, max_n_bins):
+        init_split(self, max_n_bins)
+        # TODO: don't we need to reset these things for regression in find_best_*
+        #  function ?
         self.y_sum_left = 0.0
         self.y_sum_right = 0.0
         self.y_sq_sum_left = 0.0
@@ -285,26 +291,22 @@ SplitRegressorType = get_type(SplitRegressor)
     boundscheck=BOUNDSCHECK,
     fastmath=FASTMATH,
 )
-def init_split(split):
-    """A common initializer for SplitClassifier and SplitRegressor.
-    Since numba's jitclass support for class inheritance is inexistant, we use this
-    function both in the constructors of SplitClassifier and SplitRegressor.
-
+def reset_split(split):
+    """
     Parameters
     ----------
     split : SplitClassifier or SplitRegressor
         The split to be initialized by this function
     """
-    # bins is at most of size 256
-    split.bins = np.empty(256, dtype=np.uint8)
+    # bins is at most of size max_n_bins
+    split.bins[:] = 0
     split.bins_count = 0
     split.found_split = False
     split.is_split_categorical = False
     split.gain_proxy = -np.inf
     split.feature = 0
     split.bin_threshold = 0
-    # bin_partition is at most of size 256
-    split.bin_partition = np.empty(256, dtype=np.uint8)
+    split.bin_partition[:] = 0
     split.bin_partition_size = 0
     split.n_samples_train_left = 0
     split.w_samples_train_left = 0.0
@@ -319,8 +321,30 @@ def init_split(split):
 
 
 @jit(
+    [void(SplitClassifierType, uint64), void(SplitRegressorType, uint64)],
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
+)
+def init_split(split, max_n_bins):
+    """A common initializer for SplitClassifier and SplitRegressor.
+    Since numba's jitclass support for class inheritance is inexistant, we use this
+    function both in the constructors of SplitClassifier and SplitRegressor.
+
+    Parameters
+    ----------
+    split : SplitClassifier or SplitRegressor
+        The split to be initialized by this function
+    """
+    split.bins = np.empty(max_n_bins, dtype=np.uint64)
+    split.bin_partition = np.empty(max_n_bins, dtype=np.uint64)
+    reset_split(split)
+
+
+@jit(
     Tuple((float32, float32))(
-        uint8, float32, float32, float32, float32[::1], float32[::1]
+        uint64, float32, float32, float32, float32[::1], float32[::1]
     ),
     nopython=NOPYTHON,
     nogil=NOGIL,
@@ -356,7 +380,7 @@ def apply_childs_impurity_function_clf(
 
 @jit(
     Tuple((float32, float32))(
-        uint8, float32, float32, float32, float32, float32, float32
+        uint64, float32, float32, float32, float32, float32, float32
     ),
     nopython=NOPYTHON,
     nogil=NOGIL,
@@ -391,7 +415,7 @@ def apply_childs_impurity_function_reg(
         uintp,
         uintp,
         SplitClassifierType,
-        uint8[::1],
+        uint64[::1],
         uintp[::1],
     ),
     nopython=NOPYTHON,
@@ -407,7 +431,7 @@ def apply_childs_impurity_function_reg(
         "n_samples_train_in_bins": uintp[::1],
         "w_samples_train_in_bins": float32[::1],
         "n_samples_valid_in_bins": uintp[::1],
-        "non_empty_bins_train_count": uint8,
+        "non_empty_bins_train_count": uint64,
         "y_sum_in_bins": float32[:, :],
         "n_samples_train_left": uintp,
         "w_samples_train_left": float32,
@@ -418,7 +442,7 @@ def apply_childs_impurity_function_reg(
         "y_sum_left": float32[::1],
         "y_sum_right": float32[::1],
         "is_feature_categorical": boolean,
-        "bin_threshold": uint8,
+        "bin_threshold": uint64,
         "gain_proxy": float32,
         "impurity_left": float32,
         "impurity_right": float32,
@@ -518,6 +542,7 @@ def try_feature_order_for_classifier_split(
         #  different impurities
         criterion = tree_context.criterion
         # Get the impurities of the left and right childs
+
         impurity_left, impurity_right = apply_childs_impurity_function_clf(
             criterion,
             n_classes,
@@ -526,6 +551,7 @@ def try_feature_order_for_classifier_split(
             y_sum_left,
             y_sum_right,
         )
+
         # And compute the information gain proxy
         gain_proxy = information_gain_proxy(
             impurity_left, impurity_right, w_samples_train_left, w_samples_train_right
@@ -552,6 +578,9 @@ def try_feature_order_for_classifier_split(
             best_split.bins[:non_empty_bins_train_count] = ordered_bins_train
 
 
+# TODO: remove all computations with valid data when removing aggregation.
+
+
 @jit(
     void(
         TreeClassifierContextType,
@@ -568,21 +597,21 @@ def try_feature_order_for_classifier_split(
         "n_classes": uintp,
         "n_samples_train_in_bins": uintp[::1],
         "n_samples_valid_in_bins": uintp[::1],
-        "non_empty_bins_train_count": uint8,
-        "non_empty_bins_valid_count": uint8,
-        "non_empty_bins_train": uint8[::1],
-        "non_empty_bins_valid": uint8[::1],
+        "non_empty_bins_train_count": uint64,
+        "non_empty_bins_valid_count": uint64,
+        "non_empty_bins_train": uint64[::1],
+        "non_empty_bins_valid": uint64[::1],
         "y_sum_in_bins": float32[:, :],
         "is_feature_categorical": boolean,
-        "bins_train": uint8[::1],
-        "bins_valid": uint8[::1],
+        "bins_train": uint64[::1],
+        "bins_valid": uint64[::1],
         "cumsum_samples_valid_left": uintp[::1],
         "y_sum_positives": float32[:, :],
         # TODO: add "idx_sort"
         "idx_valid": uintp,
-        "bin_test": uint8,
+        "bin_test": uint64,
         "cum_valid_left": uintp,
-        "bin_train": uint8,
+        "bin_train": uint64,
         "cat_split_strategy": uint8,
     },
 )
@@ -615,6 +644,7 @@ def find_best_split_classifier_along_feature(
         The best_split found so far
     """
     n_classes = tree_context.n_classes
+    aggregation = tree_context.aggregation
     # Number of training samples in each bin for the feature
     n_samples_train_in_bins = node_context.n_samples_train_in_bins[f]
     # Number of validation samples in each bin for the feature
@@ -632,6 +662,7 @@ def find_best_split_classifier_along_feature(
     non_empty_bins_valid = node_context.non_empty_bins_valid[
         f, :non_empty_bins_valid_count
     ]
+
     # TODO(*): get only non-zero bins for y_sum_in_bins as well ?
     # Get the sum (counts) for each (bin, label) of the feature
     y_sum_in_bins = node_context.y_sum[f]
@@ -639,14 +670,15 @@ def find_best_split_classifier_along_feature(
     is_feature_categorical = tree_context.is_categorical[feature]
 
     # TODO: We don't need to instantiate it here
-    bins_train = np.empty(non_empty_bins_train_count, dtype=np.uint8)
-    bins_valid = np.empty(non_empty_bins_valid_count, dtype=np.uint8)
+    bins_train = np.empty(non_empty_bins_train_count, dtype=np.uint64)
+    bins_valid = np.empty(non_empty_bins_valid_count, dtype=np.uint64)
 
     cumsum_samples_valid_left = np.zeros(n_samples_train_in_bins.size, dtype=np.uintp)
 
     cat_split_strategy = tree_context.cat_split_strategy
 
     if is_feature_categorical:
+        # is_feature_categorical")
         # TODO: Something faster ? Use a placeholder for y_sum_positives in split ?
         # Sort bins according to the proportions of labels equal to 1 in
         # each bin. This leads to the best split partitioning for regression and binary
@@ -696,6 +728,7 @@ def find_best_split_classifier_along_feature(
         # When the feature is continuous, we simply sort the bins in ascending order
         bins_train[:] = np.sort(non_empty_bins_train)
         bins_valid[:] = np.sort(non_empty_bins_valid)
+
         # We need to compute carefully the number of valid samples along the
         # bins_train array (since bins_train and bins_valid might not share the same
         # support). Let us give an example : let's say that max_bins=10 and that
@@ -707,16 +740,18 @@ def find_best_split_classifier_along_feature(
         # For any bin_train in bins_train, we want cum_samples_valid_left[bin_train] to
         # contain the number of valid samples on the left of bin_train (including it).
         idx_valid = 0
-        bin_test = bins_valid[idx_valid]
-        cum_valid_left = 0
-        for bin_train in bins_train:
-            while bin_test <= bin_train and idx_valid < bins_valid.size:
-                cum_valid_left += n_samples_valid_in_bins[bin_test]
-                idx_valid += 1
-                if idx_valid == bins_valid.size:
-                    break
-                bin_test = bins_valid[idx_valid]
-            cumsum_samples_valid_left[bin_train] = cum_valid_left
+
+        if aggregation:
+            bin_test = bins_valid[idx_valid]
+            cum_valid_left = 0
+            for bin_train in bins_train:
+                while bin_test <= bin_train and idx_valid < bins_valid.size:
+                    cum_valid_left += n_samples_valid_in_bins[bin_test]
+                    idx_valid += 1
+                    if idx_valid == bins_valid.size:
+                        break
+                    bin_test = bins_valid[idx_valid]
+                cumsum_samples_valid_left[bin_train] = cum_valid_left
 
         try_feature_order_for_classifier_split(
             tree_context,
@@ -749,10 +784,10 @@ def find_best_split_classifier_along_feature(
         "n_samples_train_in_bins": uintp[::1],
         "w_samples_train_in_bins": float32[::1],
         "n_samples_valid_in_bins": uintp[::1],
-        "non_empty_bins_train_count": uint8,
-        "non_empty_bins_valid_count": uint8,
-        "non_empty_bins_train": uint8[::1],
-        "non_empty_bins_valid": uint8[::1],
+        "non_empty_bins_train_count": uint64,
+        "non_empty_bins_valid_count": uint64,
+        "non_empty_bins_train": uint64[::1],
+        "non_empty_bins_valid": uint64[::1],
         "y_sum_in_bins": float32[::1],
         "n_samples_train_left": uintp,
         "w_samples_train_left": float32,
@@ -765,16 +800,16 @@ def find_best_split_classifier_along_feature(
         "y_sq_sum_left": float32,
         "y_sq_sum_right": float32,
         "is_feature_categorical": boolean,
-        "bins_train": uint8[::1],
-        "bins_valid": uint8[::1],
+        "bins_train": uint64[::1],
+        "bins_valid": uint64[::1],
         "cumsum_samples_valid_left": uintp[::1],
         "y_sum_positives": float32[::1],
         # TODO: add "idx_sort"
         "idx_valid": uintp,
-        "bin_test": uint8,
+        "bin_test": uint64,
         "cum_valid_left": uintp,
-        "bin_train": uint8,
-        "bin_threshold": uint8,
+        "bin_train": uint64,
+        "bin_threshold": uint64,
         "gain_proxy": float32,
         "impurity_left": float32,
         "impurity_right": float32,
@@ -844,8 +879,8 @@ def find_best_split_regressor_along_feature(
     is_feature_categorical = tree_context.is_categorical[feature]
 
     # TODO: We don't need to instantiate it here
-    bins_train = np.empty(non_empty_bins_train_count, dtype=np.uint8)
-    bins_valid = np.empty(non_empty_bins_valid_count, dtype=np.uint8)
+    bins_train = np.empty(non_empty_bins_train_count, dtype=np.uint64)
+    bins_valid = np.empty(non_empty_bins_valid_count, dtype=np.uint64)
 
     cumsum_samples_valid_left = np.zeros(n_samples_train_in_bins.size, dtype=np.uintp)
 
@@ -856,16 +891,18 @@ def find_best_split_regressor_along_feature(
         bins_train[:] = np.sort(non_empty_bins_train)
         bins_valid[:] = np.sort(non_empty_bins_valid)
         idx_valid = 0
-        bin_test = bins_valid[idx_valid]
-        cum_valid_left = 0
-        for bin_train in bins_train:
-            while bin_test <= bin_train and idx_valid < bins_valid.size:
-                cum_valid_left += n_samples_valid_in_bins[bin_test]
-                idx_valid += 1
-                if idx_valid == bins_valid.size:
-                    break
-                bin_test = bins_valid[idx_valid]
-            cumsum_samples_valid_left[bin_train] = cum_valid_left
+
+        if aggregation:
+            bin_test = bins_valid[idx_valid]
+            cum_valid_left = 0
+            for bin_train in bins_train:
+                while bin_test <= bin_train and idx_valid < bins_valid.size:
+                    cum_valid_left += n_samples_valid_in_bins[bin_test]
+                    idx_valid += 1
+                    if idx_valid == bins_valid.size:
+                        break
+                    bin_test = bins_valid[idx_valid]
+                cumsum_samples_valid_left[bin_train] = cum_valid_left
 
     for bin_threshold in bins_train[:-1]:
         n_samples_train_left += n_samples_train_in_bins[bin_threshold]
@@ -982,7 +1019,8 @@ def find_node_split(
     # Get the set of features to try out
     features = node_context.features_sampled
     # Loop over the possible features
-    init_split(best_split)
+
+    reset_split(best_split)
     for f, feature in enumerate(features):
         if node_context.non_empty_bins_train_count[f] > 1:
             # If there is only a single bin value for this feature, it makes no sense
@@ -1003,12 +1041,12 @@ def find_node_split(
     boundscheck=BOUNDSCHECK,
     fastmath=FASTMATH,
     locals={
-        "bin_threshold": uint8,
-        "bins": uint8[::1],
-        "bin_partition": uint8[::1],
-        "idx_bin": uint8,
-        "bin": uint8,
-        "left_partition_size": uint8,
+        "bin_threshold": uint64,
+        "bins": uint64[::1],
+        "bin_partition": uint64[::1],
+        "idx_bin": uint64,
+        "bin": uint64,
+        "left_partition_size": uint64,
     },
 )
 def compute_bin_partition(best_split):
@@ -1036,12 +1074,13 @@ def compute_bin_partition(best_split):
         left_partition_size += 1
         bin_ = bins[idx_bin]
 
+    # TODO: we can use count sort here: small number of bins ?
     bin_partition[:left_partition_size] = np.sort(bins[:left_partition_size])
     best_split.bin_partition_size = left_partition_size
 
 
 @jit(
-    boolean(uint8, uint8[::1]),
+    boolean(uint64, uint64[::1]),
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
@@ -1057,7 +1096,7 @@ def is_bin_in_partition(bin_, bin_partition):
         The bin
 
     bin_partition : ndarray
-        array of shape (bin_partition_size,) and uint8 dtype corresponding to the bins
+        array of shape (bin_partition_size,) and uint64 dtype corresponding to the bins
         that go to the left child
 
     Returns
@@ -1098,13 +1137,12 @@ def is_bin_in_partition(bin_, bin_partition):
     fastmath=FASTMATH,
     locals={
         "feature": uintp,
-        "bin_threshold": uint8,
-        "Xf": uint8[:],
+        "bin_threshold": uint64,
         "left_buffer": uintp[::1],
         "right_buffer": uintp[::1],
         "partition_train": uintp[::1],
         "partition_valid": uintp[::1],
-        "bin_partition": uint8[::1],
+        "bin_partition": uint64[::1],
         "xif_in_partition": boolean,
         "n_samples_train_left": uintp,
         "n_samples_train_right": uintp,
@@ -1173,7 +1211,16 @@ def split_indices(tree_context, split, start_train, end_train, start_valid, end_
     bin_threshold = split.bin_threshold
     bin_partition = split.bin_partition[: split.bin_partition_size]
 
-    Xf = tree_context.X.T[feature]
+    # Xf = tree_context.X.T[feature]
+    # Get information from the FeaturesBitArray to recover values from the column at
+    # index feature
+    features_bitarray = tree_context.features_bitarray
+    n_values_in_word = features_bitarray.n_values_in_words[feature]
+    n_bits = features_bitarray.n_bits[feature]
+    bitmask = features_bitarray.bitmasks[feature]
+    offsets = features_bitarray.offsets
+    bitarray = features_bitarray.bitarray[offsets[feature] : offsets[feature + 1]]
+
     left_buffer = tree_context.left_buffer
     right_buffer = tree_context.right_buffer
     # The current training sample indices in the node
@@ -1185,7 +1232,8 @@ def split_indices(tree_context, split, start_train, end_train, start_valid, end_
     n_samples_train_right = 0
     if split.is_split_categorical:
         for i in partition_train[start_train:end_train]:
-            if is_bin_in_partition(Xf[i], bin_partition):
+            bin = get_value_from_column(i, bitarray, bitmask, n_values_in_word, n_bits)
+            if is_bin_in_partition(bin, bin_partition):
                 left_buffer[n_samples_train_left] = i
                 n_samples_train_left += 1
             else:
@@ -1193,7 +1241,8 @@ def split_indices(tree_context, split, start_train, end_train, start_valid, end_
                 n_samples_train_right += 1
     else:
         for i in partition_train[start_train:end_train]:
-            if Xf[i] <= bin_threshold:
+            bin = get_value_from_column(i, bitarray, bitmask, n_values_in_word, n_bits)
+            if bin <= bin_threshold:
                 left_buffer[n_samples_train_left] = i
                 n_samples_train_left += 1
             else:
@@ -1210,7 +1259,8 @@ def split_indices(tree_context, split, start_train, end_train, start_valid, end_
     n_samples_valid_right = 0
     if split.is_split_categorical:
         for i in partition_valid[start_valid:end_valid]:
-            if is_bin_in_partition(Xf[i], bin_partition):
+            bin = get_value_from_column(i, bitarray, bitmask, n_values_in_word, n_bits)
+            if is_bin_in_partition(bin, bin_partition):
                 left_buffer[n_samples_valid_left] = i
                 n_samples_valid_left += 1
             else:
@@ -1218,7 +1268,8 @@ def split_indices(tree_context, split, start_train, end_train, start_valid, end_
                 n_samples_valid_right += 1
     else:
         for i in partition_valid[start_valid:end_valid]:
-            if Xf[i] <= bin_threshold:
+            bin = get_value_from_column(i, bitarray, bitmask, n_values_in_word, n_bits)
+            if bin <= bin_threshold:
                 left_buffer[n_samples_valid_left] = i
                 n_samples_valid_left += 1
             else:

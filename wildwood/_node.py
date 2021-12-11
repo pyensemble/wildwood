@@ -8,7 +8,7 @@ node numpy dtypes and several functions operating locally in nodes.
 
 from math import log
 import numpy as np
-from numba import from_dtype, jit, boolean, uint8, intp, uintp, float32, void
+from numba import from_dtype, jit, boolean, uint64, intp, uintp, float32, void
 from numba.experimental import jitclass
 
 from ._utils import (
@@ -20,6 +20,7 @@ from ._utils import (
     sample_without_replacement,
 )
 from ._tree_context import TreeClassifierContextType, TreeRegressorContextType
+from .preprocessing.features_bitarray import FeaturesBitArrayType, get_value_from_column
 
 
 # This data type describes all the information saved about a node. It is used in
@@ -55,7 +56,7 @@ node_dtype = np.dtype(
         ("threshold", np.float32),
         #
         # Index of the bin threshold used for splitting the node
-        ("bin_threshold", np.uint8),
+        ("bin_threshold", np.uint64),
         #
         # Impurity of the node. Used to avoid to split a "pure" node (with impurity=0).
         #   Note that impurity is computed using training samples only.
@@ -121,6 +122,9 @@ node_type = from_dtype(node_dtype)
 
 # A node_context contains all the data required to find the best split of the node
 node_context_type = [
+    # The maximum number of bins among all features.
+    ("max_n_bins", uint64),
+    #
     # This array contains the index of all the features. This will be modified
     # inplace when sampling features to be considered for splits
     ("features_pool", uintp[::1]),
@@ -176,16 +180,16 @@ node_context_type = [
     ("w_samples_valid_in_bins", float32[:, ::1]),
     #
     # A vector that counts the number of non-empty bins for each feature on train data.
-    ("non_empty_bins_train_count", uint8[::1]),
+    ("non_empty_bins_train_count", uint64[::1]),
     #
     # A vector that counts the number of non-empty bins for each feature on valid data.
-    ("non_empty_bins_valid_count", uint8[::1]),
+    ("non_empty_bins_valid_count", uint64[::1]),
     #
     # An array that saves the indices of non-empty bins for each feature on train data.
-    ("non_empty_bins_train", uint8[:, ::1]),
+    ("non_empty_bins_train", uint64[:, ::1]),
     #
     # An array that saves the indices of non-empty bins for each feature on valid data.
-    ("non_empty_bins_valid", uint8[:, ::1]),
+    ("non_empty_bins_valid", uint64[:, ::1]),
 ]
 
 
@@ -312,9 +316,10 @@ class NodeClassifierContext:
     def __init__(self, tree_context):
         init_node_context(tree_context, self)
         max_features = tree_context.max_features
-        max_bins = tree_context.max_bins
         n_classes = tree_context.n_classes
-        self.y_sum = np.empty((max_features, max_bins, n_classes), dtype=np.float32)
+        self.y_sum = np.empty(
+            (max_features, self.max_n_bins, n_classes), dtype=np.float32
+        )
         self.y_pred = np.empty(n_classes, dtype=np.float32)
 
 
@@ -419,9 +424,8 @@ class NodeRegressorContext:
     def __init__(self, tree_context):
         init_node_context(tree_context, self)
         max_features = tree_context.max_features
-        max_bins = tree_context.max_bins
-        self.y_sum = np.empty((max_features, max_bins), dtype=np.float32)
-        self.y_sq_sum = np.empty((max_features, max_bins), dtype=np.float32)
+        self.y_sum = np.empty((max_features, self.max_n_bins), dtype=np.float32)
+        self.y_sq_sum = np.empty((max_features, self.max_n_bins), dtype=np.float32)
         self.y_pred = 0.0
 
 
@@ -452,9 +456,10 @@ def init_node_context(tree_context, node_context):
     node_context : NodeClassifierContext or NodeRegressorContext
         The node context that we be partly initialized by this function
     """
-    max_features = tree_context.max_features
-    max_bins = tree_context.max_bins
     n_features = tree_context.n_features
+    max_features = tree_context.max_features
+    max_n_bins = tree_context.max_n_bins
+    node_context.max_n_bins = max_n_bins
     # If max_features is the same as n_features, we don't need to sample features
     node_context.sample_features = max_features != n_features
     # This array contains the index of all the features. This will be modified
@@ -464,21 +469,29 @@ def init_node_context(tree_context, node_context):
     # replacement) to be considered for splits
     node_context.features_sampled = np.arange(0, max_features, dtype=np.uintp)
     node_context.n_samples_train_in_bins = np.empty(
-        (max_features, max_bins), dtype=np.uintp
+        (max_features, max_n_bins), dtype=np.uintp
     )
     node_context.w_samples_train_in_bins = np.empty(
-        (max_features, max_bins), dtype=np.float32
+        (max_features, max_n_bins), dtype=np.float32
     )
     node_context.n_samples_valid_in_bins = np.empty(
-        (max_features, max_bins), dtype=np.uintp
+        (max_features, max_n_bins), dtype=np.uintp
     )
     node_context.w_samples_valid_in_bins = np.empty(
-        (max_features, max_bins), dtype=np.float32
+        (max_features, max_n_bins), dtype=np.float32
     )
-    node_context.non_empty_bins_train = np.empty((max_features, max_bins), dtype=uint8)
-    node_context.non_empty_bins_train_count = np.empty((max_features,), dtype=uint8)
-    node_context.non_empty_bins_valid = np.empty((max_features, max_bins), dtype=uint8)
-    node_context.non_empty_bins_valid_count = np.empty((max_features,), dtype=uint8)
+    node_context.non_empty_bins_train = np.empty(
+        (max_features, max_n_bins), dtype=np.uint64
+    )
+    node_context.non_empty_bins_train_count = np.empty((max_features,), dtype=np.uint64)
+    node_context.non_empty_bins_valid = np.empty(
+        (max_features, max_n_bins), dtype=np.uint64
+    )
+    node_context.non_empty_bins_valid_count = np.empty((max_features,), dtype=np.uint64)
+
+
+# TODO: code also a reset_node_context_classifier and reset_node_context_regression
+#  to avoid code duplication below
 
 
 @jit(
@@ -494,14 +507,14 @@ def init_node_context(tree_context, node_context):
         "n_samples_valid_in_bins": uintp[:, ::1],
         "w_samples_train_in_bins": float32[:, ::1],
         "w_samples_valid_in_bins": float32[:, ::1],
-        "non_empty_bins_train": uint8[:, ::1],
-        "non_empty_bins_valid": uint8[:, ::1],
-        "non_empty_bins_train_count": uint8[::1],
-        "non_empty_bins_valid_count": uint8[::1],
+        "non_empty_bins_train": uint64[:, ::1],
+        "non_empty_bins_valid": uint64[:, ::1],
+        "non_empty_bins_train_count": uint64[::1],
+        "non_empty_bins_valid_count": uint64[::1],
         "y_sum": float32[:, :, ::1],
         "y_pred": float32[::1],
         "features": uintp[::1],
-        "X": uint8[:, :],
+        "features_bitarray": FeaturesBitArrayType,
         "y": float32[::1],
         "sample_weights": float32[::1],
         "partition_train": uintp[::1],
@@ -515,9 +528,9 @@ def init_node_context(tree_context, node_context):
         "w_samples_valid": float32,
         "f": uintp,
         "loss_valid": float32,
-        "feature": uintp,
-        "sample": uintp,
-        "bin": uint8,
+        "j": uintp,
+        "i": uintp,
+        "bin": uint64,
         "label": uintp,
         "sample_weight": float32,
         "k": uintp,
@@ -583,7 +596,13 @@ def compute_node_classifier_context(
     y_pred.fill(0.0)
 
     # Get information from the tree context
-    X = tree_context.X
+    features_bitarray = tree_context.features_bitarray
+    n_values_in_words = features_bitarray.n_values_in_words
+    offsets = features_bitarray.offsets
+    bitarray = features_bitarray.bitarray
+    n_bits = features_bitarray.n_bits
+    bitmasks = features_bitarray.bitmasks
+
     y = tree_context.y
     sample_weights = tree_context.sample_weights
     partition_train = tree_context.partition_train
@@ -606,13 +625,19 @@ def compute_node_classifier_context(
     loss_valid = 0.0
 
     # TODO: unrolling the for loop could be faster
-    # For-loop on features first and then samples (X is F-major)
-    for feature in features:
-        # Compute statistics about training samples
-        for sample in train_indices:
-            bin = X[sample, feature]
-            label = uintp(y[sample])
-            sample_weight = sample_weights[sample]
+    # For-loop on features first and then samples (the bitarray is F-major)
+    for j in features:
+        n_values_in_word = n_values_in_words[j]
+        bitarray_feature = bitarray[offsets[j] : offsets[j + 1]]
+        n_bits_feature = n_bits[j]
+        bitmask = bitmasks[j]
+        for i in train_indices:
+            # This gives bin = X[i, j]
+            bin = get_value_from_column(
+                i, bitarray_feature, bitmask, n_values_in_word, n_bits_feature
+            )
+            label = uintp(y[i])
+            sample_weight = sample_weights[i]
             if f == 0:
                 w_samples_train += sample_weight
                 y_pred[label] += sample_weight
@@ -643,12 +668,14 @@ def compute_node_classifier_context(
 
         # Compute sample counts about validation samples
         if aggregation:
-            for sample in valid_indices:
-                bin = X[sample, feature]
-                sample_weight = sample_weights[sample]
+            for i in valid_indices:
+                bin = get_value_from_column(
+                    i, bitarray_feature, bitmask, n_values_in_word, n_bits_feature
+                )
+                sample_weight = sample_weights[i]
                 if f == 0:
                     w_samples_valid += sample_weight
-                    label = uintp(y[sample])
+                    label = uintp(y[i])
                     # TODO: aggregation loss is hard-coded here. Call a function instead
                     #  when implementing other losses
                     loss_valid -= sample_weight * log(y_pred[label])
@@ -686,15 +713,14 @@ def compute_node_classifier_context(
         "n_samples_valid_in_bins": uintp[:, ::1],
         "w_samples_train_in_bins": float32[:, ::1],
         "w_samples_valid_in_bins": float32[:, ::1],
-        "non_empty_bins_train": uint8[:, ::1],
-        "non_empty_bins_valid": uint8[:, ::1],
-        "non_empty_bins_train_count": uint8[::1],
-        "non_empty_bins_valid_count": uint8[::1],
+        "non_empty_bins_train": uint64[:, ::1],
+        "non_empty_bins_valid": uint64[:, ::1],
+        "non_empty_bins_train_count": uint64[::1],
+        "non_empty_bins_valid_count": uint64[::1],
         "y_sum": float32[:, ::1],
         "y_sq_sum": float32[:, ::1],
         "y_pred": float32,
         "features": uintp[::1],
-        "X": uint8[:, :],
         "y": float32[::1],
         "sample_weights": float32[::1],
         "partition_train": uintp[::1],
@@ -708,7 +734,7 @@ def compute_node_classifier_context(
         "loss_valid": float32,
         "feature": uintp,
         "sample": uintp,
-        "bin": uint8,
+        "bin": uint64,
         "label": float32,
         "sample_weight": float32,
         "k": uintp,
@@ -777,7 +803,13 @@ def compute_node_regressor_context(
     y_pred = 0.0
 
     # Get information from the tree context
-    X = tree_context.X
+    features_bitarray = tree_context.features_bitarray
+    n_values_in_words = features_bitarray.n_values_in_words
+    offsets = features_bitarray.offsets
+    bitarray = features_bitarray.bitarray
+    n_bits = features_bitarray.n_bits
+    bitmasks = features_bitarray.bitmasks
+
     y = tree_context.y
     sample_weights = tree_context.sample_weights
     partition_train = tree_context.partition_train
@@ -799,12 +831,18 @@ def compute_node_regressor_context(
 
     # TODO: unrolling the for loop could be faster
     # For-loop on features first and then samples (X is F-major)
-    for feature in features:
+    for j in features:
         # Compute statistics about training samples
-        for sample in train_indices:
-            bin = X[sample, feature]
-            label = y[sample]
-            sample_weight = sample_weights[sample]
+        n_values_in_word = n_values_in_words[j]
+        bitarray_feature = bitarray[offsets[j] : offsets[j + 1]]
+        n_bits_feature = n_bits[j]
+        bitmask = bitmasks[j]
+        for i in train_indices:
+            bin = get_value_from_column(
+                i, bitarray_feature, bitmask, n_values_in_word, n_bits_feature
+            )
+            label = y[i]
+            sample_weight = sample_weights[i]
             w_y = sample_weight * label
             if f == 0:
                 w_samples_train += sample_weight
@@ -831,12 +869,14 @@ def compute_node_regressor_context(
 
         # Compute sample counts about validation samples
         if aggregation:
-            for sample in valid_indices:
-                bin = X[sample, feature]
-                sample_weight = sample_weights[sample]
+            for i in valid_indices:
+                bin = get_value_from_column(
+                    i, bitarray_feature, bitmask, n_values_in_word, n_bits_feature
+                )
+                sample_weight = sample_weights[i]
                 if f == 0:
                     w_samples_valid += sample_weight
-                    label = y[sample]
+                    label = y[i]
                     # TODO: aggregation loss is hard-coded here. Call a function instead
                     #  when implementing other losses
                     loss_valid += sample_weight * (label - y_pred) * (label - y_pred)

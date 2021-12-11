@@ -3,10 +3,13 @@ import numpy as np
 from numpy.random import randint
 from numba import jit, void, float32, uintp
 
+# Global @jit flags used throughout the code (wth some exceptions)
 NOPYTHON = True
 NOGIL = True
 BOUNDSCHECK = False
 FASTMATH = False
+INLINE = "always"
+CACHE = True
 
 SPLIT_STRATEGY_BINARY = 0
 SPLIT_STRATEGY_ALL = 1

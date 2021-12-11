@@ -1,12 +1,13 @@
 # Authors: Stephane Gaiffas <stephane.gaiffas@gmail.com>
 # License: BSD 3 clause
 
-# py.test -rA
+"""
+This module contains unittests for the Forest classes, including statistical
+performance tests.
+"""
 
 import types
 from itertools import product
-from time import time
-
 import numpy as np
 import pytest
 
@@ -17,7 +18,6 @@ from sklearn.preprocessing import LabelBinarizer
 
 from joblib import effective_n_jobs
 from time import time
-import logging
 
 
 def approx(v, abs=1e-15):
@@ -32,10 +32,6 @@ from wildwood import ForestClassifier, ForestRegressor
 from wildwood.datasets import load_car, load_adult
 
 
-# logging.basicConfig(
-#     level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-# )
-
 # TODO: parameter_test_with_type does nothing !!!
 
 
@@ -46,10 +42,6 @@ class TestForestClassifier(object):
         self.breast_cancer = load_breast_cancer()
         self.effective_n_jobs = effective_n_jobs()
         self.adult = load_adult()
-        # logging.info(
-        #     "%d jobs can be effectively be run in parallel on this machine"
-        #     % self.effective_n_jobs
-        # )
 
     def test_min_samples_split(self):
         clf = ForestClassifier()
@@ -462,8 +454,8 @@ class TestForestClassifier(object):
             clf.class_weight = 1
 
     def test_n_classes_classes_n_features_n_samples(self):
-        y = ["one", "two", "three", "one", "one", "two"]
-        X = [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6]]
+        y = np.array(["one", "two", "three", "one", "one", "two"])
+        X = np.array([[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6]])
         clf = ForestClassifier()
         clf.fit(X, y)
 
@@ -605,8 +597,9 @@ class TestForestClassifier(object):
         clf.fit(X_train, y_train)
         y_score = clf.predict_proba(X_test)
         assert roc_auc_score(y_test, y_score[:, 1]) >= 0.98
-        clf = ForestClassifier(class_weight="balanced", random_state=42,
-                               criterion="entropy")
+        clf = ForestClassifier(
+            class_weight="balanced", random_state=42, criterion="entropy"
+        )
         clf.fit(X_train, y_train)
         y_score = clf.predict_proba(X_test)
         assert roc_auc_score(y_test, y_score[:, 1]) >= 0.98
@@ -982,56 +975,6 @@ class TestForestClassifier(object):
         y_score1 = clf1.predict_proba(X_test)
         y_score2 = clf2.predict_proba(X_test)
         assert y_score1 == pytest.approx(y_score2, abs=1e-5)
-
-        # inspired from
-        # https://scikit-learn.org/stable/auto_examples/ensemble/plot_gradient_boosting_categorical.html#sphx-glr-auto-examples-ensemble-plot-gradient-boosting-categorical-py
-        #  Ames Housing datasets¶
-
-        # from sklearn.datasets import fetch_openml
-        # from sklearn.pipeline import make_pipeline
-        # from sklearn.compose import make_column_transformer, make_column_selector
-        # from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder
-        #
-        # X, y = fetch_openml(data_id=41211, as_frame=True, return_X_y=True)
-        # X_train = X[:100]
-        # y_train = y[:100]
-        # X_test = X[100:120]
-        # y_test = y[100:120]
-        #
-        # # 1 - drop categorical features
-        # dropper = make_column_transformer(
-        #     ('drop', make_column_selector(dtype_include='category')),
-        #     remainder='passthrough')
-        # X_train_drop = dropper.fit_transform(X_train, y_train)
-        # X_test_drop = dropper.fit_transform(X_test, y_test)
-        # clf_dropped = ForestRegressor(random_state=42)
-        # clf_dropped.fit(X_train_drop, y_train)
-        # y_pred_drop = clf_dropped.predict(X_test_drop)
-        #
-        # # 2 - one-hot encoding on categorical features
-        # one_hot_encoder = make_column_transformer(
-        #     (OneHotEncoder(sparse=False, handle_unknown='ignore'),
-        #      make_column_selector(dtype_include='category')),
-        #     remainder='passthrough')
-        #
-        # hist_one_hot = make_pipeline(one_hot_encoder,
-        #                              ForestClassifier(random_state=42))
-        # # 3 - ordinal encoder
-        # ordinal_encoder = make_column_transformer(
-        #     (OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=np.nan),
-        #      make_column_selector(dtype_include='category')),
-        #     remainder='passthrough')
-        #
-        # hist_ordinal = make_pipeline(ordinal_encoder,
-        #                              ForestClassifier(random_state=42))
-        #
-        # # 4 - use categorical support of Forest Classifier
-        # categorical_features = np.where(X.dtypes == 'category')[0]
-        # hist_native = make_pipeline(
-        #     ordinal_encoder,
-        #     ForestClassifier(random_state=42,
-        #                      categorical_features=categorical_features)
-        # )
 
     # TODO: faire un test pour compute_split_partition en s'inspirant de ce qui est
     #  en dessous
