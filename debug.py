@@ -1,82 +1,68 @@
-# @pytest.mark.parametrize("n_estimators", [2])
-# @pytest.mark.parametrize("aggregation", (True,))
-# @pytest.mark.parametrize("class_weight", (None, "balanced"))
-# @pytest.mark.parametrize("dirichlet", (1e-7,))
-# @pytest.mark.parametrize("n_jobs", (-1,))
-# @pytest.mark.parametrize("max_features", ("auto",))
-# @pytest.mark.parametrize("random_state", (42,))
-# @pytest.mark.parametrize("step", (1.0,))
-# @pytest.mark.parametrize("multiclass", ("multinomial", "ovr"))
-# @pytest.mark.parametrize("cat_split_strategy", ("binary",))
-# @pytest.mark.parametrize(
-#     "dataset_name, one_hot_encode, use_categoricals",
-#     [
-#         ("adult", False, False),
-#         ("adult", False, True),
-#         ("adult", True, False),
-#         ("iris", False, False),
-#     ],
-# )
+from wildwood.datasets import (
+    load_adult,
+    load_kddcup99,
+    load_covtype,
+    load_epsilon_catboost,
+    load_kick,
+    load_amazon,
+    load_cardio,
+    load_higgs,
+)
 
-import pickle as pkl
-from sklearn.model_selection import train_test_split
+from time import time
+import logging
+from sklearn.datasets import make_circles
 from wildwood import ForestClassifier
-from wildwood.datasets import load_adult
+
+logging.info("JIT compiling...")
+tic = time()
+X, y = make_circles(n_samples=10, noise=0.2, factor=0.5, random_state=1)
+clf = ForestClassifier()
+clf.fit(X, y)
+y_scores = clf.predict_proba(X)
+toc = time()
+logging.info("Spent {time} compiling.".format(time=toc - tic))
+
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import log_loss, roc_auc_score, classification_report
 
 
-n_estimators = 2
-aggregation = True
-class_weight = "balanced"
-dirichlet = 1e-4
-n_jobs = -1
-max_features = "auto"
 random_state = 42
-step = 1.0
-multiclass = "multinomial"
-cat_split_strategy = "binary"
-
+# X, y = load_covtype(raw=True)
 
 X, y = load_adult(raw=True)
 
+dataset = "covtype"
+
 X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=random_state)
 
+n_estimators = 100
+n_jobs = -1
+class_weight = "balanced"
+categorical_features = [True] * X_train.shape[1]
 
-clf1 = ForestClassifier(
+clf = ForestClassifier(
     n_estimators=n_estimators,
-    n_jobs=n_jobs,
-    multiclass=multiclass,
-    cat_split_strategy=cat_split_strategy,
-    aggregation=aggregation,
-    max_features=max_features,
-    class_weight=class_weight,
     random_state=random_state,
-    dirichlet=dirichlet,
-    step=step,
+    class_weight=class_weight,
+    n_jobs=n_jobs,
+    categorical_features=categorical_features,
+    verbose=False,
 )
+tic = time()
+clf.fit(X_train, y_train)
+toc = time()
+fit_time = toc - tic
+logging.info(f"fit took {fit_time} on {dataset}.")
 
-clf1.fit(X_train, y_train)
+tic = time()
+y_scores = clf.predict_proba(X_test)
+y_pred = clf.predict(X_test)
+toc = time()
+fit_time = toc - tic
+logging.info(f"predict_proba took {fit_time} on {dataset}.")
 
+log_loss_adult = log_loss(y_test, y_scores)
+logging.info(f"log-loss on {dataset} is {log_loss_adult}.")
 
-filename = "forest_classifier_on_iris.pkl"
-with open(filename, "wb") as f:
-    pkl.dump(clf1, f)
-
-with open(filename, "rb") as f:
-    clf2 = pkl.load(f)
-
-
-# os.remove(filename)
-#
-# assert_forests_equal(clf1, clf2, is_classifier=True)
-#
-# y_pred1 = clf1.predict_proba(X_test)
-# y_pred2 = clf2.predict_proba(X_test)
-# assert np.all(y_pred1 == y_pred2)
-#
-# y_pred1 = clf1.predict(X_test)
-# y_pred2 = clf2.predict(X_test)
-# assert np.all(y_pred1 == y_pred2)
-#
-# apply1 = clf1.apply(X_test)
-# apply2 = clf2.apply(X_test)
-# assert np.all(apply1 == apply2)
+print(clf.is_categorical_)

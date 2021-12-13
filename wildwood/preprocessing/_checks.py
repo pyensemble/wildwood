@@ -68,6 +68,9 @@ def is_series_categorical(col, is_categorical, cat_min_categories, verbose):
     assert is_categorical in {True, False, None}
     dtype = col.dtype
 
+    print("col:", col.name, "col.dtype:", dtype, "col.dtype.kind:", dtype.kind,
+          "is_categorical:", is_categorical)
+
     if dtype.kind in "bOSU":
         # The column's data type is either boolean, object, string or unicode,
         # which corresponds to a categorical column
@@ -99,21 +102,21 @@ def is_series_categorical(col, is_categorical, cat_min_categories, verbose):
                 # It has categorical data type but was declared as
                 # non-categorical by the user. We need to raise a warning to the
                 # user even if the column is unchanged
-                if verbose:
-                    warnings.warn(
-                        f"I will consider column {col.name} as categorical: it was "
-                        f"declared non-categorical but has a categorical data type."
-                    )
+                # if verbose:
+                warnings.warn(
+                    f"I will consider column {col.name} as categorical: it was "
+                    f"declared non-categorical but has a categorical data type."
+                )
                 return "is_category"
             else:
                 # The data type corresponds to a categorical one, but the user
                 # declared it as non-categorical. We must convert it to
                 # categorical and raise a warning to the user
-                if verbose:
-                    warnings.warn(
-                        f"I will consider column {col.name} as categorical: it was "
-                        f"declared non-categorical but has a categorical data type."
-                    )
+                # if verbose:
+                warnings.warn(
+                    f"I will consider column {col.name} as categorical: it was "
+                    f"declared non-categorical but has a categorical data type."
+                )
                 return "to_category"
 
     elif dtype.kind in "uif":
@@ -142,6 +145,7 @@ def is_series_categorical(col, is_categorical, cat_min_categories, verbose):
         elif is_categorical:
             # The user declared the column as categorical. We convert it to
             # categorical
+            # TODO: this can lead to an arbitrary large number of modalities...
             return "to_category"
         else:
             # The user declared the column as non-categorical. We will

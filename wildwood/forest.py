@@ -216,7 +216,13 @@ class ForestBase(BaseEstimator):
         self.min_samples_split = min_samples_split
         self.min_samples_leaf = min_samples_leaf
         self.max_bins = max_bins
+
         self.categorical_features = categorical_features
+
+        print("In __init__ categorical_features:", categorical_features)
+        print("In __init__ self.categorical_features:", self.categorical_features)
+
+
         self.is_categorical_ = None
         self.max_features = max_features
         self.subsample = subsample
@@ -287,7 +293,9 @@ class ForestBase(BaseEstimator):
         self : object
             The fitted forest.
         """
-        if categorical_features is not None:
+        if categorical_features is None:
+            categorical_features = self.categorical_features
+        else:
             self.categorical_features = categorical_features
 
         check_consistent_length(X, y)
@@ -356,6 +364,8 @@ class ForestBase(BaseEstimator):
             is_categorical=is_categorical,
             cat_min_categories=self.cat_min_categories,
             handle_unknown=self.handle_unknown,
+            random_state=self.random_state,
+            verbose=self.verbose
         )
 
         encoder.fit(X)
@@ -381,7 +391,6 @@ class ForestBase(BaseEstimator):
                     min_samples_split=self.min_samples_split,
                     min_samples_leaf=self.min_samples_leaf,
                     categorical_features=self.categorical_features,
-                    # is_categorical=self.is_categorical_,
                     is_categorical=is_categorical_,
                     max_features=max_features_,
                     random_state=random_state,
@@ -405,7 +414,6 @@ class ForestBase(BaseEstimator):
                     min_samples_split=self.min_samples_split,
                     min_samples_leaf=self.min_samples_leaf,
                     categorical_features=self.categorical_features,
-                    # is_categorical=self.is_categorical_,
                     is_categorical=is_categorical_,
                     max_features=max_features_,
                     random_state=random_state,
