@@ -32,7 +32,7 @@ random_state = 42
 
 X, y = load_adult(raw=True)
 
-dataset = "covtype"
+dataset = "adult"
 
 X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=random_state)
 
