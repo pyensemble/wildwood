@@ -32,3 +32,24 @@ from .loaders import (
 )
 
 from .signals import get_signal, make_regression
+
+
+loader_from_name = {
+    "adult": load_adult,
+    "bank": load_bank,
+    "breastcancer": load_breastcancer,
+    "car": load_car,
+    "cardio": load_cardio,
+    "churn": load_churn,
+    "default-cb": load_default_cb,
+    "letter": load_letter,
+    "satimage": load_satimage,
+    "sensorless": load_sensorless,
+    "spambase": load_spambase,
+    "amazon": load_amazon,
+    "covtype": load_covtype,
+    "internet": load_internet,
+    "kick": load_kick,
+    "kddcup": load_kddcup99,
+    "higgs": load_higgs,
+}

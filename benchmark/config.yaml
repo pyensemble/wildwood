@@ -1,0 +1,46 @@
+# Configuration file for the `benchmark_wildwood.py` script.
+
+
+# List of datasets to use in experiments
+datasets: &ALL_DATASETS
+  random_states: [42] # Random state used for train_test_split
+  names:
+    - adult        # OK
+    - bank         # OK
+    - breastcancer # OK
+    - car          # OK
+    # - cardio      # fails
+    - churn        # OK
+    - default-cb   # OK
+    - letter       # OK
+    - satimage     # OK
+    - sensorless   # OK
+    - spambase     # OK
+    - internet     # OK
+#    - amazon       # does not work
+#    - covtype      # ValueError: Target scores need to be probabilities for multiclass roc_auc, i.e. they should sum up to 1.0 over classes
+#    - kick         # ValueError: cannot assign slice from input of different size
+#    - kddcup       # ZeroDivisionError: division by zero
+#    - higgs
+
+
+# wildwood.ForestClassifier hyper-parameters quite exhaustive grid
+hyper_parameters: &ALL_PARAMS
+  n_estimators: [50]
+  criterion: [gini]
+  loss: [log]
+  step: [1.0]
+  aggregation: [true]
+  dirichlet: [1.e-5]
+  max_depth: [null]
+  class_weight: [balanced]
+  min_samples_split: [2]
+  min_samples_leaf: [1]
+  max_bins: [256]
+  categorical_features: [null]
+  max_features: [auto]
+  n_jobs: [-1]
+  random_state: [0, 1, 2, 3, 4] # Random states used to seed ForestClassifier
+  verbose: [false]
+  multiclass: [multinomial, ovr]
+  cat_split_strategy: [binary]
