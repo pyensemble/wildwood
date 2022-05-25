@@ -8,7 +8,10 @@ from wildwood import ForestClassifier
 
 
 def _compute_display_tree(clf, tree_idx, max_depth=None):
-    df_tree = clf.get_nodes(tree_idx)
+    if tree_idx is None:
+        df_tree = clf.get_nodes()
+    else:
+        df_tree = clf.get_nodes(tree_idx)
     df_tree.sort_values(by=["depth", "parent", "node_id"], inplace=True)
     if max_depth is None:
         max_depth = df_tree.depth.max()
@@ -48,7 +51,7 @@ def _compute_display_tree(clf, tree_idx, max_depth=None):
     return df_tree
 
 
-def plot_tree(clf, tree_idx=0, max_depth=None, width=800, height=500, attributes=None):
+def plot_tree(clf, tree_idx=None, max_depth=None, width=800, height=500, attributes=None):
 
     if attributes is None:
         attributes = [
