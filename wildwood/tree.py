@@ -17,31 +17,42 @@ from sklearn.utils.validation import check_is_fitted
 from ._split import (
     SplitClassifier,
     SplitRegressor,
+    SplitSurvival,
     find_best_split_classifier_along_feature,
     find_best_split_regressor_along_feature,
+    find_best_split_survival_along_feature,
 )
 from ._grow import grow, recompute_node_predictions, compute_tree_weights
 from ._node import (
     NodeClassifierContext,
     NodeRegressorContext,
+    NodeSurvivalContext,
     compute_node_classifier_context,
     compute_node_regressor_context,
+    compute_node_survival_context,
 )
 from ._tree_context import (
     TreeClassifierContext,
     tree_classifier_context_type,
     TreeRegressorContext,
     tree_regressor_context_type,
+    TreeSurvivalContext,
+    tree_survival_context_type,
 )
 from ._tree import (
     _TreeClassifier,
     tree_classifier_type,
     _TreeRegressor,
     tree_regressor_type,
+    _TreeSurvival,
+    tree_survival_type,
     tree_classifier_predict_proba,
     tree_regressor_predict,
     tree_regressor_weighted_depth,
+    tree_survival_predict,
+    tree_survival_weighted_depth,
     get_nodes_regressor,
+    get_nodes_survival,
     get_nodes_classifier,
     tree_apply,
 )
@@ -409,6 +420,109 @@ class TreeRegressor(TreeBase, RegressorMixin):
     def get_nodes(self):
         return get_nodes_regressor(self._tree_regressor)
 
+class TreeSurvival(TreeBase, RegressorMixin):
+    def __init__(
+        self,
+        *,
+        criterion,
+        loss,
+        step=1.0,
+        aggregation=True,
+        max_depth=None,
+        min_samples_split=2,
+        min_samples_leaf=1,
+        categorical_features=None,
+        is_categorical=None,
+        max_features="auto",
+        random_state=None,
+        verbose=0,
+    ):
+        super().__init__(
+            is_classifier=False,
+            criterion=criterion,
+            loss=loss,
+            step=step,
+            aggregation=aggregation,
+            max_depth=max_depth,
+            min_samples_split=min_samples_split,
+            min_samples_leaf=min_samples_leaf,
+            categorical_features=categorical_features,
+            is_categorical=is_categorical,
+            max_features=max_features,
+            random_state=random_state,
+            verbose=verbose,
+        )
+
+    def fit(self, features_bitarray, y, delta, train_indices, valid_indices, sample_weights):
+        random_state = self.random_state
+        # TODO: on obtiendra cette info via le binner qui est dans la foret
+        n_features = features_bitarray.n_features
+        # Create the tree object, which is mostly a data container for the nodes
+        node_count = 0
+        capacity = 0
+        bin_partitions_capacity = 0
+        bin_partitions_end = 0
+        tree_survival = _TreeSurvival(
+            n_features,
+            random_state,
+            node_count,
+            capacity,
+            bin_partitions_capacity,
+            bin_partitions_end,
+        )
+
+        # We build a tree context, that contains global information about
+        # the data, in particular the way we'll organize data into contiguous
+        # node indexes both for training and validation samples
+        tree_survival_context = TreeSurvivalContext(
+            features_bitarray,
+            y,
+            delta,
+            sample_weights,
+            train_indices,
+            valid_indices,
+            self.max_features,
+            self.max_depth,
+            self.min_samples_split,
+            self.min_samples_leaf,
+            self.aggregation,
+            self._step,
+            self.is_categorical,
+            self.criterion,
+        )
+
+        node_context = NodeSurvivalContext(tree_survival_context)
+        best_split = SplitSurvival(tree_survival_context.max_n_bins)
+        compute_node_context = compute_node_survival_context
+
+        grow(
+            tree_survival,
+            tree_survival_context,
+            node_context,
+            compute_node_context,
+            find_best_split_survival_along_feature,
+            best_split,
+        )
+        self._train_indices = train_indices
+        self._valid_indices = valid_indices
+        self._tree_survival = tree_survival
+        self._tree_survival_context = tree_survival_context
+        return self
+
+    def predict(self, X):
+        y_pred = tree_survival_predict(
+            self._tree_survival,
+            X,
+            self._tree_survival_context.aggregation,
+            self._tree_survival_context.step,
+        )
+        return y_pred
+
+    def weighted_depth(self, X):
+        return tree_survival_weighted_depth(self._tree_survival, X, self.step)
+
+    def get_nodes(self):
+        return get_nodes_survival(self._tree_survival)
 
 def serialize(obj):
     if isinstance(obj, _TreeClassifier):
@@ -487,6 +601,25 @@ def unserialize(key, val):
         tree.y_pred[:] = val["y_pred"]
         tree.bin_partitions[:] = val["bin_partitions"]
         return tree
+    elif key == "_tree_survival":
+        n_features = val["n_features"]
+        random_state = val["random_state"]
+        node_count = val["node_count"]
+        capacity = val["capacity"]
+        bin_partitions_capacity = val["bin_partitions_capacity"]
+        bin_partitions_end = val["bin_partitions_end"]
+        tree = _TreeRegressor(
+            n_features,
+            random_state,
+            node_count,
+            capacity,
+            bin_partitions_capacity,
+            bin_partitions_end,
+        )
+        tree.nodes[:] = val["nodes"]
+        tree.y_pred[:] = val["y_pred"]
+        tree.bin_partitions[:] = val["bin_partitions"]
+        return tree
     elif key == "_tree_classifier_context":
         dict_features_bitarray = val["features_bitarray"]
         n_samples = dict_features_bitarray["n_samples"]
@@ -537,6 +670,44 @@ def unserialize(key, val):
         tree_context.right_buffer[:] = val["right_buffer"]
         return tree_context
     elif key == "_tree_regressor_context":
+        dict_features_bitarray = val["features_bitarray"]
+        n_samples = dict_features_bitarray["n_samples"]
+        max_values = dict_features_bitarray["max_values"]
+        features_bitarray = FeaturesBitArray(n_samples, max_values)
+        features_bitarray.n_features = dict_features_bitarray["n_features"]
+        features_bitarray.n_bits[:] = dict_features_bitarray["n_bits"]
+        features_bitarray.offsets[:] = dict_features_bitarray["offsets"]
+        features_bitarray.n_values_in_words[:] = dict_features_bitarray[
+            "n_values_in_words"
+        ]
+        features_bitarray.bitarray[:] = dict_features_bitarray["bitarray"]
+        features_bitarray.bitmasks[:] = dict_features_bitarray["bitmasks"]
+        y = val["y"]
+        sample_weights = val["sample_weights"]
+        train_indices = val["train_indices"]
+        valid_indices = val["valid_indices"]
+        max_features = val["max_features"]
+        min_samples_split = val["min_samples_split"]
+        min_samples_leaf = val["min_samples_leaf"]
+        aggregation = val["aggregation"]
+        step = val["step"]
+        is_categorical = val["is_categorical"]
+        criterion = val["criterion"]
+        tree_context = TreeRegressorContext(
+            features_bitarray,
+            y,
+            sample_weights,
+            train_indices,
+            valid_indices,
+            max_features,
+            min_samples_split,
+            min_samples_leaf,
+            aggregation,
+            step,
+            is_categorical,
+            criterion,
+        )
+    elif key == "_tree_survival_context":
         dict_features_bitarray = val["features_bitarray"]
         n_samples = dict_features_bitarray["n_samples"]
         max_values = dict_features_bitarray["max_values"]

@@ -8,7 +8,7 @@ node numpy dtypes and several functions operating locally in nodes.
 
 from math import log
 import numpy as np
-from numba import from_dtype, jit, boolean, uint64, intp, uintp, float32, void
+from numba import from_dtype, jit, boolean, uint64, intp, uintp, float32, void, int32
 from numba.experimental import jitclass
 
 from ._utils import (
@@ -19,7 +19,7 @@ from ._utils import (
     get_type,
     sample_without_replacement,
 )
-from ._tree_context import TreeClassifierContextType, TreeRegressorContextType
+from ._tree_context import TreeClassifierContextType, TreeRegressorContextType, TreeSurvivalContextType
 from .preprocessing.features_bitarray import FeaturesBitArrayType, get_value_from_column
 
 
@@ -217,6 +217,16 @@ node_regressor_context_type = [
     ("y_pred", float32),
 ]
 
+node_survival_context_type = [
+    *node_context_type,
+    #
+    # Prediction produced by the node using the training data it contains
+    ("y_pred", float32),
+    #
+    # ...
+    ("y_ind", int32[:, :, ::1]),
+
+]
 
 @jitclass(node_classifier_context_type)
 class NodeClassifierContext:
@@ -429,14 +439,118 @@ class NodeRegressorContext:
         self.y_pred = 0.0
 
 
+@jitclass(node_survival_context_type)
+class NodeSurvivalContext:
+    """A node_context contains all the data required to find the best split of the
+    node for a survival tree.
+
+    Parameters
+    ----------
+    tree_context : TreeSurvivalContext
+        An object describing the context of the tree
+
+    Attributes
+    ----------
+    features_pool : ndarray
+        Array of shape (n_features,) of intp dtype containing all the features
+        indexes, namely [0, ..., n_features-1]
+
+    features_sampled : ndarray
+        Array of shape (max_features,) of intp dtype containing sampled features to
+        be considered for possible splitting
+
+    sample_features : bool
+        Do we need to perform features sampling ? (This if True if n_features !=
+        max_features and False otherwise)
+
+    features : ndarray
+        Array of shape (max_features,) of intp dtype containing the candidate features
+        for splitting. These features are chosen uniformly at random each time a
+        split is looked for
+
+    n_samples_train : int
+        Number of training samples in the node
+
+    n_samples_valid : int
+        Number of validation (out-of-the-bag) samples in the node
+
+    w_samples_train : float
+        Weighted number of training samples in the node
+
+    w_samples_valid : float
+        Weighted number of validation (out-of-the-bag) samples in the node
+
+    start_train : int
+        Index of the first training sample in the node. We have that
+        partition_train[start_train:end_train] contains the indexes of the node's
+        training samples
+
+    end_train : int
+        End-index of the slice containing the node's training samples indexes
+
+    start_valid : int
+        Index of the first validation (out-of-the-bag) sample in the node. We have
+        that partition_valid[start_valid:end_valid] contains the indexes of the
+        node's validation samples
+
+    end_valid : int
+        End-index of the slice containing the node's validation samples indexes
+
+    loss_valid : float
+        Validation loss of the node, computed on validation (out-of-the-bag) samples
+
+    n_samples_train_in_bins : ndarray
+        Number of training samples for each (feature, bin) in the node
+
+    w_samples_train_in_bins : ndarray
+        Weighted number of training samples for each (feature, bin) in the node
+
+    n_samples_valid_in_bins : ndarray
+        Number of validation samples for each (feature, bin) in the node
+
+    w_samples_valid_in_bins : ndarray
+        Weighted number of validation samples for each (feature, bin) in the node
+
+    non_empty_bins_train_count : ndarray
+        A vector that counts the number of non-empty bins for each feature on train
+         data.
+
+    non_empty_bins_valid_count : ndarray
+        A vector that counts the number of non-empty bins for each feature on valid
+         data.
+
+    non_empty_bins_train : ndarray
+        An array that saves the indices of non-empty bins for each feature on train
+        data.
+
+    non_empty_bins_valid : ndarray
+        An array that saves the indices of non-empty bins for each feature on valid
+        data.
+
+    y_pred : float
+        Prediction produced by the node using the training data it contains
+
+    y_ind : ndarray
+        ...
+    """
+
+    def __init__(self, tree_context):
+        init_node_context(tree_context, self)
+        max_features = tree_context.max_features
+        n_samples = tree_context.n_samples
+        self.y_pred = 0.0
+        self.y_ind = np.empty((max_features, self.max_n_bins, n_samples), dtype=np.int32)
+
 NodeClassifierContextType = get_type(NodeClassifierContext)
 NodeRegressorContextType = get_type(NodeRegressorContext)
+NodeSurvivalContextType = get_type(NodeSurvivalContext)
 
 
 @jit(
     [
         void(TreeClassifierContextType, NodeClassifierContextType),
         void(TreeRegressorContextType, NodeRegressorContextType),
+        void(TreeSurvivalContextType, NodeSurvivalContextType),
     ],
     nopython=NOPYTHON,
     nogil=NOGIL,
@@ -890,6 +1004,207 @@ def compute_node_regressor_context(
 
                 n_samples_valid_in_bins[f, bin] += 1
                 w_samples_valid_in_bins[f, bin] += sample_weight
+
+        f += 1
+
+    # Save remaining things in the node context
+    node_context.y_pred = y_pred
+    node_context.n_samples_train = end_train - start_train
+    node_context.n_samples_valid = end_valid - start_valid
+    node_context.loss_valid = loss_valid
+    node_context.w_samples_train = w_samples_train
+    node_context.w_samples_valid = w_samples_valid
+
+@jit(
+    float32(float32[::1], int32[::1]),
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
+)
+def CHF_sum(y, delta):
+    event_times = y
+    event_observed = delta
+    times = np.unique(event_times)
+    CHF_sum_ = 0.0
+    for i, time in enumerate(times):
+        # number at risk
+        N = event_times[event_times >= time].shape[0]
+        if i == 0:
+            D = event_observed[event_times <= time].sum()
+        else:
+            D = event_observed[(event_times <= time) & (event_times > times[i-1])].sum()
+        CHF_sum_ += D / N
+
+    return CHF_sum_
+
+
+@jit(
+    void(
+        TreeSurvivalContextType, NodeSurvivalContextType, uintp, uintp, uintp, uintp
+    ),
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
+    locals={
+        "n_samples_train_in_bins": uintp[:, ::1],
+        "n_samples_valid_in_bins": uintp[:, ::1],
+        "w_samples_train_in_bins": float32[:, ::1],
+        "w_samples_valid_in_bins": float32[:, ::1],
+        "non_empty_bins_train": uint64[:, ::1],
+        "non_empty_bins_valid": uint64[:, ::1],
+        "non_empty_bins_train_count": uint64[::1],
+        "non_empty_bins_valid_count": uint64[::1],
+        "y_pred": float32,
+        "features": uintp[::1],
+        "y": float32[::1],
+        "y_ind": int32[:, :, ::1],
+        "sample_weights": float32[::1],
+        "partition_train": uintp[::1],
+        "partition_valid": uintp[::1],
+        "aggregation": boolean,
+        "train_indices": uintp[::1],
+        "valid_indices": uintp[::1],
+        "w_samples_train": float32,
+        "w_samples_valid": float32,
+        "f": uintp,
+        "loss_valid": float32,
+        "feature": uintp,
+        "sample": uintp,
+        "bin": uint64,
+        "sample_weight": float32,
+        "k": uintp,
+    },
+)
+def compute_node_survival_context(
+    tree_context, node_context, start_train, end_train, start_valid, end_valid
+):
+    """Computes the node context from the data and from the tree context for regression.
+    Computations are saved in the passed node_context.
+
+    Parameters
+    ----------
+    tree_context : TreeContext
+        The tree context
+
+    node_context : NodeRegressorContext
+        The node context that this function will compute
+
+    start_train : int
+        Index of the first training sample in the node. We have that
+        partition_train[start_train:end_train] contains the indexes of the node's
+        training samples
+
+    end_train : int
+        End-index of the slice containing the node's training samples indexes
+
+    start_valid : int
+        Index of the first validation (out-of-the-bag) sample in the node. We have
+        that partition_valid[start_valid:end_valid] contains the indexes of the
+        node's validation samples
+
+    end_valid : int
+        End-index of the slice containing the node's validation samples indexes
+    """
+    # Initialize the things from the node context
+    n_samples_train_in_bins = node_context.n_samples_train_in_bins
+    n_samples_valid_in_bins = node_context.n_samples_valid_in_bins
+    w_samples_train_in_bins = node_context.w_samples_train_in_bins
+    w_samples_valid_in_bins = node_context.w_samples_valid_in_bins
+    non_empty_bins_train = node_context.non_empty_bins_train
+    non_empty_bins_train_count = node_context.non_empty_bins_train_count
+    non_empty_bins_valid = node_context.non_empty_bins_valid
+    non_empty_bins_valid_count = node_context.non_empty_bins_valid_count
+    y_ind = node_context.y_ind
+
+    # If necessary, sample the features
+    if node_context.sample_features:
+        sample_without_replacement(
+            node_context.features_pool, node_context.features_sampled
+        )
+
+    features = node_context.features_sampled
+    n_samples_train_in_bins.fill(0)
+    n_samples_valid_in_bins.fill(0)
+    w_samples_train_in_bins.fill(0.0)
+    w_samples_valid_in_bins.fill(0.0)
+    non_empty_bins_train.fill(0)
+    non_empty_bins_train_count.fill(0)
+    non_empty_bins_valid.fill(0)
+    non_empty_bins_valid_count.fill(0)
+    y_ind.fill(0)
+    y_pred = 0.0
+
+    # Get information from the tree context
+    features_bitarray = tree_context.features_bitarray
+    n_values_in_words = features_bitarray.n_values_in_words
+    offsets = features_bitarray.offsets
+    bitarray = features_bitarray.bitarray
+    n_bits = features_bitarray.n_bits
+    bitmasks = features_bitarray.bitmasks
+
+    y = tree_context.y
+    delta = tree_context.delta
+    sample_weights = tree_context.sample_weights
+    partition_train = tree_context.partition_train
+    partition_valid = tree_context.partition_valid
+    aggregation = tree_context.aggregation
+
+    # The indices of the training samples contained in the node
+    train_indices = partition_train[start_train:end_train]
+    valid_indices = partition_valid[start_valid:end_valid]
+
+    # Weighted number of training and validation samples
+    w_samples_train = 0.0
+    w_samples_valid = 0.0
+
+    # A counter for the features
+    f = 0
+    # The validation loss
+    loss_valid = 0.0
+
+    # TODO: unrolling the for loop could be faster
+    # For-loop on features first and then samples (X is F-major)
+    for j in features:
+        # Compute statistics about training samples
+        n_values_in_word = n_values_in_words[j]
+        bitarray_feature = bitarray[offsets[j] : offsets[j + 1]]
+        n_bits_feature = n_bits[j]
+        bitmask = bitmasks[j]
+        for i in train_indices:
+            bin = get_value_from_column(
+                i, bitarray_feature, bitmask, n_values_in_word, n_bits_feature
+            )
+            sample_weight = sample_weights[i]
+            if f == 0:
+                w_samples_train += sample_weight
+
+            if n_samples_train_in_bins[f, bin] == 0:
+                # It's the first time we find a train sample for this (feature, bin)
+                # We save the bin number at index non_empty_bins_train_count[f]
+                non_empty_bins_train[f, non_empty_bins_train_count[f]] = bin
+                # We increase the count of non-empty bins for this feature
+                non_empty_bins_train_count[f] += 1
+
+            # One more sample in this bin for the current feature
+            n_samples_train_in_bins[f, bin] += 1
+            w_samples_train_in_bins[f, bin] += sample_weight
+            # One more sample in this bin for the current feature with this label
+            y_ind[f, bin, i] = 1
+
+        # The prediction is cumulative hazard
+        # TODO: Add the weight later
+        if f == 0:
+            y_ = y[train_indices]
+            delta_ = delta[train_indices]
+            y_pred = CHF_sum(y_, delta_)
+
+
+        # TODO: Update later
+        # Compute sample counts about validation samples
+        if aggregation:
+            loss_valid = 0.0
 
         f += 1
 

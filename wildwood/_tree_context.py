@@ -15,6 +15,7 @@ from numba import (
     intp,
     uintp,
     float32,
+    int32,
 )
 from numba.experimental import jitclass
 from ._utils import NOPYTHON, NOGIL, BOUNDSCHECK, FASTMATH, get_type
@@ -53,6 +54,9 @@ tree_context_type = [
     #
     # The total number of features
     ("n_features", uintp),
+    #
+    # The maximum depth
+    ("max_depth", uintp),
     #
     # Maximum number of features to try for splitting
     ("max_features", uintp),
@@ -114,6 +118,12 @@ tree_regressor_context_type = [
     *tree_context_type,
 ]
 
+tree_survival_context_type = [
+    *tree_context_type,
+#
+    # The number of classes
+    ("delta", int32[::1]),
+]
 
 @jitclass(tree_classifier_context_type)
 class TreeClassifierContext:
@@ -130,6 +140,7 @@ class TreeClassifierContext:
         valid_indices,
         n_classes,
         max_features,
+        max_depth,
         min_samples_split,
         min_samples_leaf,
         aggregation,
@@ -147,6 +158,7 @@ class TreeClassifierContext:
             train_indices,
             valid_indices,
             max_features,
+            max_depth,
             min_samples_split,
             min_samples_leaf,
             aggregation,
@@ -173,6 +185,7 @@ class TreeRegressorContext:
         train_indices,
         valid_indices,
         max_features,
+        max_depth,
         min_samples_split,
         min_samples_leaf,
         aggregation,
@@ -188,6 +201,7 @@ class TreeRegressorContext:
             train_indices,
             valid_indices,
             max_features,
+            max_depth,
             min_samples_split,
             min_samples_leaf,
             aggregation,
@@ -196,10 +210,50 @@ class TreeRegressorContext:
             criterion,
         )
 
+@jitclass(tree_survival_context_type)
+class TreeSurvivalContext:
+    """
+    The splitting context holds all the useful data for splitting
+    """
+
+    def __init__(
+        self,
+        features_bitarray,
+        y,
+        delta,
+        sample_weights,
+        train_indices,
+        valid_indices,
+        max_features,
+        max_depth,
+        min_samples_split,
+        min_samples_leaf,
+        aggregation,
+        step,
+        is_categorical,
+        criterion,
+    ):
+        init_tree_context(
+            self,
+            features_bitarray,
+            y,
+            sample_weights,
+            train_indices,
+            valid_indices,
+            max_features,
+            max_depth,
+            min_samples_split,
+            min_samples_leaf,
+            aggregation,
+            step,
+            is_categorical,
+            criterion,
+        )
+        self.delta = delta
 
 TreeClassifierContextType = get_type(TreeClassifierContext)
 TreeRegressorContextType = get_type(TreeRegressorContext)
-
+TreeSurvivalContextType = get_type(TreeSurvivalContext)
 
 @jit(
     [
@@ -211,6 +265,7 @@ TreeRegressorContextType = get_type(TreeRegressorContext)
             uintp[::1],                 # train_indices
             uintp[::1],                 # valid_indices
             intp,                       # max_features
+            intp,                       # max_depth
             intp,                       # min_samples_split
             uintp,                      # min_samples_leaf
             boolean,                    # aggregation
@@ -226,6 +281,23 @@ TreeRegressorContextType = get_type(TreeRegressorContext)
             uintp[::1],
             uintp[::1],
             intp,
+            intp,                       # max_depth
+            intp,
+            uintp,
+            boolean,
+            float32,
+            boolean[::1],
+            uint8,
+        ),
+        void(
+            TreeSurvivalContextType,
+            FeaturesBitArrayType,
+            float32[::1],
+            float32[::1],
+            uintp[::1],
+            uintp[::1],
+            intp,
+            intp,                       # max_depth
             intp,
             uintp,
             boolean,
@@ -247,6 +319,7 @@ def init_tree_context(
     train_indices,
     valid_indices,
     max_features,
+    max_depth,
     min_samples_split,
     min_samples_leaf,
     aggregation,
@@ -262,6 +335,7 @@ def init_tree_context(
     tree_context.y = y
     tree_context.sample_weights = sample_weights
     tree_context.max_features = max_features
+    tree_context.max_depth = max_depth
     tree_context.min_samples_split = min_samples_split
     tree_context.min_samples_leaf = min_samples_leaf
     tree_context.train_indices = train_indices

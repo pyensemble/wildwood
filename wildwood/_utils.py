@@ -23,11 +23,13 @@ split_strategy_mapping = {
 CRITERIA_GINI = 0
 CRITERIA_ENTROPY = 1
 CRITERIA_MSE = 3
+CRITERIA_LOGRANK = 4
 
 criteria_mapping = {
     "gini": CRITERIA_GINI,
     "entropy": CRITERIA_ENTROPY,
     "mse": CRITERIA_MSE,
+    "logrank": CRITERIA_LOGRANK
 }
 
 

@@ -89,6 +89,12 @@ tree_regressor_type = [
     ("y_pred", float32[::1]),
 ]
 
+tree_survival_type = [
+    *tree_type,
+    #
+    # The predictions of each node in the tree with shape (n_nodes,)
+    ("y_pred", float32[::1]),
+]
 
 @jitclass(tree_classifier_type)
 class _TreeClassifier(object):
@@ -236,10 +242,79 @@ class _TreeRegressor(object):
         self.bin_partitions_capacity = bin_partitions_capacity
         self.bin_partitions_end = bin_partitions_end
 
+@jitclass(tree_survival_type)
+class _TreeSurvival(object):
+    """A tree for regression containing an array of nodes and an array for its
+    predictions
+
+    Parameters
+    ----------
+    n_features : int
+        Number of input features
+
+    Attributes
+    ----------
+    n_features : int
+        Number of input features
+
+    max_depth :
+        Maximum depth allowed in the tree (not used for now)
+
+    node_count :
+        Number of nodes in the tree
+
+    capacity :
+        Maximum number of nodes storable in the tree
+
+    nodes : ndarray
+        A numpy array containing the nodes data
+
+    y_pred : ndarray
+        The predictions of each node in the tree with shape (n_nodes,)
+
+    bin_partitions : ndarray
+        A numpy array containing the bin partitions of nodes using a split over a
+        categorical feature. A node has `bin_partition_start` and
+        `bin_partition_end` attributes, its bin partition is given by
+        `bin_partitions[bin_partition_start:bin_partition_end]`
+
+    bin_partitions_capacity : int
+         Allocated size of `bin_partitions`
+
+    bin_partitions_end : int
+         Actual size of `bin_partitions`
+    """
+
+    def __init__(
+        self,
+        n_features,
+        random_state,
+        node_count,
+        capacity,
+        bin_partitions_capacity,
+        bin_partitions_end,
+    ):
+        self.n_features = n_features
+        self.max_depth = 0
+        self.node_count = node_count
+        self.capacity = capacity
+        self.random_state = random_state
+        # Seed numba's random generator...
+        np.random.seed(random_state)
+        # Both node and prediction arrays have zero on the first axis and are resized
+        # later when we know the initial capacity required for the tree
+        self.nodes = np.zeros((capacity,), dtype=node_dtype)
+        self.y_pred = np.zeros((capacity,), dtype=np.float32)
+        # bin partitions for categorical features
+        self.bin_partitions = np.zeros((bin_partitions_capacity,), dtype=np.uint64)
+        self.bin_partitions_capacity = bin_partitions_capacity
+        self.bin_partitions_end = bin_partitions_end
+
 
 # Numba types for Trees
 TreeClassifierType = get_type(_TreeClassifier)
 TreeRegressorType = get_type(_TreeRegressor)
+TreeSurvivalType = get_type(_TreeSurvival)
 
 
 def get_nodes(tree):
@@ -298,6 +373,11 @@ def get_nodes(tree):
     df["bin_partition"] = col_bin_partition
     return df
 
+def get_nodes_survival(tree):
+    nodes = get_nodes(tree)
+    y_pred = tree.y_pred[: tree.node_count]
+    nodes["y_pred"] = y_pred
+    return nodes
 
 def get_nodes_regressor(tree):
     nodes = get_nodes(tree)
@@ -318,7 +398,7 @@ def get_nodes_classifier(tree):
 
 
 @jit(
-    [void(TreeClassifierType, uintp), void(TreeRegressorType, uintp)],
+    [void(TreeClassifierType, uintp), void(TreeRegressorType, uintp), void(TreeSurvivalType, uintp)],
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
@@ -345,6 +425,7 @@ def resize_tree_(tree, capacity):
     [
         void(TreeClassifierType, optional(uintp)),
         void(TreeRegressorType, optional(uintp)),
+        void(TreeSurvivalType, optional(uintp)),
     ],
     nopython=NOPYTHON,
     nogil=NOGIL,
@@ -383,7 +464,8 @@ def resize_tree(tree, capacity=None):
 
 
 @jit(
-    [void(TreeClassifierType, uintp), void(TreeRegressorType, uintp)],
+    [void(TreeClassifierType, uintp), void(TreeRegressorType, uintp),
+    void(TreeSurvivalType, uintp)],
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
@@ -408,6 +490,7 @@ def resize_tree_bin_partitions_(tree, capacity):
     [
         void(TreeClassifierType, optional(uintp)),
         void(TreeRegressorType, optional(uintp)),
+        void(TreeSurvivalType, optional(uintp)),
     ],
     nopython=NOPYTHON,
     nogil=NOGIL,
@@ -471,6 +554,29 @@ def resize_tree_bin_partitions(tree, capacity=None):
         ),
         uintp(
             TreeRegressorType,
+            intp,
+            uintp,
+            boolean,
+            boolean,
+            uintp,
+            float32,
+            uint64,
+            float32,
+            uintp,
+            uintp,
+            float32,
+            float32,
+            uintp,
+            uintp,
+            uintp,
+            uintp,
+            float32,
+            boolean,
+            optional(uint64[::1]),
+            uint64,
+        ),
+        uintp(
+            TreeSurvivalType,
             intp,
             uintp,
             boolean,
@@ -670,6 +776,7 @@ def add_node_tree(
     [
         uintp(TreeClassifierType, FeaturesBitArrayType, uint64),
         uintp(TreeRegressorType, FeaturesBitArrayType, uint64),
+        uintp(TreeSurvivalType, FeaturesBitArrayType, uint64),
     ],
     nopython=NOPYTHON,
     nogil=NOGIL,
@@ -804,6 +911,7 @@ def sample_path_leaf(tree, xi):
     [
         uintp[::1](TreeClassifierType, FeaturesBitArrayType),
         uintp[::1](TreeRegressorType, FeaturesBitArrayType),
+        uintp[::1](TreeSurvivalType, FeaturesBitArrayType),
     ],
     nopython=NOPYTHON,
     nogil=NOGIL,
@@ -1017,6 +1125,147 @@ def tree_regressor_predict(tree, features_bitarray, aggregation, step):
     },
 )
 def tree_regressor_weighted_depth(tree, features_bitarray, step):
+    """Compute the weighted depth used by the aggregation algorithm for the
+    input matrix of features.
+
+    Parameters
+    ----------
+    tree : TreeRegressor
+        The tree
+
+    features_bitarray : FeaturesBitArray
+        The features bitarray
+
+    step : float
+        Step-size used for the computation of the aggregation weights. Used only if
+        aggregation=True
+
+    Returns
+    -------
+    output : ndarray
+        An array of shape (n_samples,) and float32 dtype containing the
+        predicted labels
+    """
+    n_samples = features_bitarray.n_samples
+    nodes = tree.nodes
+    out = np.zeros(n_samples, dtype=float32)
+    for i in range(n_samples):
+        idx_current = find_leaf(tree, features_bitarray, i)
+        node = nodes[idx_current]
+        weighted_depth = float32(node["depth"])
+        while idx_current != 0:
+            idx_current = nodes[idx_current]["parent"]
+            node = nodes[idx_current]
+            depth_new = node["depth"]
+            loss = -step * node["loss_valid"]
+            log_weight_tree = node["log_weight_tree"]
+            alpha = 0.5 * exp(loss - log_weight_tree)
+            weighted_depth = alpha * depth_new + (1 - alpha) * weighted_depth
+        out[i] = weighted_depth
+
+    return out
+
+@jit(
+    float32[:](TreeSurvivalType, FeaturesBitArrayType, boolean, float32),
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
+    locals={
+        "n_samples": uintp,
+        "nodes": node_type[::1],
+        "y_pred": float32[::1],
+        "out": float32[::1],
+        "i": uintp,
+        "idx_current": uintp,
+        "pred_i": float32,
+        "node": node_type,
+        "node_pred": float32,
+        "loss": float32,
+        "log_weight_tree": float32,
+        "alpha": float32,
+    },
+)
+def tree_survival_predict(tree, features_bitarray, aggregation, step):
+    """Predicts the labels for the input matrix of features.
+
+    Parameters
+    ----------
+    tree : TreeRegressor
+        The tree
+
+    features_bitarray : FeaturesBitArray
+        The features bitarray
+
+    aggregation : bool
+        If True we predict the labels using the aggregation algorithm.
+        Otherwise, we simply use the prediction given by the leaf node containing the
+        input features.
+
+    step : float
+        Step-size used for the computation of the aggregation weights. Used only if
+        aggregation=True
+
+    Returns
+    -------
+    output : ndarray
+        An array of shape (n_samples,) and float32 dtype containing the
+        predicted labels
+    """
+    n_samples = features_bitarray.n_samples
+    nodes = tree.nodes
+    y_pred = tree.y_pred
+    out = np.zeros(n_samples, dtype=float32)
+
+    for i in range(n_samples):
+        idx_current = find_leaf(tree, features_bitarray, i)
+        # First, we get the prediction of the leaf
+        pred_i = y_pred[idx_current]
+        if aggregation:
+            while idx_current != 0:
+                # Get the parent node
+                idx_current = nodes[idx_current]["parent"]
+                node = nodes[idx_current]
+                # Prediction of this node
+                node_pred = y_pred[idx_current]
+                # logarithm of the aggregation weight
+                loss = -step * node["loss_valid"]
+                log_weight_tree = node["log_weight_tree"]
+                # Compute the aggregation weight for this subtree
+                alpha = 0.5 * exp(loss - log_weight_tree)
+                # Context tree weighting dark magic
+                pred_i = alpha * node_pred + (1 - alpha) * pred_i
+
+        out[i] = pred_i
+
+    return out
+
+
+# TODO: code also a tree_classifier_weighted_depth or change the apply function with
+#  an aggregation option
+
+
+@jit(
+    float32[:](TreeSurvivalType, FeaturesBitArrayType, float32),
+    nopython=NOPYTHON,
+    nogil=NOGIL,
+    boundscheck=BOUNDSCHECK,
+    fastmath=FASTMATH,
+    locals={
+        "n_samples": uintp,
+        "nodes": node_type[::1],
+        "out": float32[::1],
+        "i": uintp,
+        "idx_current": uintp,
+        "node": node_type,
+        "weighted_depth": float32,
+        "node_pred": float32,
+        "loss": float32,
+        "log_weight_tree": float32,
+        "alpha": float32,
+    },
+)
+def tree_survival_weighted_depth(tree, features_bitarray, step):
     """Compute the weighted depth used by the aggregation algorithm for the
     input matrix of features.
 
