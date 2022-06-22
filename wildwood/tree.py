@@ -169,6 +169,25 @@ class TreeBase(BaseEstimator, metaclass=ABCMeta):
                             self._tree_regressor.node_count,
                             val,
                         )
+    def lighten(self):
+        if hasattr(self, "_train_indices"):
+            self._train_indices = None
+
+        if hasattr(self, "_valid_indices"):
+            self._valid_indices = None
+
+        if self.is_classifier:
+            if hasattr(self, "_tree_classifier_context"):
+                self._tree_classifier_context = None
+            if hasattr(self, "_tree_classifier"):
+                self._tree_classifier.nodes = self._tree_classifier.nodes[:self._tree_classifier.node_count]
+                self._tree_classifier.bin_partitions = self._tree_classifier.bin_partitions[:self._tree_classifier.bin_partitions_end]
+        else:
+            if hasattr(self, "_tree_regressor_context"):
+                self._tree_regressor_context = None
+            if hasattr(self, "_tree_regressor"):
+                self._tree_regressor.nodes = self._tree_regressor.nodes[:self._tree_regressor.node_count]
+                self._tree_regressor.bin_partitions = self._tree_regressor.bin_partitions[:self._tree_regressor.bin_partitions_end]
 
 
 class TreeClassifier(ClassifierMixin, TreeBase):
@@ -278,8 +297,10 @@ class TreeClassifier(ClassifierMixin, TreeBase):
         proba = tree_classifier_predict_proba(
             self._tree_classifier,
             features_bitarray,
-            self._tree_classifier_context.aggregation,
-            self._tree_classifier_context.step,
+            self.aggregation,
+            self.step,
+            # self._tree_classifier_context.aggregation,
+            # self._tree_classifier_context.step,
         )
         return proba
 
@@ -398,8 +419,10 @@ class TreeRegressor(TreeBase, RegressorMixin):
         y_pred = tree_regressor_predict(
             self._tree_regressor,
             X,
-            self._tree_regressor_context.aggregation,
-            self._tree_regressor_context.step,
+            self.aggregation,
+            self.step,
+            # self._tree_regressor_context.aggregation,
+            # self._tree_regressor_context.step,
         )
         return y_pred
 

@@ -18,7 +18,7 @@ from numba import (
 )
 from numba.experimental import jitclass
 from ._utils import NOPYTHON, NOGIL, BOUNDSCHECK, FASTMATH, get_type
-from .preprocessing.features_bitarray import FeaturesBitArrayType
+from .preprocessing.features_bitarray import FeaturesBitArray, FeaturesBitArrayType
 
 
 # A pure data class which contains global context information, such as the datasets,
@@ -283,3 +283,4 @@ def init_tree_context(
     # Two buffers used in the split_indices function
     tree_context.left_buffer = np.empty(n_samples, dtype=np.uintp)
     tree_context.right_buffer = np.empty(n_samples, dtype=np.uintp)
+
