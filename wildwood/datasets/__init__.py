@@ -28,6 +28,9 @@ from .loaders import (
     load_satimage,
     load_sensorless,
     load_spambase,
+    load_eeg,
+    load_occupancy,
+    load_electrical,
     describe_datasets,
 )
 

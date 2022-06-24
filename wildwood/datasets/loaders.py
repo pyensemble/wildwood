@@ -12,6 +12,70 @@ from ._default_cb import load_default_cb
 
 # TODO: kdd98 https://www.openml.org/d/23513, Il y a plein de features numeriques avec un grand nombre de "missing" values
 
+def load_electrical():
+    # imported from linlearn
+    # downloaded from https://archive.ics.uci.edu/ml/datasets/Electrical+Grid+Stability+Simulated+Data+#
+    dtype = {
+        "tau1": np.float,
+        "tau2": np.float,
+        "tau3": np.float,
+        "tau4": np.float,
+        "p1": np.float,
+        "p2": np.float,
+        "p3": np.float,
+        "p4": np.float,
+        "g1": np.float,
+        "g2": np.float,
+        "g3": np.float,
+        "g4": np.float,
+        "stab": np.float,
+    }
+    dataset = Dataset.from_dtype(
+        name="electrical",
+        task="binary-classification",
+        label_column="stabf",
+        dtype=dtype,
+    )
+    return dataset.load_from_csv("electrical.csv.gz", dtype=dtype)
+
+
+
+def load_occupancy():
+    # imported from linlearn
+    # downloaded from https://archive.ics.uci.edu/ml/datasets/Occupancy+Detection+
+    # the dataframes obtained from files datatraining.txt, datatest.txt and datatest2.txt were
+    # concatenated in this order with ignore_index = True
+    dtype = {
+        "Temperature": np.float,
+        "Humidity": np.float,
+        "Light": np.float,
+        "CO2": np.float,
+        "HumidityRatio": np.float,
+    }
+    dataset = Dataset.from_dtype(
+        name="occupancy",
+        task="binary-classification",
+        label_column="Occupancy",
+        dtype=dtype,
+        drop_columns=["date"],
+    )
+    return dataset.load_from_csv("occupancy.csv.gz", dtype=dtype)
+
+
+def load_eeg():
+    # imported from linlearn
+    # downloaded from https://archive.ics.uci.edu/ml/datasets/EEG+Eye+State
+    # parsed with pd.read_csv(..., skiprows=19, header=None)
+    dtype = {str(i): np.float for i in range(14)}
+    dataset = Dataset.from_dtype(
+        name="eeg",
+        task="binary-classification",
+        label_column="14",
+        dtype=dtype,
+    )
+    return dataset.load_from_csv("eeg_eye.csv.gz", dtype=dtype)
+
+
 
 def load_breastcancer(raw=False):
     from sklearn.datasets import load_breast_cancer
