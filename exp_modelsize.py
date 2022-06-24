@@ -115,7 +115,7 @@ def get_params(dataset_name, model_name, path):
 print("launching main loop")
 
 clf_col, data_col, size_col = [], [], []
-for data in datasets:
+for data in datasets[3:]:
     print(data.__name__[5:])
     X_train, _, y_train, _ = data().extract()
     for clf_tup in classifiers:
