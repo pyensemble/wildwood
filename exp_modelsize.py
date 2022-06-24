@@ -15,6 +15,8 @@ from datetime import datetime
 import xgboost as xgb
 import catboost as cab
 
+print("importing data loaders")
+
 from wildwood.datasets import (
     load_adult,
     load_default_cb,
@@ -36,7 +38,7 @@ from wildwood.datasets import (
     load_higgs,
 )
 
-
+print("defining sizeof function")
 def sizeof(x):
     return sys.getsizeof(pickle.dumps(x)) / 1000000
 
@@ -45,6 +47,7 @@ from collections import namedtuple
 
 Classifier = namedtuple("Classifier", ["name", "objet"])
 
+print("defining classifiers")
 classifiers = [
     Classifier(name=nm, objet=obj)
     for nm, obj in list(
@@ -76,7 +79,7 @@ datasets = [
 import os
 from pathlib import Path
 
-
+print("defining get_params function")
 def get_params(dataset_name, model_name, path):
     if os.path.exists(path + dataset_name):
         unfiltered = sorted(
@@ -109,6 +112,7 @@ def get_params(dataset_name, model_name, path):
             params = content["result"]["params"]
             return params
 
+print("launching main loop")
 
 clf_col, data_col, size_col = [], [], []
 for data in datasets:
@@ -138,14 +142,17 @@ for data in datasets:
             size_col.append(sizeof(clf))
 
 
-df = pd.DataFrame({"classifier": clf_col, "dataset": data_col, "size": size_col})
+    df = pd.DataFrame({"classifier": clf_col, "dataset": data_col, "size": size_col})
 
-now = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    now = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 
-filename = "exp_modelsize_" + "_" + now + ".pickle"
+    filename = "exp_modelsize_" + "_" + now + ".pickle"
+    print("saving results into %s" % filename)
+    with open(filename, "wb") as f:
+        pickle.dump(
+            df,
+            f,
+        )
+    print("done")
 
-with open(filename, "wb") as f:
-    pickle.dump(
-        df,
-        f,
-    )
+print("finished all datasets")
