@@ -884,3 +884,95 @@ class WWExperiment(Experiment):
         else:
             preds = bst.predict(X_test)
         return preds
+
+class WWRandomDepthExperiment(Experiment):
+    """
+    Experiment class for wildwood's ForestClassifier, for trees with random max_depth
+    """
+
+    def __init__(
+        self,
+        learning_task,
+        n_estimators=100,
+        max_hyperopt_evals=50,
+        categorical_features=None,
+        random_state=0,
+        output_folder_path="./",
+    ):
+        Experiment.__init__(
+            self,
+            learning_task,
+            "ww",
+            n_estimators,
+            max_hyperopt_evals,
+            categorical_features,
+            0,
+            random_state,
+            output_folder_path,
+        )
+        # hard-coded params search space here
+        self.space = {
+            "multiclass": hp.choice("multiclass", ["multinomial", "ovr"]),
+            #"aggregation": hp.choice("aggregation", [True, False]),
+            # "class_weight" : hp.choice("class_weight", [None, "balanced"]),
+            "min_samples_leaf": hp.choice("min_samples_leaf", [1, 5, 10]),
+            "step": hp.loguniform("step", -3, 6),
+            "dirichlet": hp.loguniform("dirichlet", -7, 2),
+            "cat_split_strategy": hp.choice("cat_split_strategy", ["binary", "all"]),
+            "max_features": hp.choice("max_features", ["auto", None]),
+        }
+        # hard-coded default params here
+        self.default_params = {
+            "multiclass": "multinomial",
+            "aggregation": False,
+            "class_weight": None,
+            "min_samples_leaf": 1,
+            "step": 1.0,
+            "dirichlet": 0.5,
+            "cat_split_strategy": "binary",
+            "max_features": "auto",
+        }
+        self.default_params = self.preprocess_params(self.default_params)
+        self.title = "WildWood"
+
+    def preprocess_params(self, params):
+        params_ = params.copy()
+        params_.update(
+            {
+                "n_estimators": self.n_estimators,
+                "random_state": self.random_state,
+                "min_samples_split": 2 * params_["min_samples_leaf"],
+            }
+        )
+        return params_
+
+    def fit(
+        self,
+        params,
+        X_train,
+        y_train,
+        Xy_val,
+        sample_weight,
+        n_estimators=None,
+        seed=None,
+    ):
+        if seed is not None:
+            params.update({"random_state": seed})
+        if n_estimators is not None:
+            params.update({"n_estimators": n_estimators})
+        clf = ForestClassifier(**params, n_jobs=-1)
+        clf.fit(
+            X_train,
+            y_train,
+            sample_weight=sample_weight,
+            categorical_features=self.categorical_features,
+        )
+        return clf, None
+
+    def predict(self, bst, X_test):
+        if self.learning_task == "classification":
+            preds = bst.predict_proba(X_test)
+        else:
+            preds = bst.predict(X_test)
+        return preds
+

@@ -116,6 +116,10 @@ class TreeBase(BaseEstimator, metaclass=ABCMeta):
         else:
             return self._tree_regressor.max_depth
 
+    def get_actual_depth(self):
+        nd = self.get_nodes()
+        return max(nd.depth)
+
     def get_n_leaves(self):
         """Return the number of leaves of the decision tree.
 
