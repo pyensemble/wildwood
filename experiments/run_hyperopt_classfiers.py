@@ -55,6 +55,7 @@ from experiment import (  # noqa: E402
     XGBExperiment,
     CABExperiment,
     WWExperiment,
+    WWRandomDepthExperiment
 )
 
 
@@ -102,6 +103,12 @@ DATA_EXTRACTION = {
         "drop": None,
         "pd_df_categories": False,
     },
+    "WildWoodRdDp": {
+    "one_hot_encode": True,
+    "standardize": False,
+    "drop": None,
+    "pd_df_categories": False,
+},
 }
 
 
@@ -167,6 +174,13 @@ def set_experiment(
             n_estimators=n_estimators,
             max_hyperopt_evals=max_hyperopt_eval,
             categorical_features=categorical_features,
+            random_state=expe_random_states,
+            output_folder_path=output_folder_path,
+        ),
+        "WildWoodRdDp": WWRandomDepthExperiment(
+            learning_task,
+            n_estimators=n_estimators,
+            max_hyperopt_evals=max_hyperopt_eval,
             random_state=expe_random_states,
             output_folder_path=output_folder_path,
         ),
@@ -524,6 +538,7 @@ if __name__ == "__main__":
             "RandomForestClassifier",
             "HistGradientBoostingClassifier",
             "WildWood",
+            "WildWoodRdDp",
         ],
     )
     parser.add_argument(

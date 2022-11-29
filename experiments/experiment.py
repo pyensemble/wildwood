@@ -902,7 +902,7 @@ class WWRandomDepthExperiment(Experiment):
         Experiment.__init__(
             self,
             learning_task,
-            "ww",
+            "ww_rd_dp",
             n_estimators,
             max_hyperopt_evals,
             categorical_features,
@@ -913,10 +913,10 @@ class WWRandomDepthExperiment(Experiment):
         # hard-coded params search space here
         self.space = {
             "multiclass": hp.choice("multiclass", ["multinomial", "ovr"]),
-            #"aggregation": hp.choice("aggregation", [True, False]),
+            # "aggregation": hp.choice("aggregation", [True, False]),
             # "class_weight" : hp.choice("class_weight", [None, "balanced"]),
             "min_samples_leaf": hp.choice("min_samples_leaf", [1, 5, 10]),
-            "step": hp.loguniform("step", -3, 6),
+            # "step": hp.loguniform("step", -3, 6),
             "dirichlet": hp.loguniform("dirichlet", -7, 2),
             "cat_split_strategy": hp.choice("cat_split_strategy", ["binary", "all"]),
             "max_features": hp.choice("max_features", ["auto", None]),
@@ -966,6 +966,7 @@ class WWRandomDepthExperiment(Experiment):
             y_train,
             sample_weight=sample_weight,
             categorical_features=self.categorical_features,
+            randomized_depth=True
         )
         return clf, None
 

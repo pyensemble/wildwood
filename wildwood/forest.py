@@ -256,7 +256,7 @@ class ForestBase(BaseEstimator):
         self._random_states_bootstrap = _random_states
         self._random_states_trees = _random_states
 
-    def fit(self, X, y, sample_weight=None, categorical_features=None):
+    def fit(self, X, y, sample_weight=None, categorical_features=None, randomized_depth=False):
         """
         Trains WildWood's forest predictor from the training set (X, y).
 
@@ -381,7 +381,7 @@ class ForestBase(BaseEstimator):
                     step=self.step,
                     aggregation=self.aggregation,
                     dirichlet=self.dirichlet,
-                    max_depth=max_depth_,
+                    max_depth=max_depth_ if not randomized_depth else int(30 + 6*np.random.randn()),
                     min_samples_split=self.min_samples_split,
                     min_samples_leaf=self.min_samples_leaf,
                     categorical_features=self.categorical_features,
@@ -405,7 +405,7 @@ class ForestBase(BaseEstimator):
                     loss=self.loss,
                     step=self.step,
                     aggregation=self.aggregation,
-                    max_depth=max_depth_,
+                    max_depth=max_depth_ if not randomized_depth else int(30 + 6*np.random.randn()),
                     min_samples_split=self.min_samples_split,
                     min_samples_leaf=self.min_samples_leaf,
                     categorical_features=self.categorical_features,
