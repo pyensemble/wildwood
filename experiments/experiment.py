@@ -332,9 +332,9 @@ class RFExperiment(Experiment):
 
     def predict(self, bst, X_test):
         if self.learning_task == "classification":
-            preds = bst.predict_proba(X_test)
+            preds = bst.predict_proba(np.nan_to_num(X_test))
         else:
-            preds = bst.predict(X_test)
+            preds = bst.predict(np.nan_to_num(X_test))
         return preds
 
 
