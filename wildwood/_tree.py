@@ -1062,11 +1062,11 @@ def tree_regressor_weighted_depth(tree, features_bitarray, step):
     """
     n_samples = features_bitarray.n_samples
     nodes = tree.nodes
-    out = np.zeros(n_samples, dtype=float64)
+    out = np.zeros(n_samples, dtype=float32)
     for i in range(n_samples):
         idx_current = find_leaf(tree, features_bitarray, i)
         node = nodes[idx_current]
-        weighted_depth = float64(node["depth"])
+        weighted_depth = float32(node["depth"])
         while idx_current != 0:
             idx_current = nodes[idx_current]["parent"]
             node = nodes[idx_current]
