@@ -440,7 +440,7 @@ class Encoder(TransformerMixin, BaseEstimator):
                     col_categories_at_fit = categories[col_idx]
                     # Use the same categories as the ones used in fit and replace
                     # unknown categories by missing values.
-                    col = col.cat.set_categories(col_categories_at_fit, inplace=False)
+                    col = col.cat.set_categories(col_categories_at_fit)#, inplace=False)
 
                     if col.hasnans:
                         # Missing values are now either actual missing values or unknown
@@ -471,7 +471,7 @@ class Encoder(TransformerMixin, BaseEstimator):
                 col = X_dict[col_idx]
                 if is_categorical_[col_idx]:
                     col_categories_at_fit = categories[col_idx]
-                    col = col.cat.set_categories(col_categories_at_fit, inplace=False)
+                    col = col.cat.set_categories(col_categories_at_fit)#, inplace=False)
                     if col.hasnans:
                         # Here, missing values can only come from unknown
                         # categories. Internally, the code used by pandas for missing

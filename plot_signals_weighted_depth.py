@@ -9,7 +9,9 @@ import pandas as pd
 from wildwood.datasets import get_signal, make_regression
 from wildwood.forest import ForestRegressor
 
-from wildwood._binning import Binner
+#from wildwood._binning import Binner
+
+from wildwood.preprocessing import Encoder
 
 pd.set_option("display.max_columns", 20)
 pd.set_option("display.precision", 2)
@@ -67,8 +69,10 @@ def plot_weighted_depth(signal):
     X_train = X_train.reshape(-1, 1)
     X_test = np.linspace(0, 1, num=n_samples_test).reshape(-1, 1)
 
-    binner = Binner().fit(X_train)
-    X_test_binned = binner.transform(X_test)
+    encoder = Encoder()
+    encoder.fit(X_train)
+    binner = encoder
+    X_test_binned = np.arange(256)#binner.transform(X_test)
 
     reg = ForestRegressor(
         random_state=random_state,
@@ -141,7 +145,7 @@ def plot_weighted_depth(signal):
         bbox_to_anchor=(0.5, 1.0),
         ncol=3,
     )
-    # plt.savefig(filename)
+    plt.savefig(filename)
     logging.info("Saved the decision functions in '%s'" % filename)
 
 

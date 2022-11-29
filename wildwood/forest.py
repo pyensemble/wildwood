@@ -10,6 +10,7 @@ import numpy as np
 from joblib import Parallel, effective_n_jobs
 
 from tqdm import tqdm
+from math import exp
 
 from scipy.sparse import issparse
 
@@ -35,7 +36,9 @@ __all__ = ["ForestClassifier", "ForestRegressor"]
 
 
 from wildwood.tree import TreeClassifier, TreeRegressor
+from ._tree import tree_regressor_weighted_depth
 
+import numba
 
 def _generate_train_valid_samples(random_state, n_samples):
     """
@@ -150,6 +153,7 @@ def _accumulate_prediction(predict, features_bitarray, out, lock, label_class_co
 
 def _compute_weighted_depth(weighted_depth, X, out, lock, tree_idx):
     tree_weighted_depth = weighted_depth(X)
+
     with lock:
         out[tree_idx] = tree_weighted_depth
 
@@ -1621,7 +1625,8 @@ class ForestRegressor(ForestBase, RegressorMixin):
     def _weighted_depth(self, X):
         X_binned, n_jobs, lock = self._predict_helper(X)
         all_weighted_depths = np.zeros(
-            (self.n_estimators, X_binned.shape[0]), dtype=np.float32
+            #(self.n_estimators, X_binned.shape[0]), dtype=np.float32
+            (self.n_estimators, X_binned.n_samples), dtype=np.float32
         )
         Parallel(
             n_jobs=n_jobs,
@@ -1629,7 +1634,8 @@ class ForestRegressor(ForestBase, RegressorMixin):
             **_joblib_parallel_args(require="sharedmem"),
         )(
             delayed(_compute_weighted_depth)(
-                e._weighted_depth, X_binned, all_weighted_depths, lock, tree_idx
+                e.weighted_depth, X_binned, all_weighted_depths, lock, tree_idx
+                #tree_regressor_weighted_depth, X_binned, all_weighted_depths, lock, tree_idx, e, self.step
             )
             for tree_idx, e in enumerate(self.trees)
         )

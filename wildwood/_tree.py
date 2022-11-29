@@ -18,6 +18,7 @@ from numba import (
     intp,
     uintp,
     float32,
+    float64,
     void,
     optional,
 )
@@ -996,8 +997,29 @@ def tree_regressor_predict(tree, features_bitarray, aggregation, step):
 #  an aggregation option
 
 
+# @jit(
+#     float32[:](TreeRegressorType, FeaturesBitArrayType, float32),
+#     nopython=NOPYTHON,
+#     nogil=NOGIL,
+#     boundscheck=BOUNDSCHECK,
+#     fastmath=FASTMATH,
+#     locals={
+#         "n_samples": uintp,
+#         "nodes": node_type[::1],
+#         "out": float32[::1],
+#         "i": uintp,
+#         "idx_current": uintp,
+#         "node": node_type,
+#         "weighted_depth": float32,
+#         "node_pred": float32,
+#         "loss": float32,
+#         "log_weight_tree": float32,
+#         "alpha": float32,
+#     },
+# )
+
 @jit(
-    float32[:](TreeRegressorType, FeaturesBitArrayType, float32),
+    float64[:](TreeRegressorType, FeaturesBitArrayType, float64),
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
@@ -1005,15 +1027,15 @@ def tree_regressor_predict(tree, features_bitarray, aggregation, step):
     locals={
         "n_samples": uintp,
         "nodes": node_type[::1],
-        "out": float32[::1],
+        "out": float64[::1],
         "i": uintp,
         "idx_current": uintp,
         "node": node_type,
-        "weighted_depth": float32,
-        "node_pred": float32,
-        "loss": float32,
-        "log_weight_tree": float32,
-        "alpha": float32,
+        "weighted_depth": float64,
+        "node_pred": float64,
+        "loss": float64,
+        "log_weight_tree": float64,
+        "alpha": float64,
     },
 )
 def tree_regressor_weighted_depth(tree, features_bitarray, step):
@@ -1040,11 +1062,11 @@ def tree_regressor_weighted_depth(tree, features_bitarray, step):
     """
     n_samples = features_bitarray.n_samples
     nodes = tree.nodes
-    out = np.zeros(n_samples, dtype=float32)
+    out = np.zeros(n_samples, dtype=float64)
     for i in range(n_samples):
         idx_current = find_leaf(tree, features_bitarray, i)
         node = nodes[idx_current]
-        weighted_depth = float32(node["depth"])
+        weighted_depth = float64(node["depth"])
         while idx_current != 0:
             idx_current = nodes[idx_current]["parent"]
             node = nodes[idx_current]
