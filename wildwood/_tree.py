@@ -997,8 +997,9 @@ def tree_regressor_predict(tree, features_bitarray, aggregation, step):
 #  an aggregation option
 
 
+
 # @jit(
-#     float32[:](TreeRegressorType, FeaturesBitArrayType, float32),
+#     float64[:](TreeRegressorType, FeaturesBitArrayType, float64),
 #     nopython=NOPYTHON,
 #     nogil=NOGIL,
 #     boundscheck=BOUNDSCHECK,
@@ -1006,20 +1007,19 @@ def tree_regressor_predict(tree, features_bitarray, aggregation, step):
 #     locals={
 #         "n_samples": uintp,
 #         "nodes": node_type[::1],
-#         "out": float32[::1],
+#         "out": float64[::1],
 #         "i": uintp,
 #         "idx_current": uintp,
 #         "node": node_type,
-#         "weighted_depth": float32,
-#         "node_pred": float32,
-#         "loss": float32,
-#         "log_weight_tree": float32,
-#         "alpha": float32,
+#         "weighted_depth": float64,
+#         "node_pred": float64,
+#         "loss": float64,
+#         "log_weight_tree": float64,
+#         "alpha": float64,
 #     },
 # )
-
 @jit(
-    float64[:](TreeRegressorType, FeaturesBitArrayType, float64),
+    float32[:](TreeRegressorType, FeaturesBitArrayType, float32),
     nopython=NOPYTHON,
     nogil=NOGIL,
     boundscheck=BOUNDSCHECK,
@@ -1027,15 +1027,15 @@ def tree_regressor_predict(tree, features_bitarray, aggregation, step):
     locals={
         "n_samples": uintp,
         "nodes": node_type[::1],
-        "out": float64[::1],
+        "out": float32[::1],
         "i": uintp,
         "idx_current": uintp,
         "node": node_type,
-        "weighted_depth": float64,
-        "node_pred": float64,
-        "loss": float64,
-        "log_weight_tree": float64,
-        "alpha": float64,
+        "weighted_depth": float32,
+        "node_pred": float32,
+        "loss": float32,
+        "log_weight_tree": float32,
+        "alpha": float32,
     },
 )
 def tree_regressor_weighted_depth(tree, features_bitarray, step):
