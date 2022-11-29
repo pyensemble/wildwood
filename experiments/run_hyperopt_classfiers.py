@@ -211,6 +211,7 @@ def run_hyperopt(
     col_data = []
     col_classifier = []
     col_fit_time = []
+    col_fit_time_std = []
     col_predict_time = []
     col_roc_auc = []
     col_roc_auc_weighted = []
@@ -455,6 +456,7 @@ def run_hyperopt(
     col_accuracy_train.append(accuracy_train)
 
     col_fit_time.append(np.mean(fit_time_list))
+    col_fit_time_std.append(np.std(fit_time_list))
     col_predict_time.append(np.mean(predict_time_list))
     col_log_loss_std.append(np.std(log_loss_list))
     col_roc_auc_std.append(np.std(roc_auc_list))
@@ -476,6 +478,7 @@ def run_hyperopt(
             "dataset": col_data,
             "classifier": col_classifier,
             "fit_time": col_fit_time,
+            "fit_time_std": col_fit_time_std,
             "predict_time": col_predict_time,
             "roc_auc": col_roc_auc,
             "roc_auc_w": col_roc_auc_weighted,

@@ -283,11 +283,12 @@ class RFExperiment(Experiment):
 
         # hard-coded params search space here
         self.space = {
-            "max_features": hp.choice("max_features", [None, "sqrt"]),
+            "max_features": hp.choice("max_features", [None, "sqrt", "log2", 0.25, 0.5, 0.75]),
+            "max_depth": hp.choice("max_depth", [None, "sqrt", "log2"]),
             "min_samples_leaf": hp.choice("min_samples_leaf", [1, 5, 10]),
         }
         # hard-coded default params here
-        self.default_params = {"max_features": "sqrt", "min_samples_leaf": 1}
+        self.default_params = {"max_features": "sqrt", "min_samples_leaf": 1, "max_depth": None}
         self.default_params = self.preprocess_params(self.default_params)
         self.title = "sklearn-RandomForest"
 
@@ -297,7 +298,7 @@ class RFExperiment(Experiment):
             {
                 "n_estimators": self.n_estimators,
                 "random_state": self.random_state,
-                "max_depth": None,
+                # "max_depth": None,
                 "min_samples_split": 2 * params["min_samples_leaf"],
             }
         )
@@ -319,6 +320,12 @@ class RFExperiment(Experiment):
             params.update({"random_state": seed})
         if n_estimators is not None:
             params.update({"n_estimators": n_estimators})
+
+        if params["max_depth"] == "sqrt":
+            params["max_depth"] = max(1, int(np.sqrt(len(X_train))))
+        elif params["max_depth"] == "log2":
+            params["max_depth"] = max(1, int(np.log2(len(X_train))))
+
         clf = RandomForestClassifier(**params, n_jobs=-1)
         clf.fit(X_train, y_train, sample_weight=sample_weight)
         return clf, None
