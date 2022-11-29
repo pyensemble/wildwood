@@ -347,8 +347,12 @@ def run_hyperopt(
         fit_time_list.append(fit_time)
         # col_fit_time.append(fit_time)
         tic = time()
-        y_scores = model.predict_proba(X_test)
-        y_scores_train = model.predict_proba(X_train)
+        if dataset.name == "kick":
+            y_scores = model.predict_proba(np.nan_to_num(X_test))
+            y_scores_train = model.predict_proba(np.nan_to_num(X_train))
+        else:
+            y_scores = model.predict_proba(X_test)
+            y_scores_train = model.predict_proba(X_train)
         toc = time()
         predict_time = toc - tic
         predict_time_list.append(predict_time)
