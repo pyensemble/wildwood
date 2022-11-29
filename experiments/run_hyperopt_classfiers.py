@@ -272,6 +272,8 @@ def run_hyperopt(
     ]:
         X_train = np.nan_to_num(X_train)
         X_test = np.nan_to_num(X_test)
+        y_train = np.nan_to_num(y_train)
+        y_test = np.nan_to_num(y_test)
     # END special cases
 
     X_tr, X_val, y_tr, y_val = train_test_split(
