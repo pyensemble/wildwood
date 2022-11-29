@@ -327,7 +327,7 @@ class RFExperiment(Experiment):
             params["max_depth"] = max(1, int(np.log2(len(X_train))))
 
         clf = RandomForestClassifier(**params, n_jobs=-1)
-        clf.fit(X_train, y_train, sample_weight=sample_weight)
+        clf.fit(np.nan_to_num(X_train), np.nan_to_num(y_train), sample_weight=sample_weight)
         return clf, None
 
     def predict(self, bst, X_test):
