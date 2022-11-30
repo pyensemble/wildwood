@@ -195,7 +195,7 @@ class ForestBase(BaseEstimator):
         max_features="auto",
         subsample=int(2e5),
         cat_min_categories="log",
-        handle_unknown="error",
+        handle_unknown="consider_missing",
         n_jobs=1,
         random_state=None,
         verbose=False,
