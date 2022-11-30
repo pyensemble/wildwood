@@ -869,7 +869,7 @@ class WWExperiment(Experiment):
             params.update({"random_state": seed})
         if n_estimators is not None:
             params.update({"n_estimators": n_estimators})
-        clf = ForestClassifier(**params, n_jobs=-1)
+        clf = ForestClassifier(**params, handle_unknown="consider_missing", n_jobs=-1)
         clf.fit(
             X_train,
             y_train,
@@ -960,7 +960,7 @@ class WWRandomDepthExperiment(Experiment):
             params.update({"random_state": seed})
         if n_estimators is not None:
             params.update({"n_estimators": n_estimators})
-        clf = ForestClassifier(**params, n_jobs=-1)
+        clf = ForestClassifier(**params, handle_unknown="consider_missing", n_jobs=-1)
         clf.fit(
             X_train,
             y_train,
