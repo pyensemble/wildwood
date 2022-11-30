@@ -130,12 +130,14 @@ class FeaturesBitArray(object):
                 self.n_bits[j] = ceil(np.log2(max_value + 1))
                 self.n_values_in_words[j] = floor(64 / self.n_bits[j])
                 if self.n_bits[j] == 0:
-                    print("n_bits is zero for j = %d" % j)
+                    print("n_bits is zero for j = ")
+                    print(j)
                 self.bitmasks[j] = (1 << self.n_bits[j]) - 1
 
             n_words = ceil(n_samples / self.n_values_in_words[j])
             if self.n_values_in_words[j] == 0:
-                print("n_values is zero for j = %d" % j)
+                print("n_values is zero for j = ")
+                print(j)
             offset += n_words
             self.offsets[j + 1] = offset
 
