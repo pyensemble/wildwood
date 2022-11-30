@@ -78,7 +78,7 @@ def set_classifier(clf_name, fit_seed, n_jobs=-1):
             allow_writing_files=False,
         ),
         "WildWood": ForestClassifier(
-            n_estimators=10, n_jobs=n_jobs, random_state=fit_seed
+            n_estimators=10, n_jobs=n_jobs, random_state=fit_seed, handle_unknown="consider_missing"
         ),
     }
     return classifier_setting[clf_name]
