@@ -905,35 +905,35 @@ class WWRandomDepthExperiment(Experiment):
             "ww_rd_dp",
             n_estimators,
             max_hyperopt_evals,
-            categorical_features,
+            None,# no categorical features
             0,
             random_state,
             output_folder_path,
         )
         # hard-coded params search space here
         self.space = {
-            "multiclass": hp.choice("multiclass", ["multinomial", "ovr"]),
+            # "multiclass": hp.choice("multiclass", ["multinomial", "ovr"]),
             # "aggregation": hp.choice("aggregation", [True, False]),
             # "class_weight" : hp.choice("class_weight", [None, "balanced"]),
             "min_samples_leaf": hp.choice("min_samples_leaf", [1, 5, 10]),
             # "step": hp.loguniform("step", -3, 6),
-            "dirichlet": hp.loguniform("dirichlet", -7, 2),
-            "cat_split_strategy": hp.choice("cat_split_strategy", ["binary", "all"]),
-            "max_features": hp.choice("max_features", ["auto", None]),
+            # "dirichlet": hp.loguniform("dirichlet", -7, 2),
+            # "cat_split_strategy": hp.choice("cat_split_strategy", ["binary", "all"]),
+            "max_features": hp.choice("max_features", ["auto", "log2", None]),
         }
         # hard-coded default params here
         self.default_params = {
-            "multiclass": "multinomial",
+            # "multiclass": "multinomial",
             "aggregation": False,
             "class_weight": None,
             "min_samples_leaf": 1,
-            "step": 1.0,
-            "dirichlet": 0.5,
-            "cat_split_strategy": "binary",
+            # "step": 1.0,
+            # "dirichlet": 0.5,
+            # "cat_split_strategy": "binary",
             "max_features": "auto",
         }
         self.default_params = self.preprocess_params(self.default_params)
-        self.title = "WildWood"
+        self.title = "WildWood_RandomDepth"
 
     def preprocess_params(self, params):
         params_ = params.copy()
@@ -962,18 +962,18 @@ class WWRandomDepthExperiment(Experiment):
             params.update({"n_estimators": n_estimators})
         clf = ForestClassifier(**params, handle_unknown="consider_missing", n_jobs=-1)
         clf.fit(
-            X_train,
-            y_train,
+            np.nan_to_num(X_train),
+            np.nan_to_num(y_train),
             sample_weight=sample_weight,
-            categorical_features=self.categorical_features,
+            categorical_features=None,  # self.categorical_features,
             randomized_depth=True
         )
         return clf, None
 
     def predict(self, bst, X_test):
         if self.learning_task == "classification":
-            preds = bst.predict_proba(X_test)
+            preds = bst.predict_proba(np.nan_to_num(X_test))
         else:
-            preds = bst.predict(X_test)
+            preds = bst.predict(np.nan_to_num(X_test))
         return preds
 

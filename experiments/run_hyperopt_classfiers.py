@@ -104,11 +104,11 @@ DATA_EXTRACTION = {
         "pd_df_categories": False,
     },
     "WildWoodRdDp": {
-    "one_hot_encode": True,
-    "standardize": False,
-    "drop": None,
-    "pd_df_categories": False,
-},
+        "one_hot_encode": True,
+        "standardize": False,
+        "drop": None,
+        "pd_df_categories": False,
+    },
 }
 
 
