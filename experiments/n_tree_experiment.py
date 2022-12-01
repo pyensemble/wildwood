@@ -36,17 +36,29 @@ random_state = 42
 classifiers = [
     lambda n: (
         "RFW",
-        RandomForestClassifier(n_estimators=n, n_jobs=-1, random_state=random_state,),
+        RandomForestClassifier(
+            n_estimators=n,
+            n_jobs=-1,
+            random_state=random_state,
+        ),
     ),
     lambda n: (
         "WildWood",
         ForestClassifier(
-            n_estimators=n, multiclass="ovr", n_jobs=-1, random_state=random_state,
+            n_estimators=n,
+            multiclass="multinomial",
+            n_jobs=-1,
+            random_state=random_state,
+            handle_unknown="consider_missing",
         ),
     ),
     lambda n: (
         "ET",
-        ExtraTreesClassifier(n_estimators=n, n_jobs=-1, random_state=random_state,),
+        ExtraTreesClassifier(
+            n_estimators=n,
+            n_jobs=-1,
+            random_state=random_state,
+        ),
     ),
 ]
 
@@ -95,8 +107,9 @@ def fit_kwargs_generator(clf_name, y_train, dataset):
 
 
 # Number of time each experiment is repeated, one for each seed (leading
-data_random_states = list(range(42, 42 + 2))
+# data_random_states = list(range(42, 42 + 2))
 # data_random_states = list(range(42, 42 + 20))
+data_random_states = [42, 43, 44, 46, 47, 49, 50, 52, 53, 55]
 
 col_data = []
 col_classifier = []
@@ -118,6 +131,7 @@ for x, n in enumerate(n_treess):
     for Clf in classifiers:
         clf_title, clf = Clf(n)
         clf_name = clf.__class__.__name__
+        logging.info("classifier : %s , n_trees = %d" % (clf_name, n))
         for loader in loaders[:n_datasets]:
             dataset = loader()
             data_name = dataset.name
@@ -212,5 +226,5 @@ now = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
 commit = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])
 commit = commit.decode("utf-8").strip()
 
-with open("experiments/ntrees_experiment_" + now + ".pickle", "wb") as f:
+with open("ntrees_experiment_" + now + ".pickle", "wb") as f:
     pkl.dump({"datetime": now, "commit": commit, "results": results}, f)
