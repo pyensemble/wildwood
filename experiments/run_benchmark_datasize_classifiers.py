@@ -205,11 +205,14 @@ def run_default_params_exp(
 
             if clf_name == "WildWood":  # pre-compile wildwood
                 clf.fit(X_train[:100], y_train[:100])
+            if hasattr(X_test, "flags"):  # if it is a numpy array
+                X_test = np.nan_to_num(X_test)
 
             if prop != 1.0:
                 if hasattr(X_train, "flags"):
                     X_train_frac = np.nan_to_num(X_train[:n_train].copy())
                     y_train_frac = np.nan_to_num(y_train[:n_train].copy())
+                    X_test = np.nan_to_num(X_test)
                     # print(X_train.flags)
                     # print(y_train.flags)
                     # print(X_train[:n_train].copy().flags)
