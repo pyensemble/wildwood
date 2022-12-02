@@ -208,8 +208,8 @@ def run_default_params_exp(
 
             if prop != 1.0:
                 if hasattr(X_train, "flags"):
-                    X_train_frac = X_train[:n_train].copy()
-                    y_train_frac = y_train[:n_train].copy()
+                    X_train_frac = np.nan_to_num(X_train[:n_train].copy())
+                    y_train_frac = np.nan_to_num(y_train[:n_train].copy())
                     # print(X_train.flags)
                     # print(y_train.flags)
                     # print(X_train[:n_train].copy().flags)
@@ -218,8 +218,8 @@ def run_default_params_exp(
                     X_train_frac = X_train[:n_train]
                     y_train_frac = y_train[:n_train]
             else:
-                X_train_frac = X_train
-                y_train_frac = y_train
+                X_train_frac = np.nan_to_num(X_train)
+                y_train_frac = np.nan_to_num(y_train)
 
             tic = timer()
             clf.fit(X_train_frac, y_train_frac, **fit_kwargs_generator(clf_name, dataset))
