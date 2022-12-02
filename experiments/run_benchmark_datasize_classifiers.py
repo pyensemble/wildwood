@@ -33,11 +33,49 @@ import lightgbm as lgb
 from sklearn.experimental import enable_hist_gradient_boosting
 from sklearn.ensemble import HistGradientBoostingClassifier
 
-from run_hyperopt_classfiers import DATA_EXTRACTION, set_dataloader
+from run_hyperopt_classfiers import set_dataloader
 
 sys.path.extend([".", ".."])
 from wildwood.forest import ForestClassifier  # noqa: E402
 
+DATA_EXTRACTION = {
+    "RandomForestClassifier": {
+        "one_hot_encode": True,
+        "standardize": False,
+        "drop": None,
+        "pd_df_categories": False,
+    },
+    "HistGradientBoostingClassifier": {
+        "one_hot_encode": False,
+        "standardize": False,
+        "drop": None,
+        "pd_df_categories": False,
+    },
+    "XGBClassifier": {
+        "one_hot_encode": True,
+        "standardize": False,
+        "drop": None,
+        "pd_df_categories": False,
+    },
+    "LGBMClassifier": {
+        "one_hot_encode": False,
+        "standardize": False,
+        "drop": None,
+        "pd_df_categories": True,
+    },
+    "CatBoostClassifier": {
+        "one_hot_encode": True,
+        "standardize": False,
+        "drop": None,
+        "pd_df_categories": False,
+    },
+    "WildWood": {
+        "one_hot_encode": False,
+        "standardize": False,
+        "drop": None,
+        "pd_df_categories": False,
+    },
+}
 
 def fit_kwargs_generator(clf_name, dataset):
     if clf_name == "RandomForestClassifier":
@@ -47,7 +85,8 @@ def fit_kwargs_generator(clf_name, dataset):
     elif clf_name == "XGBClassifier":
         return {}
     elif clf_name == "CatBoostClassifier":
-        return {"cat_features": dataset.categorical_columns, "verbose": False}
+        return {  # "cat_features": dataset.categorical_columns,
+                "verbose": False}
     elif clf_name == "LGBMClassifier":
         return {"categorical_feature": "auto"}
     elif clf_name == "HistGradientBoostingClassifier":
@@ -167,13 +206,28 @@ def run_default_params_exp(
             if clf_name == "WildWood":  # pre-compile wildwood
                 clf.fit(X_train[:100], y_train[:100])
 
+            if prop != 1.0:
+                if hasattr(X_train, "flags"):
+                    X_train_frac = X_train[:n_train].copy()
+                    y_train_frac = y_train[:n_train].copy()
+                    # print(X_train.flags)
+                    # print(y_train.flags)
+                    # print(X_train[:n_train].copy().flags)
+                    # print(y_train[:n_train].copy().flags)
+                else:
+                    X_train_frac = X_train[:n_train]
+                    y_train_frac = y_train[:n_train]
+            else:
+                X_train_frac = X_train
+                y_train_frac = y_train
+
             tic = timer()
-            clf.fit(X_train[:n_train], y_train[:n_train], **fit_kwargs_generator(clf_name, dataset))
+            clf.fit(X_train_frac, y_train_frac, **fit_kwargs_generator(clf_name, dataset))
             toc = timer()
             fit_time = toc - tic
             logging.info("Fitted %s in %.2f seconds" % (clf_name, fit_time))
             col_fit_time.append(fit_time)
-            y_scores_train = clf.predict_proba(X_train)
+            y_scores_train = clf.predict_proba(X_train_frac)
             tic = timer()
             y_scores = clf.predict_proba(X_test)
             toc = timer()
@@ -182,36 +236,36 @@ def run_default_params_exp(
             logging.info("Predict %s in %.2f seconds" % (clf_name, predict_time))
             y_pred = np.argmax(y_scores, axis=1)
             y_pred_train = np.argmax(y_scores_train, axis=1)
-            y_train_binary = LabelBinarizer().fit_transform(y_train)
+            y_train_binary = LabelBinarizer().fit_transform(y_train_frac)
             y_test_binary = LabelBinarizer().fit_transform(y_test)
 
             if learning_task == "binary-classification":
                 roc_auc = roc_auc_score(y_test, y_scores[:, 1])
-                roc_auc_train = roc_auc_score(y_train, y_scores_train[:, 1])
+                roc_auc_train = roc_auc_score(y_train_frac, y_scores_train[:, 1])
                 roc_auc_weighted = roc_auc
                 roc_auc_weighted_train = roc_auc_train
                 avg_precision_score = average_precision_score(y_test, y_scores[:, 1])
                 avg_precision_score_train = average_precision_score(
-                    y_train, y_scores_train[:, 1]
+                    y_train_frac, y_scores_train[:, 1]
                 )
                 avg_precision_score_weighted = avg_precision_score
                 avg_precision_score_weighted_train = avg_precision_score_train
                 log_loss_ = log_loss(y_test, y_scores)
-                log_loss_train_ = log_loss(y_train, y_scores_train)
+                log_loss_train_ = log_loss(y_train_frac, y_scores_train)
                 accuracy = accuracy_score(y_test, y_pred)
-                accuracy_train = accuracy_score(y_train, y_pred_train)
+                accuracy_train = accuracy_score(y_train_frac, y_pred_train)
             elif learning_task == "multiclass-classification":
                 roc_auc = roc_auc_score(
                     y_test, y_scores, multi_class="ovr", average="macro"
                 )
                 roc_auc_train = roc_auc_score(
-                    y_train, y_scores_train, multi_class="ovr", average="macro"
+                    y_train_frac, y_scores_train, multi_class="ovr", average="macro"
                 )
                 roc_auc_weighted = roc_auc_score(
                     y_test, y_scores, multi_class="ovr", average="weighted"
                 )
                 roc_auc_weighted_train = roc_auc_score(
-                    y_train, y_scores_train, multi_class="ovr", average="weighted"
+                    y_train_frac, y_scores_train, multi_class="ovr", average="weighted"
                 )
 
                 avg_precision_score = average_precision_score(y_test_binary, y_scores)
@@ -225,9 +279,9 @@ def run_default_params_exp(
                     y_train_binary, y_scores_train, average="weighted"
                 )
                 log_loss_ = log_loss(y_test, y_scores)
-                log_loss_train_ = log_loss(y_train, y_scores_train)
+                log_loss_train_ = log_loss(y_train_frac, y_scores_train)
                 accuracy = accuracy_score(y_test, y_pred)
-                accuracy_train = accuracy_score(y_train, y_pred_train)
+                accuracy_train = accuracy_score(y_train_frac, y_pred_train)
             else:
                 raise ValueError(
                     "Task %s not understood" % learning_task
