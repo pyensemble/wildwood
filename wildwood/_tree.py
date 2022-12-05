@@ -609,7 +609,6 @@ def add_node_tree(
     node_idx = tree.node_count
     if node_idx >= tree.capacity:
         resize_tree(tree, None)
-
     nodes = tree.nodes
     node = nodes[node_idx]
     node["node_id"] = node_idx
@@ -652,7 +651,9 @@ def add_node_tree(
         bin_partition_start = tree.bin_partitions_end
         bin_partition_end = bin_partition_start + bin_partition_size
         if bin_partition_end > tree.bin_partitions_capacity:
-            resize_tree_bin_partitions(tree, None)
+            # resize_tree_bin_partitions(tree, None)
+            resize_tree_bin_partitions(tree, bin_partition_end+1)
+
         tree.bin_partitions[bin_partition_start:bin_partition_end] = bin_partition[
             :bin_partition_size
         ]
