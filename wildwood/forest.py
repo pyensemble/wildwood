@@ -381,7 +381,7 @@ class ForestBase(BaseEstimator):
                     step=self.step,
                     aggregation=self.aggregation,
                     dirichlet=self.dirichlet,
-                    max_depth=max_depth_ if not randomized_depth else int(30 + 6*np.random.randn()),
+                    max_depth=max_depth_ if not randomized_depth else np.random.randint(3, 51),
                     min_samples_split=self.min_samples_split,
                     min_samples_leaf=self.min_samples_leaf,
                     categorical_features=self.categorical_features,
@@ -405,7 +405,7 @@ class ForestBase(BaseEstimator):
                     loss=self.loss,
                     step=self.step,
                     aggregation=self.aggregation,
-                    max_depth=max_depth_ if not randomized_depth else int(30 + 6*np.random.randn()),
+                    max_depth=max_depth_ if not randomized_depth else np.random.randint(3, 51),
                     min_samples_split=self.min_samples_split,
                     min_samples_leaf=self.min_samples_leaf,
                     categorical_features=self.categorical_features,
@@ -775,6 +775,11 @@ class ForestBase(BaseEstimator):
                 raise ValueError("max_features must be >= 1")
             else:
                 self._max_features = val
+        elif isinstance(val, float):
+            if val > 1.0 or val <= 0.0:
+                raise ValueError("max_features must be <= 1.0 and > 0.0")
+            else:
+                self._max_features = val
         else:
             raise ValueError(
                 "max_features can be either None, an integer value "
@@ -793,7 +798,7 @@ class ForestBase(BaseEstimator):
             else:
                 raise ValueError(
                     "max_features can be either None, an integer "
-                    "value or 'sqrt', 'log2' or 'auto'"
+                    "value, a float between 0 and 1 or 'sqrt', 'log2' or 'auto'"
                 )
         elif max_features is None:
             return n_features
@@ -802,10 +807,15 @@ class ForestBase(BaseEstimator):
                 raise ValueError("max_features must be <= n_features")
             else:
                 return max_features
+        elif isinstance(max_features, float):
+            if max_features > 1.0 or max_features <= 0.0:
+                raise ValueError("max_features must be <= 1.0 and > 0.0")
+            else:
+                return max(1, int(max_features*n_features))
         else:
             raise ValueError(
                 "max_features can be either None, an integer "
-                "value or 'sqrt', 'log2' or 'auto'"
+                "value, a float between 0 and 1 or 'sqrt', 'log2' or 'auto'"
             )
 
     @property

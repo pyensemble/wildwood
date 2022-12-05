@@ -828,7 +828,7 @@ class WWExperiment(Experiment):
             "step": hp.loguniform("step", -3, 6),
             "dirichlet": hp.loguniform("dirichlet", -7, 2),
             "cat_split_strategy": hp.choice("cat_split_strategy", ["binary", "all"]),
-            "max_features": hp.choice("max_features", ["auto", None]),
+            "max_features": hp.choice("max_features", [None, "auto", "log2", 0.25, 0.5, 0.75]),
         }
         # hard-coded default params here
         self.default_params = {
@@ -915,7 +915,7 @@ class WWRandomDepthExperiment(Experiment):
             # "multiclass": hp.choice("multiclass", ["multinomial", "ovr"]),
             # "aggregation": hp.choice("aggregation", [True, False]),
             # "class_weight" : hp.choice("class_weight", [None, "balanced"]),
-            "min_samples_leaf": hp.choice("min_samples_leaf", [1, 5, 10]),
+                "min_samples_leaf": hp.choice("min_samples_leaf", [1, 5, 10]),
             # "step": hp.loguniform("step", -3, 6),
             # "dirichlet": hp.loguniform("dirichlet", -7, 2),
             # "cat_split_strategy": hp.choice("cat_split_strategy", ["binary", "all"]),
