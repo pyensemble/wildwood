@@ -64,10 +64,10 @@ DATA_EXTRACTION = {
         "pd_df_categories": True,
     },
     "CatBoostClassifier": {
-        "one_hot_encode": True,
+        "one_hot_encode": False, #True,
         "standardize": False,
         "drop": None,
-        "pd_df_categories": False,
+        "pd_df_categories": True,#False,
     },
     "WildWood": {
         "one_hot_encode": False,
@@ -85,7 +85,7 @@ def fit_kwargs_generator(clf_name, dataset):
     elif clf_name == "XGBClassifier":
         return {}
     elif clf_name == "CatBoostClassifier":
-        return {  # "cat_features": dataset.categorical_columns,
+        return { "cat_features": dataset.categorical_columns,
                 "verbose": False}
     elif clf_name == "LGBMClassifier":
         return {"categorical_feature": "auto"}
@@ -205,11 +205,11 @@ def run_default_params_exp(
 
             if clf_name == "WildWood":  # pre-compile wildwood
                 clf.fit(X_train[:100], y_train[:100])
-            if hasattr(X_test, "flags"):  # if it is a numpy array
+            if type(X_test)==type(np.zeros(1)):#hasattr(X_test, "flags"):  # if it is a numpy array
                 X_test = np.nan_to_num(X_test)
 
             if prop != 1.0:
-                if hasattr(X_train, "flags"):
+                if type(X_test)==type(np.zeros(1)):#hasattr(X_train, "flags"):
                     X_train_frac = np.nan_to_num(X_train[:n_train].copy())
                     y_train_frac = np.nan_to_num(y_train[:n_train].copy())
                     X_test = np.nan_to_num(X_test)
@@ -221,8 +221,9 @@ def run_default_params_exp(
                     X_train_frac = X_train[:n_train]
                     y_train_frac = y_train[:n_train]
             else:
-                X_train_frac = np.nan_to_num(X_train)
-                y_train_frac = np.nan_to_num(y_train)
+                if type(X_test)==type(np.zeros(1)):#hasattr(X_train, "flags"):
+                    X_train_frac = np.nan_to_num(X_train)
+                    y_train_frac = np.nan_to_num(y_train)
 
             tic = timer()
             clf.fit(X_train_frac, y_train_frac, **fit_kwargs_generator(clf_name, dataset))
