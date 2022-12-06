@@ -85,7 +85,7 @@ def fit_kwargs_generator(clf_name, dataset):
     elif clf_name == "XGBClassifier":
         return {}
     elif clf_name == "CatBoostClassifier":
-        return { "cat_features": dataset.categorical_columns,
+        return {"cat_features": dataset.categorical_columns,
                 "verbose": False}
     elif clf_name == "LGBMClassifier":
         return {"categorical_feature": "auto"}
