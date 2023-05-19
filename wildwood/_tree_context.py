@@ -45,6 +45,9 @@ tree_context_type = [
     # Total sample size
     ("n_samples", uintp),
     #
+    # Maximum node depth
+    ("max_depth", uintp),
+    #
     # Training sample size
     ("n_samples_train", uintp),
     #
@@ -130,6 +133,7 @@ class TreeClassifierContext:
         valid_indices,
         n_classes,
         max_features,
+        max_depth,
         min_samples_split,
         min_samples_leaf,
         aggregation,
@@ -147,6 +151,7 @@ class TreeClassifierContext:
             train_indices,
             valid_indices,
             max_features,
+            max_depth,
             min_samples_split,
             min_samples_leaf,
             aggregation,
@@ -173,6 +178,7 @@ class TreeRegressorContext:
         train_indices,
         valid_indices,
         max_features,
+        max_depth,
         min_samples_split,
         min_samples_leaf,
         aggregation,
@@ -188,6 +194,7 @@ class TreeRegressorContext:
             train_indices,
             valid_indices,
             max_features,
+            max_depth,
             min_samples_split,
             min_samples_leaf,
             aggregation,
@@ -211,6 +218,7 @@ TreeRegressorContextType = get_type(TreeRegressorContext)
             uintp[::1],                 # train_indices
             uintp[::1],                 # valid_indices
             intp,                       # max_features
+            uintp,                       # max_depth
             intp,                       # min_samples_split
             uintp,                      # min_samples_leaf
             boolean,                    # aggregation
@@ -226,6 +234,7 @@ TreeRegressorContextType = get_type(TreeRegressorContext)
             uintp[::1],
             uintp[::1],
             intp,
+            uintp,
             intp,
             uintp,
             boolean,
@@ -247,6 +256,7 @@ def init_tree_context(
     train_indices,
     valid_indices,
     max_features,
+    max_depth,
     min_samples_split,
     min_samples_leaf,
     aggregation,
@@ -276,6 +286,7 @@ def init_tree_context(
     n_samples = features_bitarray.n_samples
     n_features = features_bitarray.n_features
     tree_context.n_samples = n_samples
+    tree_context.max_depth = max_depth
     tree_context.n_features = n_features
     tree_context.n_samples_train = train_indices.shape[0]
     tree_context.n_samples_valid = valid_indices.shape[0]
