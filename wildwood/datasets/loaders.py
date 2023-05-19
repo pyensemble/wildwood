@@ -186,6 +186,222 @@ def load_cardio(raw=False):
 #
 #     df.info()
 
+def load_diabetes_cl():
+    dtype = {
+        'Pregnancies': np.int32,
+        'Glucose': np.float32,
+        'BloodPressure': np.float32,
+        'SkinThickness': np.float32,
+        'Insulin': np.float32,
+        'BMI': np.float32,
+        'DiabetesPedigreeFunction': np.float32,
+        'Age': np.int32,
+    }
+    # downloaded from https://www.kaggle.com/datasets/uciml/pima-indians-diabetes-database
+    label_column = 'Outcome'
+    filename = "diabetes.csv"
+
+    dataset = Dataset.from_dtype(
+        name="diabetes_cl",
+        task="binary-classification",
+        label_column=label_column,
+        dtype=dtype,
+    )
+    return dataset.load_from_csv(filename, dtype=dtype)
+
+def load_ionosphere():
+    from string import ascii_lowercase
+    dtype = {"column_"+x: np.float32 for x in list(ascii_lowercase) + ["a" + y for y in ascii_lowercase[:8]]}
+    del dtype["column_b"] # this column is completely constant
+
+    # downloaded from https://www.kaggle.com/datasets/prashant111/ionosphere?select=ionosphere_data.csv
+    label_column = 'column_ai'
+    drop_columns = ["column_b"]
+    filename = "ionosphere_data.xls"
+
+    dataset = Dataset.from_dtype(
+        name="ionosphere",
+        task="binary-classification",
+        drop_columns=drop_columns,
+        label_column=label_column,
+        dtype=dtype,
+    )
+    return dataset.load_from_csv(filename, dtype=dtype)
+
+def load_phoneme():
+
+    dtype = {"V"+str(x): np.float32 for x in range(1, 6)}
+
+    # downloaded from https://www.openml.org/search?type=data&sort=runs&status=active&format=ARFF&qualities.NumberOfClasses=%3D_2&qualities.NumberOfFeatures=lte_10&id=1489
+    label_column = 'Class'
+    filename = "phoneme.csv.gz"
+
+    dataset = Dataset.from_dtype(
+        name="phoneme",
+        task="binary-classification",
+        label_column=label_column,
+        dtype=dtype,
+    )
+    return dataset.load_from_csv(filename, dtype=dtype)
+
+
+def load_wilt2():
+
+    dtype = {x: np.float32 for x in ['GLCM_Pan', 'Mean_G', 'Mean_R', 'Mean_NIR', 'SD_Plan']}
+    # downloaded from https://www.openml.org/search?type=data&sort=runs&status=active&format=ARFF&qualities.NumberOfClasses=%3D_2&qualities.NumberOfFeatures=lte_10&id=40983
+    label_column = 'class'
+    filename = "wilt2.csv.gz"
+
+    dataset = Dataset.from_dtype(
+        name="wilt2",
+        task="binary-classification",
+        label_column=label_column,
+        dtype=dtype,
+    )
+    return dataset.load_from_csv(filename, dtype=dtype)
+
+def load_banknote():
+
+    dtype = {"V"+str(x): np.float32 for x in range(1, 5)}
+
+    # downloaded from https://www.openml.org/search?type=data&sort=runs&status=active&format=ARFF&qualities.NumberOfClasses=%3D_2&qualities.NumberOfFeatures=lte_10&id=1462
+    label_column = 'Class'
+    filename = "banknote.csv.gz"
+
+    dataset = Dataset.from_dtype(
+        name="banknote",
+        task="binary-classification",
+        label_column=label_column,
+        dtype=dtype,
+    )
+    return dataset.load_from_csv(filename, dtype=dtype)
+
+def load_heart():
+    dtype = {
+        'age': np.int32,
+        'sex': "category",
+        'cp': "category",
+        'trestbps': np.float32,
+        'chol': np.float32,
+        'fbs': "category",
+        'restecg': "category",
+        'thalach': np.float32,
+        'exang': "category",
+        'oldpeak': np.float32,
+        'slope': "category",
+        'ca': np.int32,
+        'thal': "category",
+    }
+    # downloaded from https://www.kaggle.com/datasets/johnsmith88/heart-disease-dataset?select=heart.csv
+    label_column = 'target'
+    filename = "heart.xls"
+
+    dataset = Dataset.from_dtype(
+        name="heart",
+        task="binary-classification",
+        label_column=label_column,
+        dtype=dtype,
+    )
+    return dataset.load_from_csv(filename, dtype=dtype)
+
+def load_heart2():
+
+    dtype = {x: np.float32 for x in ['age', 'gender', 'impluse', 'pressurehight', 'pressurelow', 'glucose',
+       'kcm', 'troponin']}
+    dtype["age"] = "category"
+    # downloaded from https://data.mendeley.com/datasets/65gxgy2nmg
+    label_column = 'class'
+    filename = "heart2.csv.gz"
+
+    dataset = Dataset.from_dtype(
+        name="heart2",
+        task="binary-classification",
+        label_column=label_column,
+        dtype=dtype,
+    )
+    return dataset.load_from_csv(filename, dtype=dtype)
+
+def load_gamma_particle():
+
+    dtype = {x: np.float32 for x in ['fLength', 'fWidth', 'fSize', 'fConc', 'Conc1', 'Asym', 'M3Long',
+       'M3Trans', 'Alpha', 'Dist']}
+
+    # downloaded from https://www.kaggle.com/datasets/ppb00x/find-gamma-particles-in-magic-telescope
+    label_column = 'class'
+    drop_columns = ["ID"]
+    filename = "gamma_particle.csv"
+
+    dataset = Dataset.from_dtype(
+        name="gamma_particle",
+        task="binary-classification",
+        label_column=label_column,
+        drop_columns=drop_columns,
+        dtype=dtype,
+    )
+    return dataset.load_from_csv(filename, dtype=dtype)
+
+
+def load_cc_default():
+
+    dtype = {'student': "category", 'balance':np.float32, 'income': np.float32}
+
+    # downloaded from https://www.kaggle.com/datasets/d4rklucif3r/defaulter
+    label_column = 'default'
+    drop_columns = ['Unnamed: 0']
+    filename = "credit_card_defaulter.xls"
+
+    dataset = Dataset.from_dtype(
+        name="cc_default",
+        task="binary-classification",
+        label_column=label_column,
+        drop_columns=drop_columns,
+        dtype=dtype,
+    )
+    return dataset.load_from_csv(filename, dtype=dtype)
+
+
+def load_hcv():
+
+    dtype = {x:np.float32 for x in ['ALB', 'ALP', 'ALT', 'AST',
+       'BIL', 'CHE', 'CHOL', 'CREA', 'GGT', 'PROT']}
+    dtype['Age'] = np.int32
+    dtype['Sex'] = "category"
+
+    # downloaded from https://www.kaggle.com/datasets/fedesoriano/hepatitis-c-dataset
+    # Values in column 'Category' which are different from '0=Blood Donor' were replaced by '1=Pathology'
+
+    label_column = 'Category'
+    drop_columns = ['Unnamed: 0']
+    filename = "hepatitis.csv.gz"
+
+    dataset = Dataset.from_dtype(
+        name="hcv",
+        task="binary-classification",
+        label_column=label_column,
+        drop_columns=drop_columns,
+        dtype=dtype,
+    )
+    return dataset.load_from_csv(filename, dtype=dtype)
+
+def load_smoke():
+
+    dtype = {x: np.float32 for x in ['Temperature[C]', 'Humidity[%]', 'TVOC[ppb]',
+       'eCO2[ppm]', 'Raw H2', 'Raw Ethanol', 'Pressure[hPa]', 'PM1.0', 'PM2.5',
+       'NC0.5', 'NC1.0', 'NC2.5', 'CNT']}
+
+    # downloaded from https://www.kaggle.com/datasets/deepcontractor/smoke-detection-dataset
+    label_column = 'Fire Alarm'
+    drop_columns = ['Unnamed: 0', 'UTC']
+    filename = "smoke_detection_iot.csv"
+
+    dataset = Dataset.from_dtype(
+        name="smoke",
+        task="binary-classification",
+        label_column=label_column,
+        drop_columns=drop_columns,
+        dtype=dtype,
+    )
+    return dataset.load_from_csv(filename, dtype=dtype)
 
 def load_churn(raw=False):
     dtype = {

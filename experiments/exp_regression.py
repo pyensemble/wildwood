@@ -13,7 +13,7 @@ sys.path.extend([".", ".."])
 from wildwood.forest import ForestRegressor  # noqa: E402
 from wildwood.datasets import make_regression
 
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import RandomForestRegressor, ExtraTreesRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import (
     mean_squared_error,
@@ -61,6 +61,7 @@ if __name__ == "__main__":
     regressors = {
         "RandomForestRegressor": RandomForestRegressor,
         "WildWood": ForestRegressor,
+        "ExtraTreesRegressor": ExtraTreesRegressor,
     }
 
     for i, seed in enumerate(random_seeds):
@@ -72,6 +73,7 @@ if __name__ == "__main__":
                 X, Y = make_regression(
                     n_samples=n_samples, random_state=seed, noise=noise_sigma, signal=signals[ind]
                 )
+                Y /= np.sqrt(signal_moments[ind][1])
                 X_train, X_test, y_train, y_test = train_test_split(
                     X, Y, test_size=0.2, random_state=seed
                 )

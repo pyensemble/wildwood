@@ -1281,10 +1281,15 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         # Check data
         X = self._validate_X_predict(X)
         # TODO: we can also avoid data binning for predictions...
-        X_binned = self._bin_data(X, is_training_data=False)
-        n_samples, _ = X.shape
+
+
+        #X_binned = self._bin_data(X, is_training_data=False)
+        #n_samples, _ = X.shape
+        features_bitarray, n_jobs, lock = self._predict_helper(X)
+        n_samples = len(X)
+
         n_estimators = len(self.trees)
-        n_jobs, _, _ = _partition_estimators(n_estimators, self.n_jobs)
+        #n_jobs, _, _ = _partition_estimators(n_estimators, self.n_jobs)
         n_classes = self.n_classes_
         probas = np.empty(
             (
@@ -1294,14 +1299,15 @@ class ForestClassifier(ForestBase, ClassifierMixin):
             )
         )
 
-        lock = threading.Lock()
+        #lock = threading.Lock()
         Parallel(
             n_jobs=n_jobs,
             verbose=self.verbose,
             **_joblib_parallel_args(require="sharedmem"),
         )(
             delayed(_get_tree_prediction)(
-                e.predict_proba, X_binned, probas, lock, tree_idx
+                #e.predict_proba, X_binned, probas, lock, tree_idx
+                e.predict_proba, features_bitarray, probas, lock, tree_idx
             )
             for tree_idx, e in enumerate(self.trees)
         )
