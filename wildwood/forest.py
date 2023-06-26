@@ -35,7 +35,7 @@ eps = np.finfo("float32").eps
 __all__ = ["ForestClassifier", "ForestRegressor"]
 
 
-from wildwood.tree import TreeClassifier, TreeRegressor
+from wildwood.tree import TreeClassifier, TreeRegressor, serialize, unserialize
 from ._tree import tree_regressor_weighted_depth
 
 import numba
@@ -255,6 +255,13 @@ class ForestBase(BaseEstimator):
 
         self._random_states_bootstrap = _random_states
         self._random_states_trees = _random_states
+
+    def __getstate__(self):
+        return {k: serialize(v) for k, v in self.__dict__.items()}
+
+    def __setstate__(self, state):
+        self.__dict__ = {k: unserialize(k, v) for k, v in state.items()}
+
 
     def fit(self, X, y, sample_weight=None, categorical_features=None, randomized_depth=False):
         """
@@ -636,6 +643,11 @@ class ForestBase(BaseEstimator):
         n_jobs, _, _ = _partition_estimators(len(self.trees), self.n_jobs)
         lock = threading.Lock()
         return features_bitarray, n_jobs, lock
+
+    def lighten(self):
+        if hasattr(self, "trees"):
+            for tree in self.trees:
+                tree.lighten()
 
     def get_nodes(self, tree_idx):
         return self.trees[tree_idx].get_nodes()
