@@ -304,8 +304,10 @@ class TreeClassifier(ClassifierMixin, TreeBase):
         proba = tree_classifier_predict_proba(
             self._tree_classifier,
             features_bitarray,
-            self._tree_classifier_context.aggregation,
-            self._tree_classifier_context.step,
+            self.aggregation,
+            self.step,
+            # self._tree_classifier_context.aggregation,
+            # self._tree_classifier_context.step,
         )
         return proba
 
@@ -425,8 +427,10 @@ class TreeRegressor(TreeBase, RegressorMixin):
         y_pred = tree_regressor_predict(
             self._tree_regressor,
             X,
-            self._tree_regressor_context.aggregation,
-            self._tree_regressor_context.step,
+            self.aggregation,
+            self.step,
+            # self._tree_regressor_context.aggregation,
+            # self._tree_regressor_context.step,
         )
         return y_pred
 
