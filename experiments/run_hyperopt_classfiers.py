@@ -55,6 +55,7 @@ from experiment import (  # noqa: E402
     XGBExperiment,
     CABExperiment,
     WWExperiment,
+    WWRandomDepthExperiment
 )
 
 
@@ -98,6 +99,12 @@ DATA_EXTRACTION = {
     },
     "WildWood": {
         "one_hot_encode": False,
+        "standardize": False,
+        "drop": None,
+        "pd_df_categories": False,
+    },
+    "WildWoodRdDp": {
+        "one_hot_encode": True,
         "standardize": False,
         "drop": None,
         "pd_df_categories": False,
@@ -170,6 +177,13 @@ def set_experiment(
             random_state=expe_random_states,
             output_folder_path=output_folder_path,
         ),
+        "WildWoodRdDp": WWRandomDepthExperiment(
+            learning_task,
+            n_estimators=n_estimators,
+            max_hyperopt_evals=max_hyperopt_eval,
+            random_state=expe_random_states,
+            output_folder_path=output_folder_path,
+        ),
     }
     return experiment_setting[clf_name]
 
@@ -211,6 +225,7 @@ def run_hyperopt(
     col_data = []
     col_classifier = []
     col_fit_time = []
+    col_fit_time_std = []
     col_predict_time = []
     col_roc_auc = []
     col_roc_auc_weighted = []
@@ -271,6 +286,8 @@ def run_hyperopt(
     ]:
         X_train = np.nan_to_num(X_train)
         X_test = np.nan_to_num(X_test)
+        y_train = np.nan_to_num(y_train)
+        y_test = np.nan_to_num(y_test)
     # END special cases
 
     X_tr, X_val, y_tr, y_val = train_test_split(
@@ -344,8 +361,12 @@ def run_hyperopt(
         fit_time_list.append(fit_time)
         # col_fit_time.append(fit_time)
         tic = time()
-        y_scores = model.predict_proba(X_test)
-        y_scores_train = model.predict_proba(X_train)
+        if dataset.name == "kick":
+            y_scores = model.predict_proba(np.nan_to_num(X_test))
+            y_scores_train = model.predict_proba(np.nan_to_num(X_train))
+        else:
+            y_scores = model.predict_proba(X_test)
+            y_scores_train = model.predict_proba(X_train)
         toc = time()
         predict_time = toc - tic
         predict_time_list.append(predict_time)
@@ -455,6 +476,7 @@ def run_hyperopt(
     col_accuracy_train.append(accuracy_train)
 
     col_fit_time.append(np.mean(fit_time_list))
+    col_fit_time_std.append(np.std(fit_time_list))
     col_predict_time.append(np.mean(predict_time_list))
     col_log_loss_std.append(np.std(log_loss_list))
     col_roc_auc_std.append(np.std(roc_auc_list))
@@ -476,6 +498,7 @@ def run_hyperopt(
             "dataset": col_data,
             "classifier": col_classifier,
             "fit_time": col_fit_time,
+            "fit_time_std": col_fit_time_std,
             "predict_time": col_predict_time,
             "roc_auc": col_roc_auc,
             "roc_auc_w": col_roc_auc_weighted,
@@ -515,6 +538,7 @@ if __name__ == "__main__":
             "RandomForestClassifier",
             "HistGradientBoostingClassifier",
             "WildWood",
+            "WildWoodRdDp",
         ],
     )
     parser.add_argument(

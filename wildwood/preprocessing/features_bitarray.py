@@ -122,7 +122,7 @@ class FeaturesBitArray(object):
         self.offsets[0] = offset
         for j, max_value in enumerate(max_values):
             # Number of bits required to save numbers up to n_modalities
-            if max_value == 1:
+            if max_value <= 1:
                 self.n_bits[j] = 1
                 self.n_values_in_words[j] = 64
                 self.bitmasks[j] = 1

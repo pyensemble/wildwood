@@ -149,6 +149,8 @@ def run_default_params_exp(
     ]:
         X_train = np.nan_to_num(X_train)
         X_test = np.nan_to_num(X_test)
+        y_train = np.nan_to_num(y_train)
+        y_test = np.nan_to_num(y_test)
     # END special cases
 
     print("Run fitting with " + clf_name + " ...")

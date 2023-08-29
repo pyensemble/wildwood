@@ -9,6 +9,7 @@ import sys
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.datasets import make_moons
+from datetime import datetime
 
 sys.path.extend([".", ".."])
 
@@ -152,4 +153,5 @@ random_state = 42
 dataset = make_moons(n_samples=n_samples, noise=0.35, random_state=random_state)
 
 plot_forest_effect(10, dataset)
-plt.savefig("fig_aggregation_effect10.pdf", bbox_tight=0)
+now = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+plt.savefig("fig_aggregation_effect10_" + now + ".pdf")#, bbox_tight=0)

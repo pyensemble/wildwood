@@ -371,7 +371,7 @@ def grow(
         # We don't split a node if it's pure: whenever its impurity computed on
         # training samples is less than min_impurity split
         min_impurity_split = 0.0
-        is_leaf = is_leaf or (impurity <= min_impurity_split)
+        is_leaf = is_leaf or (impurity <= min_impurity_split) or depth >= tree_context.max_depth
 
         # TODO: put back the min_impurity_split option
 

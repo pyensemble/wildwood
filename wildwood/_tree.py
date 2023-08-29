@@ -18,6 +18,7 @@ from numba import (
     intp,
     uintp,
     float32,
+    float64,
     void,
     optional,
 )
@@ -608,7 +609,6 @@ def add_node_tree(
     node_idx = tree.node_count
     if node_idx >= tree.capacity:
         resize_tree(tree, None)
-
     nodes = tree.nodes
     node = nodes[node_idx]
     node["node_id"] = node_idx
@@ -651,7 +651,9 @@ def add_node_tree(
         bin_partition_start = tree.bin_partitions_end
         bin_partition_end = bin_partition_start + bin_partition_size
         if bin_partition_end > tree.bin_partitions_capacity:
-            resize_tree_bin_partitions(tree, None)
+            # resize_tree_bin_partitions(tree, None)
+            resize_tree_bin_partitions(tree, bin_partition_end+1)
+
         tree.bin_partitions[bin_partition_start:bin_partition_end] = bin_partition[
             :bin_partition_size
         ]
@@ -996,6 +998,27 @@ def tree_regressor_predict(tree, features_bitarray, aggregation, step):
 #  an aggregation option
 
 
+
+# @jit(
+#     float64[:](TreeRegressorType, FeaturesBitArrayType, float64),
+#     nopython=NOPYTHON,
+#     nogil=NOGIL,
+#     boundscheck=BOUNDSCHECK,
+#     fastmath=FASTMATH,
+#     locals={
+#         "n_samples": uintp,
+#         "nodes": node_type[::1],
+#         "out": float64[::1],
+#         "i": uintp,
+#         "idx_current": uintp,
+#         "node": node_type,
+#         "weighted_depth": float64,
+#         "node_pred": float64,
+#         "loss": float64,
+#         "log_weight_tree": float64,
+#         "alpha": float64,
+#     },
+# )
 @jit(
     float32[:](TreeRegressorType, FeaturesBitArrayType, float32),
     nopython=NOPYTHON,

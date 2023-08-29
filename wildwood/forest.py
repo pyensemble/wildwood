@@ -7,9 +7,10 @@ from typing import Union
 from warnings import warn
 import threading
 import numpy as np
-from joblib import Parallel, effective_n_jobs
+from joblib import Parallel, effective_n_jobs, parallel_config, delayed
 
 from tqdm import tqdm
+from math import exp
 
 from scipy.sparse import issparse
 
@@ -19,7 +20,7 @@ from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
 from sklearn.utils.validation import check_consistent_length, _check_sample_weight
 from sklearn.preprocessing import LabelEncoder, LabelBinarizer
 
-from sklearn.utils.fixes import _joblib_parallel_args, delayed
+#from sklearn.utils.fixes import _joblib_parallel_args, delayed
 from sklearn.utils.multiclass import check_classification_targets
 from sklearn.utils.validation import check_is_fitted
 
@@ -34,8 +35,10 @@ eps = np.finfo("float32").eps
 __all__ = ["ForestClassifier", "ForestRegressor"]
 
 
-from wildwood.tree import TreeClassifier, TreeRegressor
+from wildwood.tree import TreeClassifier, TreeRegressor, serialize, unserialize
+from ._tree import tree_regressor_weighted_depth
 
+import numba
 
 def _generate_train_valid_samples(random_state, n_samples):
     """
@@ -150,6 +153,7 @@ def _accumulate_prediction(predict, features_bitarray, out, lock, label_class_co
 
 def _compute_weighted_depth(weighted_depth, X, out, lock, tree_idx):
     tree_weighted_depth = weighted_depth(X)
+
     with lock:
         out[tree_idx] = tree_weighted_depth
 
@@ -191,7 +195,7 @@ class ForestBase(BaseEstimator):
         max_features="auto",
         subsample=int(2e5),
         cat_min_categories="log",
-        handle_unknown="error",
+        handle_unknown="consider_missing",
         n_jobs=1,
         random_state=None,
         verbose=False,
@@ -252,7 +256,14 @@ class ForestBase(BaseEstimator):
         self._random_states_bootstrap = _random_states
         self._random_states_trees = _random_states
 
-    def fit(self, X, y, sample_weight=None, categorical_features=None):
+    def __getstate__(self):
+        return {k: serialize(v) for k, v in self.__dict__.items()}
+
+    def __setstate__(self, state):
+        self.__dict__ = {k: unserialize(k, v) for k, v in state.items()}
+
+
+    def fit(self, X, y, sample_weight=None, categorical_features=None, randomized_depth=False):
         """
         Trains WildWood's forest predictor from the training set (X, y).
 
@@ -377,7 +388,7 @@ class ForestBase(BaseEstimator):
                     step=self.step,
                     aggregation=self.aggregation,
                     dirichlet=self.dirichlet,
-                    max_depth=max_depth_,
+                    max_depth=max_depth_ if not randomized_depth else np.random.randint(3, 51),
                     min_samples_split=self.min_samples_split,
                     min_samples_leaf=self.min_samples_leaf,
                     categorical_features=self.categorical_features,
@@ -401,7 +412,7 @@ class ForestBase(BaseEstimator):
                     loss=self.loss,
                     step=self.step,
                     aggregation=self.aggregation,
-                    max_depth=max_depth_,
+                    max_depth=max_depth_ if not randomized_depth else np.random.randint(3, 51),
                     min_samples_split=self.min_samples_split,
                     min_samples_leaf=self.min_samples_leaf,
                     categorical_features=self.categorical_features,
@@ -419,37 +430,39 @@ class ForestBase(BaseEstimator):
         # Parallel loop: use threading since all the numba code releases the GIL
         ovr = is_classifier and self.multiclass == "ovr"
         if self.verbose:
-            trees = Parallel(
-                n_jobs=self.n_jobs,
-                **_joblib_parallel_args(prefer="threads"),
-            )(
-                delayed(_parallel_build_trees)(
-                    tree,
-                    features_bitarray,
-                    y if not ovr else y[tree_idx // n_estimators],
-                    sample_weight_
-                    if not ovr
-                    else sample_weight_[tree_idx // n_estimators],
-                    self._random_states_bootstrap[tree_idx],
+            with parallel_config(prefer="threads"):
+                trees = Parallel(
+                    n_jobs=self.n_jobs,
+                    # **_joblib_parallel_args(prefer="threads"),
+                )(
+                    delayed(_parallel_build_trees)(
+                        tree,
+                        features_bitarray,
+                        y if not ovr else y[tree_idx // n_estimators],
+                        sample_weight_
+                        if not ovr
+                        else sample_weight_[tree_idx // n_estimators],
+                        self._random_states_bootstrap[tree_idx],
+                    )
+                    for tree_idx, tree in enumerate(trees)
                 )
-                for tree_idx, tree in enumerate(trees)
-            )
         else:
-            trees = Parallel(
-                n_jobs=self.n_jobs,
-                **_joblib_parallel_args(prefer="threads"),
-            )(
-                delayed(_parallel_build_trees)(
-                    tree,
-                    features_bitarray,
-                    y if not ovr else y[tree_idx // n_estimators],
-                    sample_weight_
-                    if not ovr
-                    else sample_weight_[tree_idx // n_estimators],
-                    self._random_states_bootstrap[tree_idx],
+            with parallel_config(prefer="threads"):
+                trees = Parallel(
+                    n_jobs=self.n_jobs,
+                    # **_joblib_parallel_args(prefer="threads"),
+                )(
+                    delayed(_parallel_build_trees)(
+                        tree,
+                        features_bitarray,
+                        y if not ovr else y[tree_idx // n_estimators],
+                        sample_weight_
+                        if not ovr
+                        else sample_weight_[tree_idx // n_estimators],
+                        self._random_states_bootstrap[tree_idx],
+                    )
+                    for tree_idx, tree in enumerate(trees)
                 )
-                for tree_idx, tree in enumerate(trees)
-            )
         self.trees = trees
         self._fitted = True
         self._n_samples_ = n_samples
@@ -475,14 +488,15 @@ class ForestBase(BaseEstimator):
         features_bitarray, n_jobs, lock = self._predict_helper(X)
         n_samples = features_bitarray.n_samples
         out = np.empty((len(self.trees), n_samples), dtype=np.uintp)
-        Parallel(
-            n_jobs=self.n_jobs,
-            verbose=self.verbose,
-            **_joblib_parallel_args(prefer="threads"),
-        )(
-            delayed(_parallel_tree_apply)(tree.apply, features_bitarray, out, lock, idx_tree)
-            for idx_tree, tree in enumerate(self.trees)
-        )
+        with parallel_config(prefer="threads"):
+            Parallel(
+                n_jobs=self.n_jobs,
+                verbose=self.verbose,
+                # **_joblib_parallel_args(prefer="threads"),
+            )(
+                delayed(_parallel_tree_apply)(tree.apply, features_bitarray, out, lock, idx_tree)
+                for idx_tree, tree in enumerate(self.trees)
+            )
 
         return out
 
@@ -633,6 +647,11 @@ class ForestBase(BaseEstimator):
         lock = threading.Lock()
         return features_bitarray, n_jobs, lock
 
+    def lighten(self):
+        if hasattr(self, "trees"):
+            for tree in self.trees:
+                tree.lighten()
+
     def get_nodes(self, tree_idx):
         return self.trees[tree_idx].get_nodes()
 
@@ -771,6 +790,11 @@ class ForestBase(BaseEstimator):
                 raise ValueError("max_features must be >= 1")
             else:
                 self._max_features = val
+        elif isinstance(val, float):
+            if val > 1.0 or val <= 0.0:
+                raise ValueError("max_features must be <= 1.0 and > 0.0")
+            else:
+                self._max_features = val
         else:
             raise ValueError(
                 "max_features can be either None, an integer value "
@@ -789,7 +813,7 @@ class ForestBase(BaseEstimator):
             else:
                 raise ValueError(
                     "max_features can be either None, an integer "
-                    "value or 'sqrt', 'log2' or 'auto'"
+                    "value, a float between 0 and 1 or 'sqrt', 'log2' or 'auto'"
                 )
         elif max_features is None:
             return n_features
@@ -798,10 +822,15 @@ class ForestBase(BaseEstimator):
                 raise ValueError("max_features must be <= n_features")
             else:
                 return max_features
+        elif isinstance(max_features, float):
+            if max_features > 1.0 or max_features <= 0.0:
+                raise ValueError("max_features must be <= 1.0 and > 0.0")
+            else:
+                return max(1, int(max_features*n_features))
         else:
             raise ValueError(
                 "max_features can be either None, an integer "
-                "value or 'sqrt', 'log2' or 'auto'"
+                "value, a float between 0 and 1 or 'sqrt', 'log2' or 'auto'"
             )
 
     @property
@@ -1067,7 +1096,7 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         max_bins: int = 256,
         categorical_features=None,
         max_features: Union[None, str, int] = "auto",
-        handle_unknown="error",
+        handle_unknown="consider_missing",
         cat_min_categories="log",
         subsample=int(2e5),
         n_jobs: int = 1,
@@ -1221,20 +1250,21 @@ class ForestClassifier(ForestBase, ClassifierMixin):
 
         ovr = self.multiclass == "ovr"
 
-        Parallel(
-            n_jobs=n_jobs,
-            verbose=self.verbose,
-            **_joblib_parallel_args(require="sharedmem"),
-        )(
-            delayed(_accumulate_prediction)(
-                tree.predict_proba,
-                features_bitarray,
-                all_proba,
-                lock,
-                label_class_col=tree_idx // n_estimators if ovr else None,
+        with parallel_config(require="sharedmem"):
+            Parallel(
+                n_jobs=n_jobs,
+                verbose=self.verbose,
+                # **_joblib_parallel_args(require="sharedmem"),
+            )(
+                delayed(_accumulate_prediction)(
+                    tree.predict_proba,
+                    features_bitarray,
+                    all_proba,
+                    lock,
+                    label_class_col=tree_idx // n_estimators if ovr else None,
+                )
+                for tree_idx, tree in enumerate(self.trees)
             )
-            for tree_idx, tree in enumerate(self.trees)
-        )
 
         if ovr:
             all_proba_sum = all_proba.sum(axis=1)
@@ -1267,10 +1297,15 @@ class ForestClassifier(ForestBase, ClassifierMixin):
         # Check data
         X = self._validate_X_predict(X)
         # TODO: we can also avoid data binning for predictions...
-        X_binned = self._bin_data(X, is_training_data=False)
-        n_samples, _ = X.shape
+
+
+        #X_binned = self._bin_data(X, is_training_data=False)
+        #n_samples, _ = X.shape
+        features_bitarray, n_jobs, lock = self._predict_helper(X)
+        n_samples = len(X)
+
         n_estimators = len(self.trees)
-        n_jobs, _, _ = _partition_estimators(n_estimators, self.n_jobs)
+        #n_jobs, _, _ = _partition_estimators(n_estimators, self.n_jobs)
         n_classes = self.n_classes_
         probas = np.empty(
             (
@@ -1280,17 +1315,19 @@ class ForestClassifier(ForestBase, ClassifierMixin):
             )
         )
 
-        lock = threading.Lock()
-        Parallel(
-            n_jobs=n_jobs,
-            verbose=self.verbose,
-            **_joblib_parallel_args(require="sharedmem"),
-        )(
-            delayed(_get_tree_prediction)(
-                e.predict_proba, X_binned, probas, lock, tree_idx
+        #lock = threading.Lock()
+        with parallel_config(require="sharedmem"):
+            Parallel(
+                n_jobs=n_jobs,
+                verbose=self.verbose,
+                # **_joblib_parallel_args(require="sharedmem"),
+            )(
+                delayed(_get_tree_prediction)(
+                    #e.predict_proba, X_binned, probas, lock, tree_idx
+                    e.predict_proba, features_bitarray, probas, lock, tree_idx
+                )
+                for tree_idx, e in enumerate(self.trees)
             )
-            for tree_idx, e in enumerate(self.trees)
-        )
         return probas
 
     @property
@@ -1561,7 +1598,7 @@ class ForestRegressor(ForestBase, RegressorMixin):
         max_bins: int = 256,
         categorical_features=None,
         max_features: Union[str, int] = "auto",
-        handle_unknown="error",
+        handle_unknown="consider_missing",
         cat_min_categories="log",
         subsample=int(2e5),
         n_jobs: int = 1,
@@ -1607,32 +1644,36 @@ class ForestRegressor(ForestBase, RegressorMixin):
         """
         features_bitarray, n_jobs, lock = self._predict_helper(X)
         all_preds = np.zeros(features_bitarray.n_samples)
-        Parallel(
-            n_jobs=n_jobs,
-            verbose=self.verbose,
-            **_joblib_parallel_args(require="sharedmem"),
-        )(
-            delayed(_accumulate_prediction)(tree.predict, features_bitarray, all_preds, lock)
-            for tree in self.trees
-        )
+        with parallel_config(require="sharedmem"):
+            Parallel(
+                n_jobs=n_jobs,
+                verbose=self.verbose,
+                # **_joblib_parallel_args(require="sharedmem"),
+            )(
+                delayed(_accumulate_prediction)(tree.predict, features_bitarray, all_preds, lock)
+                for tree in self.trees
+            )
         all_preds /= len(self.trees)
         return all_preds
 
     def _weighted_depth(self, X):
         X_binned, n_jobs, lock = self._predict_helper(X)
         all_weighted_depths = np.zeros(
-            (self.n_estimators, X_binned.shape[0]), dtype=np.float32
+            #(self.n_estimators, X_binned.shape[0]), dtype=np.float32
+            (self.n_estimators, X_binned.n_samples), dtype=np.float32
         )
-        Parallel(
-            n_jobs=n_jobs,
-            verbose=self.verbose,
-            **_joblib_parallel_args(require="sharedmem"),
-        )(
-            delayed(_compute_weighted_depth)(
-                e._weighted_depth, X_binned, all_weighted_depths, lock, tree_idx
+        with parallel_config(require="sharedmem"):
+            Parallel(
+                n_jobs=n_jobs,
+                verbose=self.verbose,
+                # **_joblib_parallel_args(require="sharedmem"),
+            )(
+                delayed(_compute_weighted_depth)(
+                    e.weighted_depth, X_binned, all_weighted_depths, lock, tree_idx
+                    #tree_regressor_weighted_depth, X_binned, all_weighted_depths, lock, tree_idx, e, self.step
+                )
+                for tree_idx, e in enumerate(self.trees)
             )
-            for tree_idx, e in enumerate(self.trees)
-        )
         return all_weighted_depths
 
     def predict_trees(self, X):
@@ -1656,22 +1697,23 @@ class ForestRegressor(ForestBase, RegressorMixin):
         X = self._validate_X_predict(X)
         # TODO: we can also avoid data binning for predictions...
         X_binned = self._bin_data(X, is_training_data=False)
-        n_samples, _ = X.shape
+        n_samples, n_features = X.shape
         n_estimators = len(self.trees)
         n_jobs, _, _ = _partition_estimators(self.n_estimators, self.n_jobs)
         probas = np.empty((n_estimators, n_samples, n_features))
 
         lock = threading.Lock()
-        Parallel(
-            n_jobs=n_jobs,
-            verbose=self.verbose,
-            **_joblib_parallel_args(require="sharedmem"),
-        )(
-            delayed(_get_tree_prediction)(
-                e.predict_proba, X_binned, probas, lock, tree_idx
+        with parallel_config(require="sharedmem"):
+            Parallel(
+                n_jobs=n_jobs,
+                verbose=self.verbose,
+                # **_joblib_parallel_args(require="sharedmem"),
+            )(
+                delayed(_get_tree_prediction)(
+                    e.predict_proba, X_binned, probas, lock, tree_idx
+                )
+                for tree_idx, e in enumerate(self.trees)
             )
-            for tree_idx, e in enumerate(self.trees)
-        )
         return probas
 
     @property
