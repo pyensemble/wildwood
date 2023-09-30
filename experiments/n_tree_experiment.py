@@ -6,10 +6,14 @@ This script produces Figure 2 from the WildWood's paper.
 """
 
 
+import seaborn as sns
+import matplotlib.pyplot as plt
+from matplotlib.ticker import FormatStrFormatter
+
+
 import sys
 import subprocess
 from datetime import datetime
-import pickle as pkl
 import numpy as np
 import logging
 import pandas as pd
@@ -27,9 +31,11 @@ sys.path.extend([".", ".."])
 
 from wildwood.datasets import load_adult, load_bank, load_car, load_default_cb
 from wildwood.forest import ForestClassifier
+    
+import warnings
+warnings.filterwarnings('ignore')
 
 loaders = [load_adult, load_bank, load_default_cb, load_car]
-
 
 random_state = 42
 
@@ -106,10 +112,7 @@ def fit_kwargs_generator(clf_name, y_train, dataset):
         print("ERROR : NOT Found : ", clf_name)
 
 
-# Number of time each experiment is repeated, one for each seed (leading
-# data_random_states = list(range(42, 42 + 2))
-# data_random_states = list(range(42, 42 + 20))
-data_random_states = [42, 43, 44, 46, 47, 49, 50, 52, 53, 55]
+data_random_states = list(range(42, 42 + 10))
 
 col_data = []
 col_classifier = []
@@ -131,6 +134,7 @@ for x, n in enumerate(n_treess):
     for Clf in classifiers:
         clf_title, clf = Clf(n)
         clf_name = clf.__class__.__name__
+        logging.info("-" * 64)
         logging.info("classifier : %s , n_trees = %d" % (clf_name, n))
         for loader in loaders[:n_datasets]:
             dataset = loader()
@@ -139,12 +143,9 @@ for x, n in enumerate(n_treess):
             for key, val in data_extraction[clf_name].items():
                 setattr(dataset, key, val)
             logging.info("-" * 64)
-            logging.info("Launching task for dataset %r" % dataset)
+            logging.info("Dataset : %r" % data_name)
             for repeat, data_random_state in enumerate(data_random_states):
                 clf_title, clf = Clf(n)
-                logging.info(
-                    "Repeat: %d random_state: %d" % (repeat, data_random_state)
-                )
                 col_data.append(data_name)
                 col_classifier.append(clf_name)
                 col_classifier_title.append(clf_title)
@@ -218,13 +219,54 @@ results = pd.DataFrame(
     }
 )
 
-print(results)
+def plot_comparison_n_trees(df, metric="roc_auc", filename=None, legend=True):
+    g = sns.FacetGrid(
+        df, col="dataset", col_wrap=4, aspect=1, height=4, sharex=True, sharey=False
+    )
+    g.map(
+        sns.lineplot,
+        "x_pos",
+        metric,
+        "classifier",
+        lw=4,
+        marker="o",
+        markersize=10,
+    ).set(xlabel="", ylabel="")
+
+    axes = g.axes.flatten()
+    y_ticks = [0,1, 2, 5, 10, 20, 50, 100, 200]
+    for i, dataset in enumerate(df["dataset"].unique()):        
+        axes[i].xaxis.set_ticks(list(range(len(y_ticks))))
+        axes[i].set_xticklabels(y_ticks, fontsize=14)
+        left,right = axes[i].get_xlim()
+        axes[i].set_xlim(0.6, right)
+        axes[i].set_title(dataset, fontsize=20)
+        axes[i].set_xlabel("#Trees", fontsize=18, labelpad=0.0)
+        axes[i].tick_params(axis='y', which="major", labelsize=14)
+        axes[i].tick_params(axis='y', which="minor", labelsize=14)
+        #plt.yticks(fontsize=14)
+        axes[i].yaxis.set_major_formatter(FormatStrFormatter('%.2g'))
+        axes[i].yaxis.set_minor_formatter(FormatStrFormatter('%.2g'))
+        
+    if legend:
+        plt.legend(
+            handles=axes[-1].lines,
+            labels=["RandomForest", "WildWood", "ExtraTrees"],
+            bbox_to_anchor=(0.0, 0.45, 1.0, 0.0),
+            loc="upper right",
+            ncol=1,
+            borderaxespad=0.0,
+            fontsize=18,
+        )
+
+    #plt.tight_layout()
+
+    
+plot_comparison_n_trees(results, metric="roc_auc")
 
 now = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
 
-# Get the commit number as a string
-commit = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])
-commit = commit.decode("utf-8").strip()
+plt.savefig("fig_ntrees_"+now+".pdf")
 
-with open("ntrees_experiment_" + now + ".pickle", "wb") as f:
-    pkl.dump({"datetime": now, "commit": commit, "results": results}, f)
+plt.show()
+

@@ -258,7 +258,7 @@ class Dataset:
                             "categorical_transformer",
                             OneHotEncoder(
                                 drop=self.drop,
-                                sparse=self.sparse,
+                                sparse_output=self.sparse,
                                 handle_unknown="ignore",
                             ),
                             self.categorical_columns,
