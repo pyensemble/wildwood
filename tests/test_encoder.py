@@ -1327,7 +1327,7 @@ def test_encoder_errors():
     )
 
 
-@pytest.mark.filterwarnings("ignore:I will consider column")
+# @pytest.mark.filterwarnings("ignore:I will consider column")
 def test_encoder_detects_unknowns():
     df = pd.DataFrame(
         {

@@ -121,7 +121,7 @@ class Encoder(TransformerMixin, BaseEstimator):
         subsample=int(2e5),
         is_categorical=None,
         cat_min_categories="log",
-        handle_unknown="consider_missing",
+        handle_unknown="error",
         random_state=None,
         verbose=False,
     ):
