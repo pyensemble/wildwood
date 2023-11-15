@@ -25,11 +25,10 @@ jobs:
         python-version: "3.9"
     - name: Install pip flake8 pytest and poetry
       run: |
-        python -m pip install --upgrade
+        python -m pip install --upgrade pip
         pip install flake8 pytest poetry
     - name: Install poetry dependencies
       run: |
-        # if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         poetry install
     - name: Lint with flake8
       run: |
