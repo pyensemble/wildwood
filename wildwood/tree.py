@@ -195,7 +195,6 @@ class TreeBase(BaseEstimator, metaclass=ABCMeta):
                 self._tree_regressor.bin_partitions = self._tree_regressor.bin_partitions[:self._tree_regressor.bin_partitions_end]
 
 
-
 class TreeClassifier(ClassifierMixin, TreeBase):
     def __init__(
         self,
@@ -536,6 +535,7 @@ def unserialize(key, val):
         train_indices = val["train_indices"]
         valid_indices = val["valid_indices"]
         n_classes = val["n_classes"]
+        max_depth = val["max_depth"]
         max_features = val["max_features"]
         min_samples_split = val["min_samples_split"]
         min_samples_leaf = val["min_samples_leaf"]
@@ -553,6 +553,7 @@ def unserialize(key, val):
             valid_indices,
             n_classes,
             max_features,
+            max_depth,
             min_samples_split,
             min_samples_leaf,
             aggregation,
@@ -585,6 +586,7 @@ def unserialize(key, val):
         train_indices = val["train_indices"]
         valid_indices = val["valid_indices"]
         max_features = val["max_features"]
+        max_depth = val["max_depth"]
         min_samples_split = val["min_samples_split"]
         min_samples_leaf = val["min_samples_leaf"]
         aggregation = val["aggregation"]
@@ -598,6 +600,7 @@ def unserialize(key, val):
             train_indices,
             valid_indices,
             max_features,
+            max_depth,
             min_samples_split,
             min_samples_leaf,
             aggregation,

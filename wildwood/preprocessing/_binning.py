@@ -70,7 +70,7 @@ def _find_binning_thresholds(col, max_bins, col_is_pandas_series=False):
         percentiles = np.linspace(0, 100, num=max_bins + 1)
         percentiles = percentiles[1:-1]
         # TODO: is there a faster approach ?
-        middles = np.percentile(col, percentiles, interpolation="midpoint")
+        middles = np.percentile(col, percentiles, method="midpoint")
         assert middles.shape[0] == max_bins - 1
 
     # We avoid having +inf thresholds: +inf thresholds are only allowed in

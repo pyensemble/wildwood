@@ -272,6 +272,7 @@ def test_forest_classifier_serialization(
         )
 
     clf1 = ForestClassifier(
+        criterion="gini",
         n_estimators=n_estimators,
         n_jobs=n_jobs,
         multiclass=multiclass,
@@ -321,7 +322,10 @@ def test_forest_classifier_serialization(
 @pytest.mark.parametrize("multiclass", ("multinomial", "ovr"))
 @pytest.mark.parametrize("cat_split_strategy", ("binary",))
 @pytest.mark.parametrize(
-    "dataset_name, one_hot_encode, use_categoricals", [("diabetes", False, False),],
+    "dataset_name, one_hot_encode, use_categoricals",
+    [
+        ("diabetes", False, False),
+    ],
 )
 def test_forest_regressor_serialization(
     n_estimators,

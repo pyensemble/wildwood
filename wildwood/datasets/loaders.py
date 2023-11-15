@@ -37,35 +37,27 @@ def load_breastcancer(raw=False):
 
 
 def load_boston(raw=False):
-    from sklearn.datasets import load_boston
-
-    data = load_boston()
-    # Load as a dataframe. We set some features as categorical so that we have a
-    # regression example with categorical features for tests...
-    df = pd.DataFrame(data["data"], columns=data["feature_names"]).astype(
-        {"CHAS": "category"}
-    )
-    label_column = "target"
-    df[label_column] = data[label_column]
-
+    dtype = {str(i): np.float64 for i in range(1, 47)}
+    label_column = "medv"
     if raw:
-        return get_X_y_from_dataframe(df, label_column=label_column)
+        X, y = load_raw_dataset("boston.csv.gz", label_column=label_column, dtype=dtype)
+        return X.astype({"chas": "category"}), y
     else:
         continuous_columns = [
-            "ZN",
-            "RAD",
-            "CRIM",
-            "INDUS",
-            "NOX",
-            "RM",
-            "AGE",
-            "DIS",
-            "TAX",
-            "PTRATIO",
-            "B",
-            "LSTAT",
+            "zn",
+            "rad",
+            "crim",
+            "indus",
+            "nox",
+            "rm",
+            "age",
+            "dis",
+            "tax",
+            "ptratio",
+            "b",
+            "lstat",
         ]
-        categorical_columns = ["CHAS"]
+        categorical_columns = ["chas"]
         dataset = Dataset(
             name="boston",
             task="regression",
@@ -73,8 +65,56 @@ def load_boston(raw=False):
             continuous_columns=continuous_columns,
             categorical_columns=categorical_columns,
         )
-        dataset.df_raw = df
-        return dataset
+        # dataset.df_raw = df
+        # return dataset
+        # dataset = Dataset.from_dtype(
+        #     name="boston",
+        #     task="regression",
+        #     label_column=label_column,
+        #     dtype=dtype,
+        # )
+        return dataset.load_from_csv("boston.csv.gz", dtype=dtype)
+
+
+# def load_boston(raw=False):
+#     from sklearn.datasets import load_boston
+#
+#     data = load_boston()
+#     # Load as a dataframe. We set some features as categorical so that we have a
+#     # regression example with categorical features for tests...
+#     df = pd.DataFrame(data["data"], columns=data["feature_names"]).astype(
+#         {"CHAS": "category"}
+#     )
+#     label_column = "target"
+#     df[label_column] = data[label_column]
+#
+#     if raw:
+#         return get_X_y_from_dataframe(df, label_column=label_column)
+#     else:
+#         continuous_columns = [
+#             "ZN",
+#             "RAD",
+#             "CRIM",
+#             "INDUS",
+#             "NOX",
+#             "RM",
+#             "AGE",
+#             "DIS",
+#             "TAX",
+#             "PTRATIO",
+#             "B",
+#             "LSTAT",
+#         ]
+#         categorical_columns = ["CHAS"]
+#         dataset = Dataset(
+#             name="boston",
+#             task="regression",
+#             label_column=label_column,
+#             continuous_columns=continuous_columns,
+#             categorical_columns=categorical_columns,
+#         )
+#         dataset.df_raw = df
+#         return dataset
 
 
 def load_californiahousing(raw=False):
