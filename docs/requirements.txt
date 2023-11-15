@@ -1,3 +1,4 @@
+sphinx >= 7.2
 matplotlib >= 3.7
 memory-profiler >= 0.61
 myst-parser >= 2.0
