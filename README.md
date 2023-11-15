@@ -1,5 +1,5 @@
 
-[![Build Status](https://app.travis-ci.com/pyensemble/wildwood.svg?branch=master)](https://app.travis-ci.com/pyensemble/wildwood)
+![Build Status](https://github.com/pyensemble/wildwood/actions/workflows/python-app.yml/badge.svg)
 [![Documentation Status](https://readthedocs.org/projects/wildwood/badge/?version=latest)](https://wildwood.readthedocs.io/en/latest/?badge=latest)
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/wildwood)
 ![PyPI - Wheel](https://img.shields.io/pypi/wheel/wildwood)
