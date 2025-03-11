@@ -246,35 +246,11 @@ def load_epsilon_catboost(raw=False):
 
 def load_covtype(raw=False):
     from sklearn.datasets import fetch_covtype
-    data = fetch_covtype(as_frame=True)
-    df = data["frame"]
-    label_column = "Cover_Type"
-    continuous_columns = [col for col in df.columns if col != label_column]
-    dataset = Dataset(
-        name="covtype",
-        task="multiclass-classification",
-        label_column="Cover_Type",
-        continuous_columns=continuous_columns,
-        categorical_columns=None,
-    )
-    dataset.df_raw = df
-    return dataset
+    return _load_sklearn_dataset("covtype", "multiclass-classification", fetch_covtype, "Cover_Type")
 
 def load_diabetes(raw=False):
     from sklearn.datasets import load_diabetes
-    data = load_diabetes(as_frame=True)
-    df = data["frame"]
-    label_column = "target"
-    continuous_columns = [col for col in df.columns if col != label_column]
-    dataset = Dataset(
-        name="diabetes",
-        task="regression",
-        label_column="target",
-        continuous_columns=continuous_columns,
-        categorical_columns=None,
-    )
-    dataset.df_raw = df
-    return dataset
+    return _load_sklearn_dataset("diabetes", "regression", load_diabetes, "target")
 
 def load_kddcup99(raw=False):
     from sklearn.datasets import fetch_kddcup99
