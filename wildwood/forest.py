@@ -777,14 +777,14 @@ class ForestRegressor(ForestBase, RegressorMixin):
         return all_preds
 
     def _weighted_depth(self, X):
-        X_binned, n_jobs, lock = self._predict_helper(X)
+        features_bitarray, n_jobs, lock = self._predict_helper(X)
         all_weighted_depths = np.zeros(
-            (self.n_estimators, X_binned.n_samples), dtype=np.float32
+            (self.n_estimators, features_bitarray.n_samples), dtype=np.float32
         )
         with parallel_config(require="sharedmem"):
             Parallel(n_jobs=n_jobs, verbose=self.verbose)(
                 delayed(_compute_weighted_depth)(
-                    e.weighted_depth, X_binned, all_weighted_depths, lock, tree_idx
+                    e.weighted_depth, features_bitarray, all_weighted_depths, lock, tree_idx
                 )
                 for tree_idx, e in enumerate(self.trees)
             )
