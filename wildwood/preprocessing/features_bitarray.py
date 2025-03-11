@@ -30,21 +30,13 @@ _UINT64_MAX = np.iinfo(np.uint64).max
 
 
 spec_features_bit_array = [
-    # Number of samples in the dataset
     ("n_samples", uint64),
-    # Number of features in the dataset
     ("n_features", uint64),
-    # maximum value in each column
     ("max_values", uint64[::1]),
-    # Number of bits used for each values of each columns
     ("n_bits", uint64[::1]),
-    # bitarray[offsets[j]:offsets[j+1]] is the array of words for the j-th column
     ("offsets", uint64[::1]),
-    # n_values_in_words[j] is the number of values saved in a word for column j
     ("n_values_in_words", uint64[::1]),
-    # The bitarray containing all values
     ("bitarray", uint64[::1]),
-    # The bitmasks used for each column
     ("bitmasks", uint64[::1]),
 ]
 
